@@ -152,10 +152,11 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-./batch/*
-./src/*/__pycache__
-./configs/*.yaml
-!./configs/mouse_skeleton.yaml
+__pycache__/
+batch/
+src/*/__pycache__
+configs/*.yaml
+!configs/mouse_skeleton.yaml
 
 
 # PyCharm
