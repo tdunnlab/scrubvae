@@ -1,16 +1,15 @@
-from data.dataset import get_data, inv_normalize_root
-import model, train
+from ssumo.data.dataset import get_data, inv_normalize_root
+from ssumo import model, train
 from torch.utils.data import DataLoader
 import torch
 
 torch.autograd.set_detect_anomaly(True)
-from train.losses import get_batch_loss
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
-from plot.constants import PALETTE_DICT
-from parameters import read
+from ssumo.plot.constants import PALETTE_DICT
+from ssumo.parameters import read
 import pickle
 import sys
 
@@ -27,9 +26,6 @@ dataset = get_data(
     train=True,
     data_keys=["x6d", "root", "offsets"] + config["disentangle"]["features"],
 )
-import pdb
-
-pdb.set_trace()
 
 loader = DataLoader(
     dataset=dataset, batch_size=config["train"]["batch_size"], shuffle=True
@@ -41,10 +37,6 @@ arena_size = (
 vae, device = model.get.model(config, dataset.n_keypts)
 optimizer = optim.Adam(vae.parameters(), lr=0.0001)
 vae.train()
-
-import pdb
-
-pdb.set_trace()
 # else:
 #     vae, speed_decoder, device = utils.init_model(
 #         config, dataset.n_keypts, config["invariant"]
@@ -84,7 +76,10 @@ for epoch in tqdm.trange(
         #         data["speed"] = data["speed"][:, None]
 
         if config["disentangle"]["method"] == "invariant":
-            invariant = torch.cat(data[config["disentangle"]["features"] if config["invariant"] else None)
+            invariant = torch.cat(
+                [data[key] for key in config["disentangle"]["features"]], axis=-1
+            )
+        import pdb; pdb.set_trace()
 
         if config["data"]["arena_size"] is not None:
             x_i = torch.cat(
@@ -109,7 +104,7 @@ for epoch in tqdm.trange(
             else:
                 data_o["speed"] = speed_decoder(data_o["mu"])
 
-        batch_loss = get_batch_loss(data, data_o, config["loss"])
+        batch_loss = train.get_batch_loss(data, data_o, config["loss"])
         batch_loss["total"].backward()
         optimizer.step()
         loss_dict = {

@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 import torch
-from data.rotation_conversion import rotation_6d_to_matrix
-from data.dataset import fwd_kin_cont6d_torch
+from ssumo.data.rotation_conversion import rotation_6d_to_matrix
+from ssumo.data.dataset import fwd_kin_cont6d_torch
 
 
 def rotation_loss(x, x_hat, eps=1e-7):

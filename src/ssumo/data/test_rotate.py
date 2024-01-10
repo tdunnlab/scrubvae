@@ -1,4 +1,4 @@
-from dataset import MouseDataset,fwd_kin_cont6d_torch,inv_normalize_root
+from ssumo.data.dataset import MouseDataset,fwd_kin_cont6d_torch,inv_normalize_root
 from dappy import visualization as vis
 from dappy import read
 import numpy as np

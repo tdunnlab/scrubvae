@@ -1,6 +1,5 @@
 import torch
 
-
 def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
     if beta_anneal:
         print("Cyclical beta anneal")

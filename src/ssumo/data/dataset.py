@@ -1,12 +1,11 @@
-from dappy import read
+from dappy import read, preprocess
 import numpy as np
-import data.quaternion as qtn
+import ssumo.data.quaternion as qtn
 from typing import Optional, Type, Union, List
 from torch.utils.data import Dataset
 import torch
 from numpy.lib.stride_tricks import sliding_window_view
 from tqdm import trange
-from dappy import preprocess
 
 
 def inv_kin(
@@ -284,7 +283,7 @@ def get_data(
         )
         window_inds = np.delete(window_inds, outlier_frames, 0)
 
-    if len(speed_key > 0):
+    if len(speed_key) > 0:
         data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1)
 
     yaw = get_frame_yaw(pose, 0, 1)[window_inds[:, window // 2], None]
@@ -363,7 +362,7 @@ class MouseDataset(Dataset):
 
         self.kinematic_tree = kinematic_tree
         self.ind_with_window_inds = [
-            k for k, v in self.data.items() if v.shape[0] == len(self.window_inds)
+            k for k, v in self.data.items() if v.shape[0] != len(self.window_inds)
         ]
 
     def __len__(self):

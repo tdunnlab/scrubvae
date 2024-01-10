@@ -1,4 +1,4 @@
-from quaternion import *
+from ssumo.data.quaternion import *
 import scipy.ndimage.filters as filters
 
 class Skeleton(object):

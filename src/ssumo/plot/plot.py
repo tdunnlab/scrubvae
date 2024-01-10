@@ -3,7 +3,7 @@ from dappy import DataStruct as ds
 from typing import Union, List
 from dappy import visualization as vis
 import matplotlib.pyplot as plt
-from constants import PLANE
+from ssumo.plot.constants import PLANE
 
 
 # def keypoints(

@@ -2,7 +2,6 @@ from torch.autograd import Function
 import torch.nn as nn
 import torch
 
-
 class GradientReversal(Function):
     @staticmethod
     def forward(ctx, x, alpha):
