@@ -1,17 +1,17 @@
 import torch
 from pathlib import Path
 
-
-def model(model_config, disentangle_config, n_keypts, direction_process, verbose=1):
+def get(model_config, disentangle_config, n_keypts, direction_process, verbose=1):
     feat_dim_dict = {
         "avg_speed": 1,
         "part_speed": 4,
         "frame_speed": model_config["window"] - 1,
         "heading": 2,
+        "heading_change": 1,
     }
 
     in_channels = n_keypts * 6
-    if direction_process == ("x360" or "midfwd" or None):
+    if direction_process in ["x360","midfwd",None]:
         in_channels += 3
 
     invariant_dim = 0
@@ -19,13 +19,12 @@ def model(model_config, disentangle_config, n_keypts, direction_process, verbose
     if disentangle_config["method"] == "invariant":
         invariant_dim = sum([feat_dim_dict[k] for k in disentangle_config["features"]])
     elif ("gr_" or "linear") in disentangle_config["method"]:
-        from model.LinearDisentangle import LinearDisentangle
+        from ssumo.model.LinearDisentangle import LinearDisentangle
 
-        if disentangle_config["method"] is "linear":
+        if disentangle_config["method"] == "linear":
             reversal = None
         else:
-            reversal = disentangle_config["method"][2:]
-
+            reversal = disentangle_config["method"][3:]
         disentangle = {}
         for feat in disentangle_config["features"]:
             disentangle[feat] = LinearDisentangle(
@@ -34,7 +33,7 @@ def model(model_config, disentangle_config, n_keypts, direction_process, verbose
                 bias=False,
                 reversal=reversal,
                 alpha=disentangle_config["alpha"],
-                do_detach=model_config["detach_gr"],
+                do_detach=disentangle_config["detach_gr"],
             )
 
         if verbose > 0:
@@ -42,32 +41,31 @@ def model(model_config, disentangle_config, n_keypts, direction_process, verbose
     
     ### Initialize/load model
     if model_config["type"] == "rcnn":
-        from model.ResVAE import ResVAE
-
+        from ssumo.model.ResVAE import ResVAE
         vae = ResVAE(
             in_channels=in_channels,
             kernel=model_config["kernel"],
             z_dim=model_config["z_dim"],
             window=model_config["window"],
             activation=model_config["activation"],
-            is_diag=model_config["is_diag"],
+            is_diag=model_config["diag"],
             invariant_dim=invariant_dim,
             init_dilation=model_config["init_dilation"],
             disentangle=disentangle
         )
     elif model_config["type"] == "transformer":
-        from model.TransformerVAE import TransformerVAE
+        from ssumo.model.TransformerVAE import TransformerVAE
 
         vae = TransformerVAE(
             in_channels=in_channels,
             window=model_config["window"],
             z_dim=model_config["z_dim"],
             activation=model_config["activation"],
-            is_diag=model_config["is_diag"],
+            is_diag=model_config["diag"],
             n_heads=model_config["n_heads"],
         )
     elif model_config["type"] == "hrcnn":
-        from model.ResVAE import HResVAE
+        from ssumo.model.ResVAE import HResVAE
 
         vae = HResVAE(
             in_channels=in_channels,
@@ -75,7 +73,7 @@ def model(model_config, disentangle_config, n_keypts, direction_process, verbose
             z_dim=model_config["z_dim"],
             window=model_config["window"],
             activation=model_config["activation"],
-            is_diag=model_config["is_diag"],
+            is_diag=model_config["diag"],
             invariant_dim=invariant_dim,
             init_dilation=model_config["init_dilation"],
         )

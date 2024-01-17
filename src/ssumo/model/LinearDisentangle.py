@@ -60,12 +60,10 @@ class ReversalEnsemble(nn.Module):
         d = self.mlp3(z)
         return a, b, c, d
 
-
 class LinearDisentangle(nn.Module):
     def __init__(self, in_dim, out_dim, bias=False, reversal="linear", alpha=1.0, do_detach=True):
         super(LinearDisentangle, self).__init__()
         self.do_detach = do_detach
-        self.reversal
 
         self.decoder = nn.Linear(in_dim, out_dim, bias=bias)
         if reversal == "mlp":
@@ -105,7 +103,7 @@ class LinearDisentangle(nn.Module):
 
             return x, self.reversal(z_sub)
         
-        return x
+        return x, None
     
     # def forward(self, z):
     #     x = self.decoder(z)

@@ -14,9 +14,11 @@ PARAM_KEYS = dict(
         "diag",
         "init_dilation",
         "kernel",
+        "load_epoch",
+        "load_model",
         "type",
         "window",
         "z_dim",
     ],
-    train=["beta_anneal", "batch_size", "load_epoch", "load_model", "num_epochs"],
+    train=["beta_anneal", "batch_size", "num_epochs"],
 )
