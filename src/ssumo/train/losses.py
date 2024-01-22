@@ -83,7 +83,7 @@ def get_batch_loss(data, data_o, loss_scale):
         batch_loss["jpe"] = mpjpe_loss(
             data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data_o["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
-            data_o["kinematic_tree"],
+            data["kinematic_tree"],
             data["offsets"].view(-1, *data["offsets"].shape[-2:]),
         )
 
@@ -94,7 +94,9 @@ def get_batch_loss(data, data_o, loss_scale):
 
     for key in ["avg_speed", "frame_speed", "part_speed", "heading", "heading_change"]:
         if key in loss_scale.keys():
-            batch_loss[key] = torch.nn.MSELoss(reduction="sum")(data_o["disentangle"][key][0], data[key])
+            batch_loss[key] = torch.nn.MSELoss(reduction="sum")(
+                data_o["disentangle"][key][0], data[key]
+            )
             # loss_scale[key] = loss_scale["disentangle"]
 
         if key + "_gr" in loss_scale.keys():
@@ -104,9 +106,13 @@ def get_batch_loss(data, data_o, loss_scale):
                     batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="sum")(
                         gr_e, data[key]
                     )
-                batch_loss[key + "_gr"] = batch_loss[key + "_gr"] / len(data_o["disentangle"][key][1])
+                batch_loss[key + "_gr"] = batch_loss[key + "_gr"] / len(
+                    data_o["disentangle"][key][1]
+                )
             elif torch.is_tensor(data_o["disentangle"][key][1]):
-                batch_loss[key + "_gr"] = torch.nn.MSELoss(reduction="sum")(data_o["disentangle"][key], data[key])
+                batch_loss[key + "_gr"] = torch.nn.MSELoss(reduction="sum")(
+                    data_o["disentangle"][key], data[key]
+                )
 
             # loss_scale[key + "_gr"] = loss_scale["gr"]
 
@@ -136,6 +142,8 @@ def get_batch_loss(data, data_o, loss_scale):
     if "orthogonal_cov" in loss_scale.keys():
         batch_loss["orthogonal_cov"] = hierarchical_orthogonal_loss(*data_o["L"])
 
-    batch_loss["total"] = sum( [loss_scale[k] * batch_loss[k] for k in batch_loss.keys()] )
+    batch_loss["total"] = sum(
+        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys()]
+    )
 
     return batch_loss

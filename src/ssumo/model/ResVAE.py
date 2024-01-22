@@ -2,13 +2,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
+
 def find_latent_dim(
     window_size: int, kernel: int, num_layers: int, dilation=torch.ones(4)
 ):
     stride = 1 if any(dilation > 1) else 2
     layer_out = (
-        lambda l_in, dil: (l_in + 2 * (kernel // 2) - dil * (kernel - 1) - 1)
-        / stride
+        lambda l_in, dil: (l_in + 2 * (kernel // 2) - dil * (kernel - 1) - 1) / stride
         + 1
     )
 
@@ -19,9 +19,7 @@ def find_latent_dim(
     return int(l_out)
 
 
-def find_out_dim(
-    latent_dim: int, kernel: int, num_layers: int, dilation=torch.ones(4)
-):
+def find_out_dim(latent_dim: int, kernel: int, num_layers: int, dilation=torch.ones(4)):
     stride = 1 if any(dilation > 1) else 2
     layer_out = (
         lambda l_in, dil: (l_in - 1) * stride
@@ -195,7 +193,6 @@ class ResidualEncoder(nn.Module):
         else:
             dilation = init_dilation * 2 ** torch.arange(4)
 
-        
         self.res_layers = nn.Sequential(
             ResidualBlock(ch, 2 * ch, kernel, activation, dilation[0].item()),
             ResidualBlock(2 * ch, 4 * ch, kernel, activation, dilation[1].item()),
@@ -236,7 +233,7 @@ class ResidualDecoder(nn.Module):
         self.invariant_dim = invariant_dim
 
         if init_dilation is None:
-            dilation = torch.ones(4,dtype=int)
+            dilation = torch.ones(4, dtype=int)
         else:
             dilation = init_dilation * 2 ** torch.arange(4)
 
@@ -304,12 +301,19 @@ class ResVAE(nn.Module):
         invariant_dim=0,
         init_dilation=None,
         disentangle=None,
+        kinematic_tree=None,
+        arena_size=None,
+        disentangle_keys=None,
     ):
         super(ResVAE, self).__init__()
         self.in_channels = in_channels
         self.window = window
         self.is_diag = is_diag
         self.invariant_dim = invariant_dim
+        self.kinematic_tree = kinematic_tree
+        self.register_buffer("arena_size", arena_size)
+        # self.arena_size = arena_size
+        self.disentangle_keys = disentangle_keys
         self.encoder = ResidualEncoder(
             in_channels,
             ch=ch,
@@ -335,22 +339,85 @@ class ResVAE(nn.Module):
         else:
             self.disentangle = nn.ModuleDict()
 
+    def normalize_root(self, root):
+        norm_root = root - self.arena_size[0]
+        norm_root = 2 * norm_root / (self.arena_size[1] - self.arena_size[0]) - 1
+        return norm_root
+
+    def inv_normalize_root(self, norm_root):
+        root = 0.5 * (norm_root + 1) * (self.arena_size[1] - self.arena_size[0])
+        root += self.arena_size[0]
+        return root
+
     def sampling(self, mu, L):
         eps = torch.randn_like(mu)
         return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
 
-    def forward(self, x, invariant=None):
-        in_shape = x.shape
-        mu, L = self.encoder(x.moveaxis(1, -1).view(-1, self.in_channels, self.window))
-        z = self.sampling(mu, L)
+    def encode(self, data):
+        if self.arena_size is not None:
+            # self.arena_size.to("cuda" if data["root"].is_cuda else "cpu")
+            norm_root = self.normalize_root(data["root"])
 
-        if invariant is not None:
-            z = torch.cat((z, invariant), dim=-1)
-        
-        d = {k:dis(mu) for k, dis in self.disentangle.items()}
+            x_in = torch.cat(
+                (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), norm_root), axis=-1
+            )
+        else:
+            x_in = data["x6d"]
+
+        mu, L = self.encoder(
+            x_in.moveaxis(1, -1).view(-1, self.in_channels, self.window)
+        )
+        return mu, L
+
+    def decode(self, data):
+        x_hat = self.decoder(data["mu"]).moveaxis(-1, 1)
+
+        if self.arena_size is not None:
+            x6d = x_hat[..., :-3]
+            root = self.inv_normalize_root(x_hat[..., -3:]).reshape(
+                data["mu"].shape[0], self.window, 3
+            )
+        else:
+            x6d = x_hat
+
+        x6d = x6d.reshape(data["mu"].shape[0], self.window, -1, 6)
+
+        return x6d, root
+
+    def forward(self, data):
+        if self.arena_size is not None:
+            # self.arena_size.to("cuda" if data["root"].is_cuda else "cpu")
+            norm_root = self.normalize_root(data["root"])
+
+            x_in = torch.cat(
+                (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), norm_root), axis=-1
+            )
+        else:
+            x_in = data["x6d"]
+
+        in_shape = x_in.shape
+        data_o = {}
+        data_o["mu"], data_o["L"] = self.encoder(
+            x_in.moveaxis(1, -1).view(-1, self.in_channels, self.window)
+        )
+        z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+
+        if self.invariant_dim > 0:
+            z = torch.cat([z] + [data[k] for k in self.disentangle_keys], dim=-1)
+
+        # Runni
+        # if len(self.disentangle.keys()) > 0:
+        data_o["disentangle"] = {
+            k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
+        }
 
         x_hat = self.decoder(z).moveaxis(-1, 1).reshape(in_shape)
-        return x_hat, mu, L, d
+
+        if self.arena_size is not None:
+            data_o["x6d"] = x_hat[..., :-3].reshape(data["x6d"].shape)
+            data_o["root"] = self.inv_normalize_root(x_hat[..., -3:])
+
+        return data_o
 
 
 class HierarchicalResidualEncoder(nn.Module):
@@ -375,9 +442,7 @@ class HierarchicalResidualEncoder(nn.Module):
         self.activation = nn.Tanh() if activation == "tanh" else nn.PReLU()
 
         self.res_layers = nn.Sequential(
-            ResidualBlock(
-                ch, 2 * ch, kernel, activation, dilation=dilation[0].item()
-            ),
+            ResidualBlock(ch, 2 * ch, kernel, activation, dilation=dilation[0].item()),
             ResidualBlock(
                 2 * ch, 4 * ch, kernel, activation, dilation=dilation[1].item()
             ),

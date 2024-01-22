@@ -1,7 +1,7 @@
 import torch
 from pathlib import Path
 
-def get(model_config, disentangle_config, n_keypts, direction_process, verbose=1):
+def get(model_config, disentangle_config, n_keypts, direction_process, arena_size=None, kinematic_tree=None, verbose=1):
     feat_dim_dict = {
         "avg_speed": 1,
         "part_speed": 4,
@@ -35,9 +35,6 @@ def get(model_config, disentangle_config, n_keypts, direction_process, verbose=1
                 alpha=disentangle_config["alpha"],
                 do_detach=disentangle_config["detach_gr"],
             )
-
-        if verbose > 0:
-            print(disentangle)
     
     ### Initialize/load model
     if model_config["type"] == "rcnn":
@@ -51,7 +48,10 @@ def get(model_config, disentangle_config, n_keypts, direction_process, verbose=1
             is_diag=model_config["diag"],
             invariant_dim=invariant_dim,
             init_dilation=model_config["init_dilation"],
-            disentangle=disentangle
+            disentangle=disentangle,
+            disentangle_keys=disentangle_config["features"],
+            arena_size = arena_size,
+            kinematic_tree = kinematic_tree,
         )
     elif model_config["type"] == "transformer":
         from ssumo.model.TransformerVAE import TransformerVAE
@@ -82,10 +82,13 @@ def get(model_config, disentangle_config, n_keypts, direction_process, verbose=1
 
     if model_config["load_model"] is not None:
         load_path = "{}/weights/epoch_{}.pth".format(
-            model_config["load_model"], model_config["load_epoch"]
+            model_config["load_model"], model_config["start_epoch"]
         )
         print("Loading Weights from:\n{}".format(load_path))
-        vae.load_state_dict(torch.load(load_path))
+        # import pdb; pdb.set_trace()
+        state_dict = torch.load(load_path)
+        state_dict["arena_size"] = arena_size.cuda()
+        vae.load_state_dict(state_dict)
 
         # spd_decoder_path = "{}/weights/{}_spd_epoch_{}.pth".format(
         #     model_config["load_model"],

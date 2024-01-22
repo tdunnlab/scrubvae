@@ -14,7 +14,7 @@ PARAM_KEYS = dict(
         "diag",
         "init_dilation",
         "kernel",
-        "load_epoch",
+        "start_epoch",
         "load_model",
         "type",
         "window",

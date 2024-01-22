@@ -114,7 +114,6 @@ def fwd_kin_cont6d_torch(
             )
     return pose
 
-
 def normalize_root(root, arena_size):
     norm_root = root - arena_size[0]
     norm_root = 2 * norm_root / (arena_size[1] - arena_size[0]) - 1
@@ -125,7 +124,6 @@ def inv_normalize_root(norm_root, arena_size):
     root = 0.5 * (norm_root + 1) * (arena_size[1] - arena_size[0])
     root += arena_size[0]
     return root
-
 
 def get_speed_parts(pose, parts):
     print("Getting speed by body parts")
@@ -257,7 +255,6 @@ class MouseDataset(Dataset):
                 if k not in self.ind_with_window_inds
             }
         )
-
         return query
 
 

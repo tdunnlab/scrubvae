@@ -121,10 +121,6 @@ def get_mouse(
 
     if "root" in data_keys:
         data["root"] = root
-        if data_config["arena_size"] is not None:
-            data["root"] = normalize_root(
-                data["root"], np.array(data_config["arena_size"])
-            )
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
     dataset = MouseDataset(
