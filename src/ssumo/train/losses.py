@@ -92,12 +92,16 @@ def get_batch_loss(data, data_o, loss_scale):
             data_o["root"], data["root"]
         )
 
-    for key in ["avg_speed", "frame_speed", "part_speed", "heading", "heading_change"]:
+    available_dis_keys = ["avg_speed", "frame_speed", "part_speed", "heading_change", "heading"]
+    num_keys = len([key for key in loss_scale.keys() if key in available_dis_keys])
+    for key in available_dis_keys:
         if key in loss_scale.keys():
-            batch_loss[key] = torch.nn.MSELoss(reduction="sum")(
-                data_o["disentangle"][key][0], data[key]
+            batch_loss[key] = (
+                torch.nn.MSELoss(reduction="sum")(
+                    data_o["disentangle"][key][0], data[key]
+                )
+                / num_keys
             )
-            # loss_scale[key] = loss_scale["disentangle"]
 
         if key + "_gr" in loss_scale.keys():
             if type(data_o["disentangle"][key][1]) is tuple:
@@ -106,15 +110,35 @@ def get_batch_loss(data, data_o, loss_scale):
                     batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="sum")(
                         gr_e, data[key]
                     )
-                batch_loss[key + "_gr"] = batch_loss[key + "_gr"] / len(
-                    data_o["disentangle"][key][1]
+                batch_loss[key + "_gr"] = (
+                    batch_loss[key + "_gr"]
+                    / len(data_o["disentangle"][key][1])
+                    / num_keys
                 )
             elif torch.is_tensor(data_o["disentangle"][key][1]):
-                batch_loss[key + "_gr"] = torch.nn.MSELoss(reduction="sum")(
-                    data_o["disentangle"][key], data[key]
+                batch_loss[key + "_gr"] = (
+                    torch.nn.MSELoss(reduction="sum")(
+                        data_o["disentangle"][key], data[key]
+                    )
+                    / num_keys
                 )
 
-            # loss_scale[key + "_gr"] = loss_scale["gr"]
+    # if "heading" in loss_scale.keys():
+    #     batch_loss["heading"] = (
+    #         data_o["disentangle"]["heading"][0] * data["heading"]
+    #     ).sum()
+    #     if "heading_gr" in loss_scale.keys():
+    #         if type(data_o["disentangle"]["heading"][1]) is tuple:
+    #             batch_loss["heading_gr"] = 0
+    #             for gr_e in data_o["disentangle"]["heading"][1]:
+    #                 batch_loss["heading_gr"] += (gr_e * data["heading"]).sum()
+    #             batch_loss["heading_gr"] = batch_loss["heading_gr"] / len(
+    #                 data_o["disentangle"]["heading"][1]
+    #             )
+    #         elif torch.is_tensor(data_o["disentangle"]["heading"][1]):
+    #             batch_loss["heading_gr"] = (
+    #                 data_o["disentangle"]["heading"] * data["ehading"]
+    #             ).sum()
 
     # if "speed" in loss_scale.keys():
     #     batch_loss["speed"] = torch.nn.MSELoss(reduction="sum")(

@@ -29,7 +29,7 @@ def get_mouse(
     speed_key = [key for key in data_keys if "speed" in key]
     assert len(speed_key) < 2
     if (len(speed_key) > 0) or (data_config["remove_speed_outliers"] is not None):
-        if speed_key[0] == "part_speed":
+        if "part_speed" in speed_key:
             speed = get_speed_parts(
                 pose=pose,
                 parts=[

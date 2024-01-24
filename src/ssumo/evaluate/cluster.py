@@ -1,38 +1,78 @@
 import pickle
 import numpy as np
 from pathlib import Path
+import functools
 
-def get_gmm(
+
+def _check_model_exists(func):
+    @functools.wraps(func)
+    def wrapper(
+        latents: np.ndarray,
+        label: str = "cluster",
+        path: str = "./results/",
+        **kwargs,
+    ):
+        model_path = "{}{}_{}.p".format(path, label, func.__name__)
+        preds_path = "{}{}_{}_pred.npy".format(path,label, func.__name__,)
+        model_exists = Path(model_path).exists()
+
+        if model_exists:
+            print("Found {} model - Loading ...".format(func.__name__))
+            model = pickle.load(open(model_path, "rb"))
+        else:
+            model = func(
+                latents=latents,
+                **kwargs,
+            )
+
+            pickle.dump(model, open(model_path, "wb"))
+
+        if Path(preds_path).exists() and model_exists:
+            print("Found existing {} clusterings - Loading ...".format(func.__name__))
+            k_pred = np.load(preds_path)
+        else:
+            print("Calculating sklearn {} clusters ...".format(func.__name__))
+            k_pred = model.predict(latents)
+            np.save(preds_path, k_pred)
+
+        return k_pred, model
+
+    return wrapper
+
+
+@_check_model_exists
+def gmm(
     latents: np.ndarray,
     n_components: int = 25,
-    label: str = "cluster",
-    path: str = "./results/",
     covariance_type: str = "full",
 ):
-    model_exists = Path("{}{}_gmm.p".format(path, label)).exists()
+    from sklearn.mixture import GaussianMixture
 
-    if model_exists:
-        print("Found GMM model - Loading ...")
-        model = pickle.load(open("{}{}_gmm.p".format(path, label), "rb"))
-    else:
-        print("\nNo GMM model found - Fitting sklearn GMM Model")
-        from sklearn.mixture import GaussianMixture
+    model = GaussianMixture(
+        n_components=n_components,
+        covariance_type=covariance_type,
+        max_iter=150,
+        verbose=1,
+    ).fit(latents)
 
-        model = GaussianMixture(
-            n_components=n_components,
-            covariance_type=covariance_type,
-            max_iter=150,
-            verbose=1,
-        ).fit(latents)
+    return model
 
-        pickle.dump(model, open("{}{}_gmm.p".format(path, label), "wb"))
+def dbscan(
+    latents: np.ndarray,
+    eps: float = 0.1,
+    min_samples= 500,
+    label: str = "cluster",
+    path: str = "./results/",
+):
+    preds_path = "{}{}_sc_pred.npy".format(path,label)
+    # from sklearn.decomposition import PCA
 
-    if Path("{}{}_pred.npy".format(path, label)).exists() and model_exists:
-        print("Found existing clusterings - Loading ...")
-        k_pred = np.load("{}{}_pred.npy".format(path, label))
-    else:
-        print("Calculating sklearn GMM clusters ...")
-        k_pred = model.predict(latents)
-        np.save("{}{}_pred.npy".format(path, label), k_pred)
+    # latents = PCA(n_components=50).fit_transform(latents)
+    from sklearn.cluster import HDBSCAN
+    print("Calculating sklearn dbscan clusters ...")
+    k_pred = HDBSCAN(min_cluster_size=min_samples).fit_predict(latents)
+    print(len(np.unique(k_pred)))
+    # k_pred = model.predict(latents)
+    np.save(preds_path, k_pred)
 
-    return k_pred, model
+    return k_pred

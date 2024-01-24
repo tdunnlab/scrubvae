@@ -1,87 +1,43 @@
 import numpy as np
-import utils
 from dappy import read
-from data.dataset import MouseDatasetOld
+# from ssumo.data.dataset import MouseDatasetOld
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 import scipy.linalg as spl
 from sklearn.linear_model import LinearRegression
 from pathlib import Path
 import re
+import ssumo
 
-palette = [
-    "#e60049",
-    "#0bb4ff",
-    "#50e991",
-    "#e6d800",
-    "#9b19f5",
-    "#ffa300",
-    "#dc0ab4",
-    "#b3d4ff",
-    "#00bfa0",
-    "#b30000",
-    "#7c1158",
-    "#4421af",
-]
-
-# out_base = "/mnt/home/jwu10/working/ceph/results/vae/"
-base_path = "/mnt/ceph/users/jwu10/results/vae/gr_parts1/"
-# paths = ["rc_w51_midfwd_full","rc_w51_ba_midfwd_full"]
-
-paths = ["partspd10_gre1_rc_w51_b1_midfwd_full", "partspd10_rc_w51_b1_midfwd_full"]
-
-# paths = [
-    # "rc_w51_midfwd_full",
-    # "rc_w51_ba_midfwd_full",
-    # "avgspd_rc_w51_b1_midfwd_full",
-    # "avgspd_rc_w51_midfwd_full",
-    # "avgspd_ndgre20_rc_w51_b1_midfwd_full_a1",
-    # "avgspd_ndgre_rc_w51_b1_midfwd_full_a05",
-    # "avgspd_ndgre_rc_w51_midfwd_full_a1",
-    # "avgspd_ndgre1_rc_w51_b1_midfwd_full_a05",
-    # "avgspd_gre_rc_w51_midfwd_full_a1",
-    # "avgspd_gre_rc_w51_ba_midfwd_full_a1",
-    # "avgspd_gre_rc_w51_b1_midfwd_full_a05",
-    # "avgspd_gre1_rc_w51_b1_midfwd_full_a05",
-# ]
+base_path = "/mnt/ceph/users/jwu10/results/vae/heading/"
+paths = ["gre1_b1_true_x360", "vanilla", "no_gr"]
 
 f, ax_arr = plt.subplots(2, 1, figsize=(15, 15))
 for path_ind, path in enumerate(paths):
     config = read.config(base_path + path + "/model_config.yaml")
-    config["load_model"] = config["out_path"]
+    config["model"]["load_model"] = config["out_path"]
 
     # Get all epochs
     z_path = Path(config["out_path"] + "weights/")
     epochs = [re.findall(r"\d+", f.parts[-1]) for f in list(z_path.glob("epoch*"))]
     epochs = np.sort(np.array(epochs).astype(int).squeeze())
-    # epochs = epochs[np.where(epochs<201)[0]]
     print("Epochs found: {}".format(epochs))
 
     if path == paths[0]:
-        dataset = MouseDatasetOld(
-            data_path=config["data_path"],
-            skeleton_path="/mnt/home/jwu10/working/behavior_vae/configs/mouse_skeleton.yaml",
-            train=True,
-            window=config["window"],
-            stride=1,
-            direction_process=config["direction_process"],
-            get_speed=True,
-            arena_size=config["arena_size"],
-            invariant=config["invariant"],
-            get_raw_pose=False,
+        dataset = ssumo.data.get_mouse(
+            data_config=config["data"],
+            window=config["model"]["window"],
+            train="Train",
+            data_keys=["x6d", "root"]
+            + config["disentangle"]["features"],
         )
-        spd_true = dataset[:]["speed"].mean(dim=-1, keepdim=True).detach().cpu().numpy()
 
     metrics = {
         "R2": [],
-        "R2_Sub": [],
-        "w_Norm": [],
-        "w_Norm_Sub": [],
-        "Bias": [],
-        "Bias_Sub": [],
+        "R2_Sub": []
     }
     for epoch in epochs:
-        config["load_epoch"] = epoch
+        config["model"]["start_epoch"] = epoch
 
         if config["speed_decoder"] is None:
             vae, device = utils.init_model(

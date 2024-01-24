@@ -11,7 +11,7 @@ def latents(model, dataset, config, device, dataset_label):
     )
     if not Path(latent_path).exists():
         loader = DataLoader(
-            dataset=dataset, batch_size=config["batch_size"], shuffle=False
+            dataset=dataset, batch_size=config["train"]["batch_size"], shuffle=False
         )
         print("Latent projections not found - Embedding dataset ...")
         latents = []

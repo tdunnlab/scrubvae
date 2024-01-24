@@ -369,20 +369,22 @@ class ResVAE(nn.Module):
         )
         return mu, L
 
-    def decode(self, data):
-        x_hat = self.decoder(data["mu"]).moveaxis(-1, 1)
+    def decode(self, mu):
+        data_o = {}
+        x_hat = self.decoder(mu).moveaxis(-1, 1)
 
         if self.arena_size is not None:
             x6d = x_hat[..., :-3]
-            root = self.inv_normalize_root(x_hat[..., -3:]).reshape(
-                data["mu"].shape[0], self.window, 3
+            data_o["root"] = self.inv_normalize_root(x_hat[..., -3:]).reshape(
+                mu.shape[0], self.window, 3
             )
         else:
             x6d = x_hat
+            data_o["root"] = torch.zeros(mu.shape[0], self.window, 3).to(mu.device)
 
-        x6d = x6d.reshape(data["mu"].shape[0], self.window, -1, 6)
+        data_o["x6d"] = x6d.reshape(mu.shape[0], self.window, -1, 6)
 
-        return x6d, root
+        return data_o
 
     def forward(self, data):
         if self.arena_size is not None:

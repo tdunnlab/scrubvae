@@ -1,5 +1,5 @@
 import torch
-from pathlib import Path
+import re
 
 def get(model_config, disentangle_config, n_keypts, direction_process, arena_size=None, kinematic_tree=None, verbose=1):
     feat_dim_dict = {
@@ -16,9 +16,11 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
 
     invariant_dim = 0
     disentangle = None
-    if disentangle_config["method"] == "invariant":
+    if disentangle_config["method"] is None:
+        pass
+    elif disentangle_config["method"] == "invariant":
         invariant_dim = sum([feat_dim_dict[k] for k in disentangle_config["features"]])
-    elif ("gr_" or "linear") in disentangle_config["method"]:
+    elif ("gr_" in disentangle_config["method"]) or ("linear" in disentangle_config["method"]):
         from ssumo.model.LinearDisentangle import LinearDisentangle
 
         if disentangle_config["method"] == "linear":

@@ -8,7 +8,7 @@ PARAM_KEYS = dict(
         "skeleton_path",
         "stride",
     ],
-    disentangle=["alpha", "detach_gr", "features", "method"],
+    disentangle=["alpha", "balance_loss", "detach_gr", "features", "method"],
     model=[
         "activation",
         "diag",

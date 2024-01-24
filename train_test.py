@@ -26,6 +26,16 @@ dataset = ssumo.data.get_mouse(
 loader = DataLoader(
     dataset=dataset, batch_size=config["train"]["batch_size"], shuffle=True
 )
+
+#Balance disentanglement losses
+if config["disentangle"]["balance_loss"]:
+    print("Balancing disentanglement losses")
+    for k in config["disentangle"]["features"]:
+        std = dataset[:][k].std()*dataset[0][k].shape[-1]
+        config["loss"][k] /= std
+        if k + "_gr" in config["loss"].keys():
+            config["loss"][k+"_gr"] /=std
+
 vae, device = ssumo.model.get(
     model_config=config["model"],
     disentangle_config=config["disentangle"],
@@ -62,81 +72,11 @@ for epoch in tqdm.trange(
         disentangle_keys=config["disentangle"]["features"],
     )
     loss_dict = {k: v + [epoch_loss[k]] for k,v in loss_dict.items()}
-    # for batch_idx, data in enumerate(loader):
-    #     optimizer.zero_grad()
-    #     data = {k: v.to(device) for k, v in data.items()}
-    #     data_o = {
-    #         "kinematic_tree": dataset.kinematic_tree,
-    #         "arena_size": dataset.arena_size.cuda(),
-    #     }
-    #     len_batch = len(data["x6d"])
-
-    #     # if (config["invariant"] == "speed") or (
-    #     #     config["speed_decoder"] == "avg" or "part"
-    #     # ):
-    #     #     data["speed"] = data["speed"].mean(dim=1)
-
-    #     #     if len(data["speed"].shape) < 2:
-    #     #         data["speed"] = data["speed"][:, None]
-
-    #     if config["disentangle"]["method"] == "invariant":
-    #         invariant = torch.cat( [data[key] for key in config["disentangle"]["features"]], axis=-1 )
-    #     else:
-    #         invariant = None
-
-    #     if config["data"]["arena_size"] is not None:
-    #         x_i = torch.cat(
-    #             (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), data["root"]), axis=-1
-    #         )
-    #         x_o, data_o["mu"], data_o["L"], data_o["disentangle"] = vae( x_i, invariant=invariant )
-
-    #         data_o["x6d"] = x_o[..., :-3].reshape(data["x6d"].shape)
-    #         data_o["root"] = inv_normalize_root(x_o[..., -3:], data_o["arena_size"])
-    #         data["root"] = inv_normalize_root(data["root"], data_o["arena_size"])
-
-    #     else:
-    #         data_o["x6d"], data_o["mu"], data_o["L"], data_o["disentangle"] = vae(
-    #             data["x6d"], invariant=invariant
-    #         )
-
-    #     # if config["disentangle"]["method"] is not None:
-    #     #     for
-
-    #     # if config["speed_decoder"] is not None:
-    #     #     if config["gradient_reversal"]:
-    #     #         data_o["speed"], data_o["speed_gr"] = speed_decoder(data_o["mu"])
-    #     #     else:
-    #     #         data_o["speed"] = speed_decoder(data_o["mu"])
-
-    #     batch_loss = train.losses.get_batch_loss(data, data_o, config["loss"])
-    #     batch_loss["total"].backward()
-    #     optimizer.step()
-
-    #     # import pdb; pdb.set_trace()
-    #     loss_dict = {
-    #         k: v[:-1] + [v[-1] + batch_loss[k].item()] for k, v in loss_dict.items()
-    #     }
-
-    #     if batch_idx % 500 == 0:
-    #         print(
-    #             "Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
-    #                 epoch,
-    #                 batch_idx * len_batch,
-    #                 len(loader.dataset),
-    #                 100.0 * batch_idx / len(loader),
-    #                 batch_loss["total"].item() / len_batch,
-    #             )
-    #         )
-
-    # for k, v in loss_dict.items():
-    #     loss_dict[k][-1] = v[-1] / len(loader.dataset)
-    #     print("====> Epoch: {} Average {} loss: {:.4f}".format(epoch, k, v[-1]))
-    #     loss_dict[k] += [0]
 
     if epoch % 10 == 0:
         print("Saving model to folder: {}".format(config["out_path"]))
         torch.save(
-            vae.state_dict(),
+            {k: v.cpu() for k, v in vae.state_dict()},
             "{}/weights/epoch_{}.pth".format(config["out_path"], epoch),
         )
 
@@ -146,11 +86,3 @@ for epoch in tqdm.trange(
         )
 
         ssumo.plot.eval.loss( loss_dict, config["out_path"], config["disentangle"]["features"] )
-
-        # if config["speed_decoder"]:
-        #     torch.save(
-        #         speed_decoder.state_dict(),
-        #         "{}/weights/{}_spd_epoch_{}.pth".format(
-        #             config["out_path"], config["speed_decoder"], epoch
-        #         ),
-        #     )

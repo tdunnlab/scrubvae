@@ -1,4 +1,4 @@
-from data.dataset import MouseDataset, fwd_kin_cont6d_torch, inv_normalize_root
+import ssumo
 from torch.utils.data import DataLoader
 from dappy import read
 import torch
@@ -6,53 +6,50 @@ from dappy import visualization as vis
 import numpy as np
 from pathlib import Path
 import tqdm
-import utils
 import pickle
 
-path = "avgspd_ndgre1_rc_w51_b1_midfwd_full_a05"
-base_path = "/mnt/ceph/users/jwu10/results/vae/gr_scratch/"
-out_path = base_path + path + "/vis_latents/"
-config = read.config(base_path + path + "/model_config.yaml")
-k = 50  # Number of clusters
-config["load_model"] = config["out_path"]
-config["load_epoch"] = 470
-# config["speed_decoder"] = None
-Path(out_path).mkdir(parents=True, exist_ok=True)
-
-connectivity = read.connectivity_config(
-    "/mnt/home/jwu10/working/behavior_vae/configs/mouse_skeleton.yaml"
-)
+z_null = None
 gen_means_cluster = False
 gen_samples_cluster = False
 gen_actions = False
 vis_clusters = True
 
-# Load in train dataset
-dataset = MouseDataset(
-    data_path=config["data_path"],
-    skeleton_path="/mnt/home/jwu10/working/behavior_vae/configs/mouse_skeleton.yaml",
-    train=True,
-    window=config["window"],
-    stride=1,
-    direction_process=config["direction_process"],
-    get_speed=config["speed_decoder"],
-    arena_size=config["arena_size"],
-    invariant=config["invariant"],
-    get_raw_pose=True,
+path = "gre1_b1_true_x360"
+base_path = "/mnt/ceph/users/jwu10/results/vae/heading/"
+out_path = base_path + path + "/vis_latents/"
+config = read.config(base_path + path + "/model_config.yaml")
+k = 25  # Number of clusters
+config["model"]["load_model"] = config["out_path"]
+config["model"]["start_epoch"] = 250
+config["data"]["stride"] = 2
+# config["speed_decoder"] = None
+Path(out_path).mkdir(parents=True, exist_ok=True)
+
+connectivity = read.connectivity_config(config["data"]["skeleton_path"])
+dataset_label = "Train"
+### Load Dataset
+dataset = ssumo.data.get_mouse(
+    data_config=config["data"],
+    window=config["model"]["window"],
+    train=dataset_label == "Train",
+    data_keys=["x6d", "root", "offsets"] + config["disentangle"]["features"],
 )
-loader = DataLoader(dataset=dataset, batch_size=config["batch_size"], shuffle=False)
-arena_size = None if config["arena_size"] is None else dataset.arena_size.cuda()
+loader = DataLoader(
+    dataset=dataset, batch_size=config["train"]["batch_size"], shuffle=False
+)
+vae, device = ssumo.model.get(
+    model_config=config["model"],
+    disentangle_config=config["disentangle"],
+    n_keypts=dataset.n_keypts,
+    direction_process=config["data"]["direction_process"],
+    arena_size=dataset.arena_size,
+    kinematic_tree=dataset.kinematic_tree,
+    verbose=1,
+)
+kinematic_tree = dataset.kinematic_tree
+n_keypts = dataset.n_keypts
 
-if config["speed_decoder"] is None:
-    vae, device = utils.init_model(config, dataset.n_keypts, config["invariant"])
-else:
-    vae, spd_decoder, device = utils.init_model(
-        config, dataset.n_keypts, config["invariant"]
-    )
-    spd_decoder.eval()
-vae.eval()
-
-latents = utils.get_latents(vae, dataset, config, device, "Train")
+latents = ssumo.evaluate.get.latents(vae, dataset, config, device, dataset_label)
 mean_offsets = dataset.data["offsets"].mean(axis=(0, -1)).cuda()
 latent_means = latents.mean(axis=0)
 latent_std = latents.std(axis=0)
@@ -60,22 +57,37 @@ num_latents = latents.shape[-1]
 
 # import pdb; pdb.set_trace()
 
-# if config["speed_decoder"] is not None:
-#     spd_weights = spd_decoder.weight.cpu().detach().numpy()
-#     nrm = (spd_weights @ spd_weights.T).ravel()
-#     avg_spd_o = latents @ spd_weights.T
-#     latents = latents - (avg_spd_o @ spd_weights) / nrm
+if z_null is not None:
+    dis_w = vae.disentangle[z_null].decoder.weight.cpu().detach().numpy()
+    import scipy.linalg as spl
+    U_orth = spl.null_space(dis_w)
+    latents = latents @ U_orth
+    # nrm = (spd_weights @ spd_weights.T).ravel()
+    # avg_spd_o = latents @ spd_weights.T
+    # latents = latents - (avg_spd_o @ spd_weights) / nrm
+
 ### Visualize clusters
 if vis_clusters:
-    k_pred, gmm = utils.get_gmm_clusters(
-        latents, k, label="z", path=out_path, covariance_type="diag"
-    )
-    assert len(k_pred) == len(dataset)
+    # k_pred, gmm = ssumo.evaluate.cluster.gmm(
+    #     latents=latents,
+    #     n_components=k,
+    #     label="z_sub",
+    #     path=out_path,
+    #     covariance_type="full",
+    # )
+
+    k_pred = ssumo.evaluate.cluster.dbscan( latents=latents, eps=34.4, min_samples=256, label="z", path=out_path, )
+
+    print(np.histogram(k_pred, bins=len(np.unique(k_pred)), range=(-1.5, np.max(k_pred)+0.5))[0])
+    import pdb; pdb.set_trace()
+    # assert len(k_pred) == len(dataset)
+    # from sklearn.cluster import DBSCAN
+    # k_pred = DBSCAN().fit_predict(latents)
 
     ### Sample 9 videos from each cluster
     n_samples = 9
     indices = np.arange(len(k_pred))
-    for cluster in range(k):
+    for cluster in np.unique(k_pred):
         label_idx = indices[k_pred == cluster]
         num_points = min(len(label_idx), n_samples)
         permuted_points = np.random.permutation(label_idx)
@@ -93,14 +105,12 @@ if vis_clusters:
 
         num_points = len(sampled_points)
 
-        root = inv_normalize_root(dataset[sampled_points]["root"], dataset.arena_size)
-
-        raw_pose = fwd_kin_cont6d_torch(
+        raw_pose = ssumo.data.dataset.fwd_kin_cont6d_torch(
             dataset[sampled_points]["x6d"].reshape(-1, dataset.n_keypts, 6),
             dataset.kinematic_tree,
             dataset[sampled_points]["offsets"].reshape(-1, dataset.n_keypts, 3),
             # (torch.abs(mean_offsets)[:, None].detach().cpu() * dataset.offset).repeat( num_points * config["window"], 1, 1 ),
-            root_pos=root.reshape(-1, 3),
+            root_pos=dataset[sampled_points]["root"].reshape(-1, 3),
             do_root_R=True,
         ).numpy()
 
@@ -123,7 +133,7 @@ if vis_clusters:
                 * n_trans
             )
             plot_trans = np.append(plot_trans, np.zeros(n_samples)[:, None], axis=-1)
-            raw_pose += np.repeat(plot_trans, config["window"], axis=0)[:, None, :]
+            raw_pose += np.repeat(plot_trans, vae.window, axis=0)[:, None, :]
         # raw_pose = dataset[sampled_points]["raw_pose"].reshape(
         #     num_points * config["window"], dataset.n_keypts, 3
         # )
@@ -131,13 +141,13 @@ if vis_clusters:
         vis.pose.arena3D(
             raw_pose,
             connectivity,
-            frames=np.arange(num_points) * config["window"],
+            frames=np.arange(num_points) * vae.window,
             centered=False,
-            N_FRAMES=config["window"],
+            N_FRAMES=vae.window,
             fps=30,
             dpi=200,
             VID_NAME="cluster{}.mp4".format(cluster),
-            SAVE_ROOT=out_path + "/sampled_clusters9/",
+            SAVE_ROOT=out_path + "/sampled_clusters/",
         )
 import pdb
 
