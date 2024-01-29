@@ -76,7 +76,7 @@ for epoch in tqdm.trange(
     if epoch % 10 == 0:
         print("Saving model to folder: {}".format(config["out_path"]))
         torch.save(
-            {k: v.cpu() for k, v in vae.state_dict()},
+            {k: v.cpu() for k, v in vae.state_dict().items()},
             "{}/weights/epoch_{}.pth".format(config["out_path"], epoch),
         )
 

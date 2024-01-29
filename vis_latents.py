@@ -5,8 +5,6 @@ import torch
 from dappy import visualization as vis
 import numpy as np
 from pathlib import Path
-import tqdm
-import pickle
 
 z_null = None
 gen_means_cluster = False
@@ -16,11 +14,11 @@ vis_clusters = True
 
 path = "gre1_b1_true_x360"
 base_path = "/mnt/ceph/users/jwu10/results/vae/heading/"
-out_path = base_path + path + "/vis_latents/"
+out_path = base_path + path + "/vis_latents_200/"
 config = read.config(base_path + path + "/model_config.yaml")
 k = 25  # Number of clusters
 config["model"]["load_model"] = config["out_path"]
-config["model"]["start_epoch"] = 250
+config["model"]["start_epoch"] = 200
 config["data"]["stride"] = 2
 # config["speed_decoder"] = None
 Path(out_path).mkdir(parents=True, exist_ok=True)
@@ -32,7 +30,8 @@ dataset = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
     train=dataset_label == "Train",
-    data_keys=["x6d", "root", "offsets"] + config["disentangle"]["features"],
+    data_keys=["x6d", "root", "offsets", "raw_pose"]
+    + config["disentangle"]["features"],
 )
 loader = DataLoader(
     dataset=dataset, batch_size=config["train"]["batch_size"], shuffle=False
@@ -60,6 +59,7 @@ num_latents = latents.shape[-1]
 if z_null is not None:
     dis_w = vae.disentangle[z_null].decoder.weight.cpu().detach().numpy()
     import scipy.linalg as spl
+
     U_orth = spl.null_space(dis_w)
     latents = latents @ U_orth
     # nrm = (spd_weights @ spd_weights.T).ravel()
@@ -68,18 +68,21 @@ if z_null is not None:
 
 ### Visualize clusters
 if vis_clusters:
-    # k_pred, gmm = ssumo.evaluate.cluster.gmm(
-    #     latents=latents,
-    #     n_components=k,
-    #     label="z_sub",
-    #     path=out_path,
-    #     covariance_type="full",
-    # )
+    k_pred, gmm = ssumo.evaluate.cluster.gmm(
+        latents=latents,
+        n_components=k,
+        label="z",
+        path=out_path,
+        covariance_type="full",
+    )
 
-    k_pred = ssumo.evaluate.cluster.dbscan( latents=latents, eps=34.4, min_samples=256, label="z", path=out_path, )
+    # k_pred = ssumo.evaluate.cluster.dbscan( latents=latents, eps=34.4, min_samples=256, label="z", path=out_path, )
 
-    print(np.histogram(k_pred, bins=len(np.unique(k_pred)), range=(-1.5, np.max(k_pred)+0.5))[0])
-    import pdb; pdb.set_trace()
+    print(
+        np.histogram(
+            k_pred, bins=len(np.unique(k_pred)), range=(-1.5, np.max(k_pred) + 0.5)
+        )[0]
+    )
     # assert len(k_pred) == len(dataset)
     # from sklearn.cluster import DBSCAN
     # k_pred = DBSCAN().fit_predict(latents)
@@ -105,14 +108,17 @@ if vis_clusters:
 
         num_points = len(sampled_points)
 
-        raw_pose = ssumo.data.dataset.fwd_kin_cont6d_torch(
-            dataset[sampled_points]["x6d"].reshape(-1, dataset.n_keypts, 6),
-            dataset.kinematic_tree,
-            dataset[sampled_points]["offsets"].reshape(-1, dataset.n_keypts, 3),
-            # (torch.abs(mean_offsets)[:, None].detach().cpu() * dataset.offset).repeat( num_points * config["window"], 1, 1 ),
-            root_pos=dataset[sampled_points]["root"].reshape(-1, 3),
-            do_root_R=True,
-        ).numpy()
+        # raw_pose = ssumo.data.dataset.fwd_kin_cont6d_torch(
+        #     dataset[sampled_points]["x6d"].reshape(-1, dataset.n_keypts, 6),
+        #     dataset.kinematic_tree,
+        #     dataset[sampled_points]["offsets"].reshape(-1, dataset.n_keypts, 3),
+        #     # (torch.abs(mean_offsets)[:, None].detach().cpu() * dataset.offset).repeat( num_points * config["window"], 1, 1 ),
+        #     root_pos=dataset[sampled_points]["root"].reshape(-1, 3),
+        #     do_root_R=True,
+        # ).numpy()
+        raw_pose = dataset[sampled_points]["raw_pose"].detach().cpu().numpy()
+        raw_pose = raw_pose - raw_pose[:, vae.window // 2 : vae.window // 2 + 1, 0:1, :]
+        raw_pose = raw_pose.reshape(-1, dataset.n_keypts, 3)
 
         if num_points == n_samples:
             n_trans = 100

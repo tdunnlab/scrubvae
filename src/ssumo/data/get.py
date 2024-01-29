@@ -63,7 +63,7 @@ def get_mouse(
     windowed_yaw = get_frame_yaw(pose, 0, 1)[window_inds]
 
     if "heading_change" in data_keys:
-        data["heading_change"] = np.diff(windowed_yaw, n=1, axis=-1).mean(
+        data["heading_change"] = np.diff(windowed_yaw, n=1, axis=-1).sum(
             axis=-1, keepdims=True
         )
 
