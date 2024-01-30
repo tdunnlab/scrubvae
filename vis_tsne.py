@@ -1,14 +1,17 @@
 from dappy.embed import Embed
 import ssumo
-from dappy import visualization as vis
 from dappy import read
 from torch.utils.data import DataLoader
 import numpy as np
 import scipy.linalg as spl
+from base_path import RESULTS_PATH
+import matplotlib.pyplot as plt
+from cmocean.cm import phase
+import colorcet as cc
+from ssumo.plot import scatter_cmap
 
-path = "balanced"
-base_path = "/mnt/ceph/users/jwu10/results/vae/heading/"
-config = read.config(base_path + path + "/model_config.yaml")
+path = "heading/balanced/"
+config = read.config(RESULTS_PATH + path + "/model_config.yaml")
 config["model"]["load_model"] = config["out_path"]
 config["model"]["start_epoch"] = 300
 
@@ -44,14 +47,25 @@ embedder = Embed(
     perplexity=50,
     lr="auto",
 )
-embed_vals = embedder.embed(z, save_self=True)
+# embed_vals = embedder.embed(z, save_self=True)
+# np.save(config["out_path"] + "tSNE_z.npy", embed_vals)
 
-vis.plot.scatter_by_cat(embed_vals, yaw, label="z_yaw", filepath=config["out_path"])
+embed_vals = np.load(config["out_path"] + "tSNE_z.npy")
 
-dis_w = vae.disentangle["heading"].decoder.weight.detach().cpu().numpy()
-U_orth = spl.null_space(dis_w)
-z_sub = z @ U_orth
+downsample = 10
+scatter_cmap(
+    embed_vals[::downsample, :], yaw[::downsample], "z_yaw", path=config["out_path"]
+)
 
-embed_vals = embedder.embed(z, save_self=True)
+z_null = ssumo.eval.project_to_null(
+    z, vae.disentangle["heading"].decoder.weight.detach().cpu().numpy()
+)[0]
 
-vis.plot.scatter_by_cat(embed_vals, yaw, label="zsub_yaw", filepath=config["out_path"])
+# embed_vals = embedder.embed(z_null, save_self=True)
+# np.save(config["out_path"] + "tSNE_znull.npy", embed_vals)
+
+embed_vals = np.load(config["out_path"] + "tSNE_znull.npy")
+
+scatter_cmap(
+    embed_vals[::downsample, :], yaw[::downsample], "znull_yaw", path=config["out_path"]
+)

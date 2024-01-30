@@ -1,10 +1,9 @@
 from dappy import read, preprocess
 import numpy as np
 import ssumo.data.quaternion as qtn
-from typing import Optional, Type, Union, List
+from typing import List
 import torch
 from ssumo.data.dataset import *
-
 
 def get_mouse(
     data_config: dict,
