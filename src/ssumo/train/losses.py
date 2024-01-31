@@ -43,9 +43,9 @@ def vae_BXEntropy_loss(x, x_hat, mu, log_var):
 
 def mpjpe_loss(x, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
     if root == None:
-        root = torch.zeros((x.shape[0], 3)).to(x.device)
+        root = torch.zeros((x.shape[0], 3), device=x.device)
     if root_hat == None:
-        root_hat = torch.zeros((x.shape[0], 3)).to(x.device)
+        root_hat = torch.zeros((x.shape[0], 3), device=x.device)
 
     pose = fwd_kin_cont6d_torch(
         x, kinematic_tree, offsets, root_pos=root, do_root_R=True, eps=1e-8
@@ -122,41 +122,6 @@ def get_batch_loss(data, data_o, loss_scale):
                     )
                     / num_keys
                 )
-
-    # if "heading" in loss_scale.keys():
-    #     batch_loss["heading"] = (
-    #         data_o["disentangle"]["heading"][0] * data["heading"]
-    #     ).sum()
-    #     if "heading_gr" in loss_scale.keys():
-    #         if type(data_o["disentangle"]["heading"][1]) is tuple:
-    #             batch_loss["heading_gr"] = 0
-    #             for gr_e in data_o["disentangle"]["heading"][1]:
-    #                 batch_loss["heading_gr"] += (gr_e * data["heading"]).sum()
-    #             batch_loss["heading_gr"] = batch_loss["heading_gr"] / len(
-    #                 data_o["disentangle"]["heading"][1]
-    #             )
-    #         elif torch.is_tensor(data_o["disentangle"]["heading"][1]):
-    #             batch_loss["heading_gr"] = (
-    #                 data_o["disentangle"]["heading"] * data["ehading"]
-    #             ).sum()
-
-    # if "speed" in loss_scale.keys():
-    #     batch_loss["speed"] = torch.nn.MSELoss(reduction="sum")(
-    #         data_o["speed"], data["speed"]
-    #     )
-
-    # if "speed_gr" in loss_scale.keys():
-    #     if type(data_o["speed_gr"]) is tuple:
-    #         batch_loss["speed_gr"] = 0
-    #         for speed_gr in data_o["speed_gr"]:
-    #             batch_loss["speed_gr"] += torch.nn.MSELoss(reduction="sum")(
-    #                 speed_gr, data["speed"]
-    #             )
-    #         batch_loss["speed_gr"] = batch_loss["speed_gr"] / len(data_o["speed_gr"])
-    #     else:
-    #         batch_loss["speed_gr"] = torch.nn.MSELoss(reduction="sum")(
-    #             data_o["speed_gr"], data["speed"]
-    #         )
 
     # if "speed_regularize" in loss_scale.keys():
     #     batch_loss["speed_regularize"] = torch.sum(

@@ -6,7 +6,6 @@ import torch
 from ssumo.data.dataset import *
 from torch.utils.data import DataLoader
 
-
 def get_mouse(
     data_config: dict,
     window: int = 51,
@@ -132,6 +131,12 @@ def get_mouse(
         skeleton_config["KINEMATIC_TREE"],
         pose.shape[-2],
     )
-    loader = DataLoader(dataset=dataset, batch_size=data_config["batch_size"], shuffle=shuffle)
+    loader = DataLoader(
+        dataset=dataset,
+        batch_size=data_config["batch_size"],
+        shuffle=shuffle,
+        num_workers=8,
+        pin_memory=True,
+    )
 
     return dataset, loader

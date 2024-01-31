@@ -21,42 +21,19 @@ def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
     return beta_schedule
 
 
-def predict_batch(vae, data, disentangle_keys=None):
-    # data_o = {}
+def predict_batch(model, data, disentangle_keys=None):
 
-    # if vae.invariant_dim > 0:
-    #     invariant = torch.cat([data[key] for key in disentangle_keys], axis=-1)
-    # else:
-    #     invariant = None
-
-    # if "arena_size" in data.keys():
-    #     # x_i = torch.cat(
-    #     #     (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), data["root"]), axis=-1
-    #     # )
-    #     x_o, data_o["mu"], data_o["L"], data_o["disentangle"] = vae(
-    #         x_i, invariant=invariant
-    #     )
-
-    #     data_o["x6d"] = x_o[..., :-3].reshape(data["x6d"].shape)
-    #     import pdb; pdb.set_trace()
-    #     data_o["root"] = inv_normalize_root(x_o[..., -3:], data["arena_size"])
-    #     data["root"] = inv_normalize_root(data["root"], data["arena_size"])
-
-    # else:
-    #     data_o["x6d"], data_o["mu"], data_o["L"], data_o["disentangle"] = vae(
-    #         data["x6d"], invariant=invariant
-    #     )
     data_i = {k:v for k,v in data.items() if (k in disentangle_keys) or (k in ["x6d","root"])}
 
-    return vae(data_i)
+    return model(data_i)
 
 
-def train_epoch(vae, optimizer, loader, device, loss_config, epoch, mode="train", disentangle_keys=None):
+def train_epoch(model, optimizer, loader, device, loss_config, epoch, mode="train", disentangle_keys=None):
     if mode == "train":
-        vae.train()
+        model.train()
         grad_env = torch.enable_grad
     elif ("test" or "encode" or "decode") in mode:
-        vae.eval()
+        model.eval()
         grad_env = torch.no_grad
     else:
         raise ValueError("This mode is not recognized.")
@@ -64,21 +41,22 @@ def train_epoch(vae, optimizer, loader, device, loss_config, epoch, mode="train"
     with grad_env():
         for batch_idx, data in enumerate(loader):
             if mode == "train":
-                optimizer.zero_grad()
+                for param in model.parameters():
+                    param.grad = None
 
             data = {k: v.to(device) for k, v in data.items()}
-            data["kinematic_tree"] = vae.kinematic_tree
-            len_batch = len(data["x6d"])
-            data_o = predict_batch(vae, data, disentangle_keys)
+            data["kinematic_tree"] = model.kinematic_tree
+            data_o = predict_batch(model, data, disentangle_keys)
 
             batch_loss = get_batch_loss(data, data_o, loss_config)
 
             if mode == "train":
                 batch_loss["total"].backward()
                 optimizer.step()
-            epoch_loss = { k: v + batch_loss[k].item() for k, v in epoch_loss.items() }
+            epoch_loss = { k: v + batch_loss[k] for k, v in epoch_loss.items() }
 
             if batch_idx % 500 == 0:
+                len_batch = len(data["x6d"])
                 print(
                     "{} Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
                         mode.title(),
@@ -91,7 +69,7 @@ def train_epoch(vae, optimizer, loader, device, loss_config, epoch, mode="train"
                 )
 
         for k, v in epoch_loss.items():
-            epoch_loss[k] = v / len(loader.dataset)
+            epoch_loss[k] = v.item() / len(loader.dataset)
             print("====> Epoch: {} Average {} loss: {:.4f}".format(epoch, k, epoch_loss[k]))
 
     return epoch_loss

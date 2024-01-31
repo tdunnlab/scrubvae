@@ -52,6 +52,10 @@ beta_schedule = ssumo.train.get_beta_schedule(
 
 loss_dict_keys = ["total"] + list(config["loss"].keys())
 loss_dict = {k: [] for k in loss_dict_keys}
+
+if device == "cuda":
+    torch.backends.cudnn.benchmark = True
+
 for epoch in tqdm.trange(
     config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
 ):

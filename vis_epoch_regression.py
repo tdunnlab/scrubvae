@@ -16,72 +16,75 @@ paths = ["gre1_b1_true_x360", "balanced", "no_gr", "bal_hc_sum", "vanilla"]
 dataset_label = "Train"
 
 for path_ind, path in enumerate(paths):
-    config = read.config(results_path + path + "/model_config.yaml")
-    config["model"]["load_model"] = config["out_path"]
+    metrics = ssumo.eval.metrics.epoch_linear_regression(
+        "{}{}/".format(results_path, path), dataset_label, save_load=True
+    )
+    # config = read.config(results_path + path + "/model_config.yaml")
+    # config["model"]["load_model"] = config["out_path"]
 
-    # Get all epochs
-    epochs = ssumo.eval.metrics.get_all_epochs(config["out_path"])
+    # # Get all epochs
+    # epochs = ssumo.eval.metrics.get_all_epochs(config["out_path"])
 
-    if path == paths[0]:
-        disentangle_keys = config["disentangle"]["features"]
-        dataset, loader = ssumo.data.get_mouse(
-            data_config=config["data"],
-            window=config["model"]["window"],
-            train=dataset_label == "Train",
-            data_keys=[
-                "x6d",
-                "root",
-            ]
-            + disentangle_keys,
-            shuffle = False,
-        )
-        met_dict = {
-            k: {"R2": [], "R2_Null": []} for k in disentangle_keys
-        }
-        met_dict["epochs"] = []
-        metrics = {p: met_dict.copy() for p in paths}
+    # if path == paths[0]:
+    #     disentangle_keys = config["disentangle"]["features"]
+    #     dataset, loader = ssumo.data.get_mouse(
+    #         data_config=config["data"],
+    #         window=config["model"]["window"],
+    #         train=dataset_label == "Train",
+    #         data_keys=[
+    #             "x6d",
+    #             "root",
+    #         ]
+    #         + disentangle_keys,
+    #         shuffle = False,
+    #     )
+    #     met_dict = {
+    #         k: {"R2": [], "R2_Null": []} for k in disentangle_keys
+    #     }
+    #     met_dict["epochs"] = []
+    #     metrics = {p: met_dict.copy() for p in paths}
 
-    metrics[path]["epochs"] = epochs
+    # metrics[path]["epochs"] = epochs
 
-    for epoch_ind, epoch in enumerate(epochs):
-        config["model"]["start_epoch"] = epoch
+    # for epoch_ind, epoch in enumerate(epochs):
+    #     config["model"]["start_epoch"] = epoch
 
-        vae, device = ssumo.model.get(
-            model_config=config["model"],
-            disentangle_config=config["disentangle"],
-            n_keypts=dataset.n_keypts,
-            direction_process=config["data"]["direction_process"],
-            arena_size=dataset.arena_size,
-            kinematic_tree=dataset.kinematic_tree,
-            verbose=-1,
-        )
+    #     vae, device = ssumo.model.get(
+    #         model_config=config["model"],
+    #         disentangle_config=config["disentangle"],
+    #         n_keypts=dataset.n_keypts,
+    #         direction_process=config["data"]["direction_process"],
+    #         arena_size=dataset.arena_size,
+    #         kinematic_tree=dataset.kinematic_tree,
+    #         verbose=-1,
+    #     )
 
-        z = ssumo.eval.get.latents(vae, dataset, config, device, dataset_label)
+    #     z = ssumo.eval.get.latents(vae, dataset, config, device, dataset_label)
 
-        for key in disentangle_keys:
-            print("Decoding Feature: {}".format(key))
-            y_true = dataset[:][key].detach().cpu().numpy()
-            lin_model = LinearRegression().fit(z, y_true)
-            pred = lin_model.predict(z)
-            print(metrics)
+    #     for key in disentangle_keys:
+    #         print("Decoding Feature: {}".format(key))
+    #         y_true = dataset[:][key].detach().cpu().numpy()
+    #         lin_model = LinearRegression().fit(z, y_true)
+    #         pred = lin_model.predict(z)
+    #         print(metrics)
 
-            metrics[path][key]["R2"] += [r2_score(y_true, pred)]
-            print(metrics[path][key]["R2"])
+    #         metrics[path][key]["R2"] += [r2_score(y_true, pred)]
+    #         print(metrics[path][key]["R2"])
 
-            if len(vae.disentangle.keys()) > 0:
-                dis_w = vae.disentangle[key].decoder.weight.detach().cpu().numpy()
-            else:
-                dis_w = lin_model.coef_
-                # z -= lin_model.intercept_[:,None] * dis_w
+    #         if len(vae.disentangle.keys()) > 0:
+    #             dis_w = vae.disentangle[key].decoder.weight.detach().cpu().numpy()
+    #         else:
+    #             dis_w = lin_model.coef_
+    #             # z -= lin_model.intercept_[:,None] * dis_w
 
-            ## Null space projection
-            z_null = ssumo.eval.project_to_null(z, dis_w)[0]
-            pred_null = LinearRegression().fit(z_null, y_true).predict(z_null)
+    #         ## Null space projection
+    #         z_null = ssumo.eval.project_to_null(z, dis_w)[0]
+    #         pred_null = LinearRegression().fit(z_null, y_true).predict(z_null)
 
-            metrics[path][key]["R2_Null"] += [r2_score(y_true, pred_null)]
-            print(metrics[path][key]["R2_Null"])
+    #         metrics[path][key]["R2_Null"] += [r2_score(y_true, pred_null)]
+    #         print(metrics[path][key]["R2_Null"])
 
-    pickle.dump(metrics, open("{}/linreg.p".format(results_path), "wb"))
+    # pickle.dump(metrics, open("{}/linreg.p".format(results_path), "wb"))
 
 ## Plot R^2
 for key in disentangle_keys:
