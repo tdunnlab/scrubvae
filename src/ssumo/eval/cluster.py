@@ -13,7 +13,7 @@ def _check_model_exists(func):
         **kwargs,
     ):
         model_path = "{}{}_{}.p".format(path, label, func.__name__)
-        preds_path = "{}{}_{}_pred.npy".format(path,label, func.__name__,)
+        preds_path = "{}{}_{}.npy".format(path,label, func.__name__,)
         model_exists = Path(model_path).exists()
 
         if model_exists:
@@ -52,6 +52,7 @@ def gmm(
         n_components=n_components,
         covariance_type=covariance_type,
         max_iter=150,
+        init_params = "k-means++",
         verbose=1,
     ).fit(latents)
 

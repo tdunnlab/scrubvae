@@ -5,26 +5,23 @@ import torch
 torch.autograd.set_detect_anomaly(True)
 import torch.optim as optim
 import tqdm
-from ssumo.parameters import read
+from ssumo.params import read
 import pickle
 import sys
+from base_path import RESULTS_PATH
 
 ### Set/Load Parameters
-base_path = "/mnt/ceph/users/hkoneru/results/vae/"
 analysis_key = sys.argv[1]
 print(analysis_key)
-config = read.config(base_path + analysis_key + "/model_config.yaml")
+config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 ### Load Dataset
-dataset = ssumo.data.get_mouse(
+dataset, loader = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
     train=True,
     data_keys=["x6d", "root", "offsets"] + config["disentangle"]["features"],
-)
-
-loader = DataLoader(
-    dataset=dataset, batch_size=config["train"]["batch_size"], shuffle=True
+    shuffle=True,
 )
 
 #Balance disentanglement losses

@@ -157,6 +157,7 @@ batch/
 src/ssumo/*/__pycache__
 configs/*.yaml
 !configs/mouse_skeleton.yaml
+base_path.py
 
 
 # PyCharm

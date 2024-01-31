@@ -1,7 +1,7 @@
 import yaml
 from dappy import read
 from pathlib import Path
-from ssumo.parameters import PARAM_KEYS
+from ssumo.params import PARAM_KEYS
 
 def config(path):
     config = read.config(path)

@@ -98,7 +98,7 @@ class ResidualBlock(nn.Module):
             in_channels,
             out_channels,
             kernel,
-            2,
+            stride,
             kernel // 2,
             dilation=dilation,
         )

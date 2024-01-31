@@ -4,7 +4,12 @@ from typing import Union, List
 from dappy import visualization as vis
 import matplotlib.pyplot as plt
 from ssumo.plot.constants import PLANE
-
+from pathlib import Path
+from matplotlib.lines import Line2D
+from typing import Union, List, Optional, Dict, Tuple
+import pandas as pd
+import seaborn as sns
+import colorcet as cc
 
 # def keypoints(
 #     pose: np.ndarray,
@@ -142,3 +147,188 @@ def trace(
     plt.close()
 
     return
+
+
+def sample_clusters(pose, k_pred, connectivity, save_root):
+    window = pose.shape[1]
+    n_keypts = pose.shape[2]
+    pose = pose - pose[:, window//2 : window//2 + 1,0:1, :]
+    ### Sample 9 videos from each cluster
+    n_samples = 9
+    indices = np.arange(len(k_pred))
+    assert len(pose) == len(k_pred)
+    for cluster in np.unique(k_pred):
+        label_idx = indices[k_pred == cluster]
+        num_points = min(len(label_idx), n_samples)
+        permuted_points = np.random.permutation(label_idx)
+        sampled_points = []
+        for i in range(len(permuted_points)):
+            if len(sampled_points) == num_points:
+                break
+            elif any(np.abs(permuted_points[i] - np.array(sampled_points)) < 100):
+                continue
+            else:
+                sampled_points += [permuted_points[i]]
+
+        print("Plotting Poses from Cluster {}".format(cluster))
+        print(sampled_points)
+
+        num_points = len(sampled_points)
+
+        raw_pose = pose[sampled_points, ...].reshape(-1, n_keypts, 3)
+
+        if num_points == n_samples:
+            n_trans = 100
+            plot_trans = (
+                np.array(
+                    [
+                        [0, 0],
+                        [1, 1],
+                        [1, -1],
+                        [-1, 1],
+                        [-1, -1],
+                        [1.5, 0],
+                        [0, 1.5],
+                        [-1.5, 0],
+                        [0, -1.5],
+                    ]
+                )
+                * n_trans
+            )
+            plot_trans = np.append(plot_trans, np.zeros(n_samples)[:, None], axis=-1)
+            raw_pose += np.repeat(plot_trans, window, axis=0)[:, None, :]
+        # raw_pose = dataset[sampled_points]["raw_pose"].reshape(
+        #     num_points * config["window"], dataset.n_keypts, 3
+        # )
+
+        vis.pose.arena3D(
+            raw_pose,
+            connectivity,
+            frames=np.arange(num_points) * window,
+            centered=False,
+            N_FRAMES=window,
+            fps=30,
+            dpi=200,
+            VID_NAME="cluster{}.mp4".format(cluster),
+            SAVE_ROOT=save_root,
+        )
+
+
+def feature_ridge(
+    feature: np.ndarray,
+    labels: Union[List, np.ndarray],
+    xlabel: str,
+    ylabel: str,
+    n_bins: int = 100,
+    row_order: Optional[List] = None,
+    binrange: Optional[List] = None,
+    x_lim: Optional[List] = None,
+    xticks: Optional[List] = None,
+    medians: bool = False,
+    path: str = "./",
+):
+    sns.set_theme(
+        style="white", rc={"axes.facecolor": (0, 0, 0, 0), "figure.figsize": (20, 20)}
+    )
+    df = pd.DataFrame({"x": feature, "y": labels})
+    print(len(np.unique(labels)))
+    height = 0.75
+    pal = sns.cubehelix_palette(len(np.unique(labels)), rot=-0.25, light=0.7)
+    grid = sns.FacetGrid(
+        df, row="y", hue="y", aspect=20, row_order=row_order, height=height, palette=pal
+    )
+
+    grid.map(
+        sns.histplot,
+        "x",
+        stat="probability",
+        bins=n_bins,
+        binrange=binrange,
+        common_norm=False,
+        fill=True,
+        alpha=0.5,
+    )
+
+    def adjust_xlim(x, color, label):
+        ax = plt.gca()
+        ax.set_xlim(left=x_lim[0], right=x_lim[1])
+
+    grid.refline(y=0, linewidth=1, linestyle="-", color=None, clip_on=False)
+
+    # Define and use a simple function to label the plot in axes coordinates
+    def labelx(x, color, label):
+        ax = plt.gca()
+        ax.text(
+            0,
+            0.2,
+            label,
+            fontweight="bold",
+            color=color,
+            ha="left",
+            va="center",
+            transform=ax.transAxes,
+        )
+
+    grid.map(labelx, "x")
+    if x_lim is not None:
+        grid.map(adjust_xlim, "x")
+
+    # Set the subplots to overlap
+    grid.figure.subplots_adjust(hspace=-0.25)
+
+    # Remove axes details that don't play well with overlap
+    grid.set_titles("")
+    grid.set(yticks=[], ylabel="")
+    if xticks is not None:
+        grid.set(xticks=xticks[0])
+        grid.set_xticklabels(xticks[1])
+    grid.despine(bottom=True, left=True)
+    plt.xlabel(xlabel)
+    grid.fig.text(0.03, 0.4, ylabel, rotation="vertical")
+
+    if medians:
+        ax_keys = list(grid.axes_dict.keys())
+        for i, key in enumerate(ax_keys):
+            ax = grid.axes_dict[key]
+            for j in range(i, len(ax_keys)):
+                ax.axvline(
+                    np.median(df["x"].loc[df["y"] == ax_keys[j]]),
+                    color=pal[j],
+                    linewidth=3.5,
+                    linestyle="-",
+                )
+
+            if i == 0:
+                handles = [
+                    Line2D(
+                        [0],
+                        [0],
+                        linestyle="-",
+                        color="k",
+                        linewidth=3.5,
+                        label="Median",
+                    )
+                ]
+                ax.legend(handles, ["Median"], facecolor="white")
+
+    # Path(path).mkdir(parents=True, exist_ok=True)
+    plt.savefig(path + "ridge.png".format(xlabel, ylabel))
+    plt.close()
+
+def scatter_cmap(data, hue, label, path, cmap="cyclic"):
+    if cmap == "cyclic":
+        cmap = cc.cm["colorwheel"]
+    
+    plt.scatter(
+        data[:, 0],
+        data[:, 1],
+        marker=".",
+        s=0.4,
+        c=hue,
+        cmap=cmap,
+        alpha=0.5,
+    )
+    plt.colorbar()
+    plt.savefig("{}scatter_{}.png".format(path,label), dpi=400)
+    plt.close()
+

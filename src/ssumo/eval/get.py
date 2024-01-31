@@ -5,7 +5,8 @@ import torch
 import numpy as np
 
 def latents(model, dataset, config, device, dataset_label):
-    model.eval()
+    if model is not None:
+        model.eval()
     latent_path = "{}/latents/{}_{}.npy".format(
         config["out_path"], dataset_label, config["model"]["start_epoch"]
     )
