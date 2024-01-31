@@ -19,6 +19,7 @@ PARAM_KEYS = dict(
         "type",
         "window",
         "z_dim",
+        "channel",
     ],
     train=["beta_anneal", "batch_size", "num_epochs"],
 )

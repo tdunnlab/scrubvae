@@ -54,6 +54,7 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
             disentangle_keys=disentangle_config["features"],
             arena_size = arena_size,
             kinematic_tree = kinematic_tree,
+            ch=model_config["channel"],
         )
     elif model_config["type"] == "transformer":
         from ssumo.model.TransformerVAE import TransformerVAE
