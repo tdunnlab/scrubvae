@@ -307,6 +307,7 @@ class ResVAE(nn.Module):
     ):
         super(ResVAE, self).__init__()
         self.in_channels = in_channels
+        self.ch=ch
         self.window = window
         self.is_diag = is_diag
         self.invariant_dim = invariant_dim

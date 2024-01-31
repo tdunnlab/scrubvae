@@ -12,6 +12,7 @@ PARAM_KEYS = dict(
     disentangle=["alpha", "balance_loss", "detach_gr", "features", "method"],
     model=[
         "activation",
+        "channel",
         "diag",
         "init_dilation",
         "kernel",
