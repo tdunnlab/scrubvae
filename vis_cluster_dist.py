@@ -35,7 +35,6 @@ for key in ["heading", "avg_speed"]:
     else:
         feat = dataset[:][key].cpu().detach().numpy().squeeze()
 
-
     ssumo.plot.feature_ridge(
         feature=feat,
         labels=k_pred,

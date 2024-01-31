@@ -26,6 +26,42 @@ class GradientReversalLayer(nn.Module):
     def forward(self, x):
         return revgrad(x, self.alpha)
 
+class MultiReversalEnsemble(nn.Module):
+    def __init__(self, in_dim, out_dim, n_units=3):
+        super(MultiReversalEnsemble, self).__init__()
+
+        self.reversal_ensemble = nn.ModuleList([
+            ReversalEnsemble()
+        ])
+
+        self.lin = nn.Linear(in_dim, out_dim)
+
+        self.mlp1 = nn.Sequential(
+            nn.Linear(in_dim, in_dim),
+            nn.ReLU(),
+            nn.Linear(in_dim, in_dim),
+            nn.ReLU(),
+            nn.Linear(in_dim, out_dim),
+        )
+
+        self.mlp2 = nn.Sequential(
+            nn.Linear(in_dim, in_dim), nn.ReLU(), nn.Linear(in_dim, out_dim)
+        )
+
+        self.mlp3 = nn.Sequential(
+            nn.Linear(in_dim, in_dim),
+            nn.ReLU(),
+            nn.Linear(in_dim, in_dim // 2),
+            nn.ReLU(),
+            nn.Linear(in_dim // 2, out_dim),
+        )
+
+    def forward(self, z):
+        a = self.lin(z)
+        b = self.mlp1(z)
+        c = self.mlp2(z)
+        d = self.mlp3(z)
+        return a, b, c, d
 
 class ReversalEnsemble(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -90,16 +126,10 @@ class LinearDisentangle(nn.Module):
         x = self.decoder(z)
 
         if self.reversal is not None:
-            if self.do_detach:
-                w = self.decoder.weight.detach()
-            else:
-                w = self.decoder.weight
+            w = self.decoder.weight
 
             nrm = w @ w.T
-            if self.do_detach:
-                z_sub = z - torch.linalg.solve(nrm, x.detach().T).T @ w
-            else:
-                z_sub = z - torch.linalg.solve(nrm, x.T).T @ w
+            z_sub = z - torch.linalg.solve(nrm, x.T).T @ w
 
             return x, self.reversal(z_sub)
         

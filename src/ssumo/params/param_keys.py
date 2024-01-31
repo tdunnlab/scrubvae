@@ -1,6 +1,7 @@
 PARAM_KEYS = dict(
     data=[
         "arena_size",
+        "batch_size",
         "data_path",
         "direction_process",
         "filter_pose",
@@ -20,5 +21,5 @@ PARAM_KEYS = dict(
         "window",
         "z_dim",
     ],
-    train=["beta_anneal", "batch_size", "num_epochs"],
+    train=["beta_anneal", "num_epochs"],
 )

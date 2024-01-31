@@ -16,15 +16,12 @@ print(analysis_key)
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 ### Load Dataset
-dataset = ssumo.data.get_mouse(
+dataset, loader = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
     train=True,
     data_keys=["x6d", "root", "offsets"] + config["disentangle"]["features"],
-)
-
-loader = DataLoader(
-    dataset=dataset, batch_size=config["train"]["batch_size"], shuffle=True
+    shuffle=True,
 )
 
 #Balance disentanglement losses

@@ -4,6 +4,8 @@ import ssumo.data.quaternion as qtn
 from typing import List
 import torch
 from ssumo.data.dataset import *
+from torch.utils.data import DataLoader
+
 
 def get_mouse(
     data_config: dict,
@@ -11,6 +13,7 @@ def get_mouse(
     train_ids: List = [0, 1, 2],
     train: bool = True,
     data_keys: List[str] = ["x6d", "root", "offsets"],
+    shuffle: bool = False,
 ):
     REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
     skeleton_config = read.config(data_config["skeleton_path"])
@@ -129,4 +132,6 @@ def get_mouse(
         skeleton_config["KINEMATIC_TREE"],
         pose.shape[-2],
     )
-    return dataset
+    loader = DataLoader(dataset=dataset, batch_size=data_config["batch_size"], shuffle=shuffle)
+
+    return dataset, loader

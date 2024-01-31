@@ -8,7 +8,7 @@ from pathlib import Path
 
 from base_path import RESULTS_PATH
 
-z_null = "avg_speed"
+z_null = None
 gen_means_cluster = False
 gen_samples_cluster = False
 gen_actions = False
