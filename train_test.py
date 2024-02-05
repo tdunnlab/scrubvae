@@ -12,7 +12,14 @@ from base_path import RESULTS_PATH
 
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
-print(analysis_key)
+
+if len(sys.argv)> 2:
+    job_id = sys.argv[2]
+    print(job_id)
+    print(sys.argv)
+    analysis_key = "{}/{}/".format(analysis_key, job_id)
+
+
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 ### Load Dataset

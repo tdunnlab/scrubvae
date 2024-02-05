@@ -36,6 +36,7 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
                 reversal=reversal,
                 alpha=disentangle_config["alpha"],
                 do_detach=disentangle_config["detach_gr"],
+                n_models=disentangle_config["n_models"]
             )
     
     ### Initialize/load model

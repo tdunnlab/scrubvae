@@ -104,7 +104,7 @@ def get_batch_loss(data, data_o, loss_scale):
             )
 
         if key + "_gr" in loss_scale.keys():
-            if type(data_o["disentangle"][key][1]) is tuple:
+            if isinstance(data_o["disentangle"][key][1],list):
                 batch_loss[key + "_gr"] = 0
                 for gr_e in data_o["disentangle"][key][1]:
                     batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="sum")(
