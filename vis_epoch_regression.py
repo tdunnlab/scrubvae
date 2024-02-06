@@ -4,17 +4,17 @@ import ssumo
 from base_path import RESULTS_PATH
 
 palette = ssumo.plot.constants.PALETTE_2
-results_path = RESULTS_PATH + "/heading/"
-paths = [
-    "vanilla",
-    "gre1_b1_true_x360",
-    "balanced",
-    "no_gr",
-    "bal_hc_sum",
-    "adamw",
-    # "adamw_big_scrub",
-]
-# paths = ["4", "6", "8", "10"]
+results_path = RESULTS_PATH + "/ensemble_mlp/"
+# paths = [
+#     "vanilla",
+#     "gre1_b1_true_x360",
+#     "balanced",
+#     "no_gr",
+#     "bal_hc_sum",
+#     "adamw",
+#     # "adamw_big_scrub",
+# ]
+paths = ["4", "6", "8", "10"]
 dataset_label = "Train"
 
 disentangle_keys = ["avg_speed", "heading", "heading_change"]

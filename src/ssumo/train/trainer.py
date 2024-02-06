@@ -36,7 +36,7 @@ def predict_batch(model, data, disentangle_keys=None):
 def train_epoch(
     model,
     optimizer,
-    # scheduler,
+    scheduler,
     loader,
     device,
     loss_config,
@@ -68,7 +68,7 @@ def train_epoch(
             if mode == "train":
                 batch_loss["total"].backward()
                 optimizer.step()
-                # scheduler.step(epoch + batch_idx / len(loader))
+                scheduler.step(epoch + batch_idx / len(loader))
             epoch_loss = {k: v + batch_loss[k] for k, v in epoch_loss.items()}
 
             # if batch_idx % 500 == 0:

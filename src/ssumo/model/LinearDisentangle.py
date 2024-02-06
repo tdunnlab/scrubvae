@@ -17,9 +17,7 @@ class GradientReversal(Function):
             grad_input = -alpha * grad_output
         return grad_input, None
 
-
 revgrad = GradientReversal.apply
-
 
 class GradientReversalLayer(nn.Module):
     def __init__(self, alpha):
@@ -28,7 +26,6 @@ class GradientReversalLayer(nn.Module):
 
     def forward(self, x):
         return revgrad(x, self.alpha)
-
 
 class MLP(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -43,7 +40,6 @@ class MLP(nn.Module):
 
     def forward(self, z):
         return self.mlp(z)
-
 
 class MLPEnsemble(nn.Module):
     def __init__(self, in_dim, out_dim, n_models=3):

@@ -18,7 +18,6 @@ def find_latent_dim(
 
     return int(l_out)
 
-
 def find_out_dim(latent_dim: int, kernel: int, num_layers: int, dilation=torch.ones(4)):
     stride = 1 if any(dilation > 1) else 2
     layer_out = (
@@ -32,7 +31,6 @@ def find_out_dim(latent_dim: int, kernel: int, num_layers: int, dilation=torch.o
         l_out = layer_out(l_out, dilation[-i])
 
     return int(l_out)
-
 
 class CholeskyL(nn.Module):
     def __init__(
@@ -65,7 +63,6 @@ class CholeskyL(nn.Module):
         # reshape y_hat so we can concatenate it to L
         return L
 
-
 class ResidualBlock(nn.Module):
     def __init__(
         self, in_channels, out_channels, kernel=5, activation="prelu", dilation=1
@@ -81,6 +78,7 @@ class ResidualBlock(nn.Module):
                 stride,
                 kernel // 2,
                 dilation=dilation,
+                #bias=False,
             ),
             nn.BatchNorm1d(out_channels // 2, eps=1e-4),
             nn.Tanh() if activation == "tanh" else nn.PReLU(),
@@ -91,6 +89,7 @@ class ResidualBlock(nn.Module):
                 1,
                 kernel // 2,
                 dilation=1,
+                #bias=False,
             ),
         )
 
@@ -101,6 +100,7 @@ class ResidualBlock(nn.Module):
             stride,
             kernel // 2,
             dilation=dilation,
+            #bias=False,
         )
 
         self.add = nn.Sequential(
@@ -136,6 +136,7 @@ class ResidualBlockTranspose(nn.Module):
                 1,
                 kernel // 2,
                 dilation=1,
+                #bias=False,
             ),
             nn.BatchNorm1d(in_channels // 2, eps=1e-4),
             nn.Tanh() if activation == "tanh" else nn.PReLU(),
@@ -146,6 +147,7 @@ class ResidualBlockTranspose(nn.Module):
                 stride,
                 kernel // 2,
                 dilation=dilation,
+                #bias=False,
             ),
         )
 
@@ -158,6 +160,7 @@ class ResidualBlockTranspose(nn.Module):
                 1,
                 kernel // 2,
                 dilation=dilation,
+                #bias=False,
             ),
         )
 

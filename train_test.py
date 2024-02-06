@@ -32,10 +32,10 @@ dataset, loader = ssumo.data.get_mouse(
 if config["disentangle"]["balance_loss"]:
     print("Balancing disentanglement losses")
     for k in config["disentangle"]["features"]:
-        std = dataset[:][k].std()*dataset[0][k].shape[-1]
-        config["loss"][k] /= std
+        var = torch.sqrt((dataset[:][k].std(dim=0)**2).sum())
+        config["loss"][k] /= var
         if k + "_gr" in config["loss"].keys():
-            config["loss"][k+"_gr"] /=std
+            config["loss"][k+"_gr"] /=var
 
     print("Finished disentanglement loss balancing...")
     print(config["loss"])
@@ -51,7 +51,7 @@ vae, device = ssumo.model.get(
 )
 
 optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
-# scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 50)
+scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 50)
 
 beta_schedule = ssumo.train.get_beta_schedule(
     config["loss"]["prior"],
@@ -74,7 +74,7 @@ for epoch in tqdm.trange(
     epoch_loss = ssumo.train.train_epoch(
         vae,
         optimizer,
-        # scheduler,
+        scheduler,
         loader,
         device,
         config["loss"],
