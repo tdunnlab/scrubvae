@@ -3,7 +3,6 @@ import torch
 from ssumo.data.rotation_conversion import rotation_6d_to_matrix
 from ssumo.data.dataset import fwd_kin_cont6d_torch
 
-
 def rotation_loss(x, x_hat, eps=1e-7):
     assert x.shape[-1] == 6
     assert x_hat.shape[-1] == 6
@@ -41,15 +40,16 @@ def vae_BXEntropy_loss(x, x_hat, mu, log_var):
     return B_XEntropy + KL_div
 
 
-def mpjpe_loss(x, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
-    if root == None:
-        root = torch.zeros((x.shape[0], 3), device=x.device)
+def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
+    # if root == None:
+    #     root = torch.zeros((x.shape[0], 3), device=x.device)
     if root_hat == None:
-        root_hat = torch.zeros((x.shape[0], 3), device=x.device)
+        root_hat = torch.zeros((x_hat.shape[0], 3), device=x_hat.device)
 
-    pose = fwd_kin_cont6d_torch(
-        x, kinematic_tree, offsets, root_pos=root, do_root_R=True, eps=1e-8
-    )
+    # pose = fwd_kin_cont6d_torch(
+    #     x, kinematic_tree, offsets, root_pos=root, do_root_R=True, eps=1e-8
+    # )
+    # pose = x
     pose_hat = fwd_kin_cont6d_torch(
         x_hat, kinematic_tree, offsets, root_pos=root_hat, do_root_R=True, eps=1e-8
     )
@@ -81,7 +81,7 @@ def get_batch_loss(data, data_o, loss_scale):
 
     if "jpe" in loss_scale.keys():
         batch_loss["jpe"] = mpjpe_loss(
-            data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
+            data["target_pose"].reshape(-1, data["x6d"].shape[-2], 3),#data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data_o["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data["kinematic_tree"],
             data["offsets"].view(-1, *data["offsets"].shape[-2:]),

@@ -6,6 +6,7 @@ import torch
 from ssumo.data.dataset import *
 from torch.utils.data import DataLoader
 
+
 def get_mouse(
     data_config: dict,
     window: int = 51,
@@ -124,18 +125,30 @@ def get_mouse(
         data["root"] = root
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
+
+    if "target_pose" in data_keys:
+        data["target_pose"] = fwd_kin_cont6d_torch(
+            data["x6d"],
+            skeleton_config["KINEMATIC_TREE"],
+            data["offsets"],
+            root_pos=torch.zeros(data["x6d"].shape[0], 3),
+            do_root_R=True,
+            eps=1e-8,
+        )
+
     dataset = MouseDataset(
         data,
         window_inds,
         data_config["arena_size"],
         skeleton_config["KINEMATIC_TREE"],
         pose.shape[-2],
+        label="Train" if train else "Test",
     )
     loader = DataLoader(
         dataset=dataset,
         batch_size=data_config["batch_size"],
         shuffle=shuffle,
-        num_workers=8,
+        num_workers=5,
         pin_memory=True,
     )
 

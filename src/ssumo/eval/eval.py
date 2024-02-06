@@ -5,6 +5,7 @@ import torch
 from ssumo.plot import trace, PLANE
 from dappy import visualization as vis
 
+
 def project_to_null(z, weight):
     print("Finding null space projection of decoder ...")
     u_orth = spl.null_space(weight)
@@ -20,15 +21,34 @@ def traverse_latent(
     weight,
     index,
     connectivity,
+    label,
     minmax=10,
     n_shifts=15,
     grid_vis=True,
     arena_vis=True,
     static_vis=False,
+    circle=False,
+    save_path="./",
 ):
-    n_keypts = vae.n_keypts
-    window = dataset.window
-    graded_z_shift = ( torch.linspace(-minmax, minmax, n_shifts)[:,None].cuda() @ weight.sum(dim=0,keepdim=True).cuda() )
+    n_keypts = dataset.n_keypts
+    window = vae.window
+
+    if circle:
+        import scipy.linalg as spl
+
+        linspace = torch.linspace(-torch.pi, torch.pi, n_shifts)[:, None].cuda()
+        circ = torch.cat([torch.sin(linspace), torch.cos(linspace)], dim=-1)
+        graded_z_shift = circ @ weight.cuda()
+        radius = torch.linalg.norm(z[index : index + 1] @ weight.T)
+        circle_z = circ @ weight.cuda()
+        import pdb
+
+        pdb.set_trace()
+    else:
+        graded_z_shift = (
+            torch.linspace(-minmax, minmax, n_shifts)[:, None].cuda()
+            @ weight.sum(dim=0, keepdim=True).cuda()
+        )
     sample_latent = z[index : index + 1].repeat(n_shifts, 1).cuda()
     print("Latent Norm: {}".format(torch.linalg.norm(sample_latent[0])))
     sample_latent += graded_z_shift
@@ -48,7 +68,8 @@ def traverse_latent(
         .numpy()
     )
 
-    # part_lbl = ""
+    PARTS = ["Root", "Head + Spine", "L-Arm", "R-Arm", "L-Leg", "R-Leg"]
+    part_lbl = ""
     # if config["speed_decoder"] == "part":
     #     part_lbl = PARTS[i]
 
@@ -66,8 +87,8 @@ def traverse_latent(
                 vis_plane=vis_plane,
                 centered=False,
                 N_FRAMES=window,
-                FIG_NAME=dataset_label + "{}_trace_{}.png".format(part_lbl, index),
-                SAVE_ROOT=vis_decode_path,
+                FIG_NAME=dataset.label + "{}_trace_{}.png".format(part_lbl, index),
+                SAVE_ROOT=save_path,
             )
 
     subtitles = (sample_latent @ weight.T.cuda()).detach().cpu().numpy()
@@ -85,10 +106,10 @@ def traverse_latent(
             frames=np.arange(n_shifts) * vae.window,
             centered=False,
             subtitles=subtitles,
-            title=dataset_label + " Data - {} Traversal".format(k),
+            title=dataset.label + " Data - {} Traversal".format(label),
             fps=15,
             N_FRAMES=vae.window,
-            VID_NAME=dataset_label + "grid{}_mod.mp4".format(index),
+            VID_NAME=dataset.label + "grid{}_mod.mp4".format(index),
             SAVE_ROOT=save_path,
         )
 
@@ -100,6 +121,6 @@ def traverse_latent(
             centered=False,
             fps=15,
             N_FRAMES=vae.window,
-            VID_NAME=dataset_label + "arena{}_mod.mp4".format(index),
+            VID_NAME=dataset.label + "arena{}_mod.mp4".format(index),
             SAVE_ROOT=save_path,
         )

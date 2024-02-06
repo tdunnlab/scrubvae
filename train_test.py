@@ -1,7 +1,5 @@
 import ssumo
-from torch.utils.data import DataLoader
 import torch
-
 torch.autograd.set_detect_anomaly(True)
 import torch.optim as optim
 import tqdm
@@ -19,7 +17,6 @@ if len(sys.argv)> 2:
     print(sys.argv)
     analysis_key = "{}/{}/".format(analysis_key, job_id)
 
-
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 ### Load Dataset
@@ -27,7 +24,7 @@ dataset, loader = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
     train=True,
-    data_keys=["x6d", "root", "offsets"] + config["disentangle"]["features"],
+    data_keys=["x6d", "root", "offsets", "target_pose"] + config["disentangle"]["features"],
     shuffle=True,
 )
 
@@ -40,6 +37,9 @@ if config["disentangle"]["balance_loss"]:
         if k + "_gr" in config["loss"].keys():
             config["loss"][k+"_gr"] /=std
 
+    print("Finished disentanglement loss balancing...")
+    print(config["loss"])
+
 vae, device = ssumo.model.get(
     model_config=config["model"],
     disentangle_config=config["disentangle"],
@@ -49,7 +49,9 @@ vae, device = ssumo.model.get(
     kinematic_tree = dataset.kinematic_tree,
     verbose=1,
 )
-optimizer = optim.Adam(vae.parameters(), lr=0.0001)
+
+optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
+# scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 50)
 
 beta_schedule = ssumo.train.get_beta_schedule(
     config["loss"]["prior"],
@@ -67,11 +69,12 @@ for epoch in tqdm.trange(
     config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
 ):
     config["loss"]["prior"] = beta_schedule[epoch - config["model"]["start_epoch"] - 1]
-    print("Beta schedule: {}".format(config["loss"]["prior"]))
+    print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
     epoch_loss = ssumo.train.train_epoch(
         vae,
         optimizer,
+        # scheduler,
         loader,
         device,
         config["loss"],

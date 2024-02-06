@@ -1,6 +1,7 @@
 import torch
 from ssumo.train.losses import get_batch_loss
 
+
 def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
     if beta_anneal:
         print("Cyclical beta anneal")
@@ -16,19 +17,33 @@ def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
             )
     else:
         print("No beta anneal")
-        beta_schedule = torch.ones(n_epochs) * beta
+        beta_schedule = torch.zeros(n_epochs) + beta
 
-    return beta_schedule
+    return beta_schedule.type(torch.float32)
 
 
 def predict_batch(model, data, disentangle_keys=None):
 
-    data_i = {k:v for k,v in data.items() if (k in disentangle_keys) or (k in ["x6d","root"])}
+    data_i = {
+        k: v
+        for k, v in data.items()
+        if (k in disentangle_keys) or (k in ["x6d", "root"])
+    }
 
     return model(data_i)
 
 
-def train_epoch(model, optimizer, loader, device, loss_config, epoch, mode="train", disentangle_keys=None):
+def train_epoch(
+    model,
+    optimizer,
+    # scheduler,
+    loader,
+    device,
+    loss_config,
+    epoch,
+    mode="train",
+    disentangle_keys=None,
+):
     if mode == "train":
         model.train()
         grad_env = torch.enable_grad
@@ -53,23 +68,28 @@ def train_epoch(model, optimizer, loader, device, loss_config, epoch, mode="trai
             if mode == "train":
                 batch_loss["total"].backward()
                 optimizer.step()
-            epoch_loss = { k: v + batch_loss[k] for k, v in epoch_loss.items() }
+                # scheduler.step(epoch + batch_idx / len(loader))
+            epoch_loss = {k: v + batch_loss[k] for k, v in epoch_loss.items()}
 
-            if batch_idx % 500 == 0:
-                len_batch = len(data["x6d"])
-                print(
-                    "{} Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
-                        mode.title(),
-                        epoch,
-                        batch_idx * len_batch,
-                        len(loader.dataset),
-                        100.0 * batch_idx / len(loader),
-                        batch_loss["total"].item() / len_batch,
-                    )
-                )
+            # if batch_idx % 500 == 0:
+            #     len_batch = len(data["x6d"])
+            #     print(
+            #         "{} Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
+            #             mode.title(),
+            #             epoch,
+            #             batch_idx * len_batch,
+            #             len(loader.dataset),
+            #             100.0 * batch_idx / len(loader),
+            #             batch_loss["total"].item() / len_batch,
+            #         )
+            #     )
 
         for k, v in epoch_loss.items():
             epoch_loss[k] = v.item() / len(loader.dataset)
-            print("====> Epoch: {} Average {} loss: {:.4f}".format(epoch, k, epoch_loss[k]))
+            print(
+                "====> Epoch: {} Average {} loss: {:.4f}".format(
+                    epoch, k, epoch_loss[k]
+                )
+            )
 
     return epoch_loss

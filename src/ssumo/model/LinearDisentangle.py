@@ -143,21 +143,3 @@ class LinearDisentangle(nn.Module):
             return x, self.reversal(z_sub)
 
         return x, None
-
-    # def forward(self, z):
-    #     x = self.decoder(z)
-
-    #     if self.do_detach:
-    #         w = self.decoder.weight.detach()
-    #     else:
-    #         w = self.decoder.weight
-
-    #     nrm = (w @ w.T).ravel()
-
-
-1
-#     if self.do_detach:
-#         z_sub = z - (x.detach() @ w) / nrm
-#     else:
-#         z_sub = z - (x @ w) / nrm
-#     return x, self.reversal(z_sub)
