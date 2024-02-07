@@ -13,7 +13,7 @@ paths = [
     "bal_hc_sum",
     "adamw",
     "adamw_big_scrub",
-    "adamw_cawr",
+    "adamw_cawr"
     "bal_var_cawr",
 ]
 # paths = ["4", "6", "8", "10"]

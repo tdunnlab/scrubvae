@@ -89,7 +89,6 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
             model_config["load_model"], model_config["start_epoch"]
         )
         print("Loading Weights from:\n{}".format(load_path))
-        # import pdb; pdb.set_trace()
         state_dict = torch.load(load_path)
         state_dict["arena_size"] = arena_size.cuda()
         missing_keys, unexpected_keys = vae.load_state_dict(state_dict, strict=False)
