@@ -57,7 +57,7 @@ if config["train"]["optimizer"] == "adam":
 elif config["train"]["optimizer"] == "adamw":
     optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
 elif config["train"]["optimizer"] == "sgd":
-    optimizer = optim.SGD(vae.parameters(), lr=config["train"]["lr"], momentum=0.9)
+    optimizer = optim.SGD(vae.parameters(), lr=config["train"]["lr"], momentum=0.2, nesterov=True)
 
 scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
 

@@ -13,7 +13,7 @@ def rotation_loss(x, x_hat, eps=1e-7):
 
     cos = (m[:, 0, 0] + m[:, 1, 1] + m[:, 2, 2] - 1) / 2
     cos = torch.clamp(cos, -1 + eps, 1 - eps)
-    theta = torch.acos(cos).sum()
+    theta = torch.acos(cos).mean()
 
     return theta
 
@@ -30,12 +30,12 @@ def prior_loss(mu, L):
         + 2 * torch.log(L.diagonal(dim1=-1, dim2=-2))
         - mu.pow(2)
         - var.diagonal(dim1=-1, dim2=-2)
-    )
+    )/mu.shape[0]
     return KL_div
 
 
 def vae_BXEntropy_loss(x, x_hat, mu, log_var):
-    B_XEntropy = F.binary_cross_entropy(x_hat, x.view(-1, 784), reduction="sum")
+    B_XEntropy = F.binary_cross_entropy(x_hat, x.view(-1, 784), reduction="mean")
     KL_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
     return B_XEntropy + KL_div
 
@@ -54,8 +54,8 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
         x_hat, kinematic_tree, offsets, root_pos=root_hat, do_root_R=True, eps=1e-8
     )
 
-    loss = torch.sum((pose - pose_hat) ** 2)
-    loss = loss / (pose.shape[-1] * pose.shape[-2])
+    loss = torch.mean((pose - pose_hat) ** 2)
+    # loss = loss / (pose.shape[-1] * pose.shape[-2])
     return loss
 
 
@@ -88,7 +88,7 @@ def get_batch_loss(data, data_o, loss_scale):
         )
 
     if "root" in loss_scale.keys():
-        batch_loss["root"] = torch.nn.MSELoss(reduction="sum")(
+        batch_loss["root"] = torch.nn.MSELoss(reduction="mean")(
             data_o["root"], data["root"]
         )
 
@@ -97,7 +97,7 @@ def get_batch_loss(data, data_o, loss_scale):
     for key in available_dis_keys:
         if key in loss_scale.keys():
             batch_loss[key] = (
-                torch.nn.MSELoss(reduction="sum")(
+                torch.nn.MSELoss(reduction="mean")(
                     data_o["disentangle"][key][0], data[key]
                 )
                 / num_keys
@@ -107,7 +107,7 @@ def get_batch_loss(data, data_o, loss_scale):
             if isinstance(data_o["disentangle"][key][1],list):
                 batch_loss[key + "_gr"] = 0
                 for gr_e in data_o["disentangle"][key][1]:
-                    batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="sum")(
+                    batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="mean")(
                         gr_e, data[key]
                     )
                 batch_loss[key + "_gr"] = (
@@ -117,7 +117,7 @@ def get_batch_loss(data, data_o, loss_scale):
                 )
             elif torch.is_tensor(data_o["disentangle"][key][1]):
                 batch_loss[key + "_gr"] = (
-                    torch.nn.MSELoss(reduction="sum")(
+                    torch.nn.MSELoss(reduction="mean")(
                         data_o["disentangle"][key], data[key]
                     )
                     / num_keys

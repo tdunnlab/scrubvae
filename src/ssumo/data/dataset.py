@@ -132,23 +132,23 @@ def get_speed_parts(pose, parts):
     dxyz[:, 0] = np.sqrt(root_spd).sum(axis=-1)
 
     centered_pose = preprocess.center_spine(pose, keypt_idx=0)
-    ego_pose = preprocess.rotate_spine(
-        centered_pose,
-        keypt_idx=[0, 1],
-        lock_to_x=False,
-    )
+    # ego_pose = preprocess.rotate_spine(
+    #     centered_pose,
+    #     keypt_idx=[0, 1],
+    #     lock_to_x=False,
+    # )
 
     for i, part in enumerate(parts):
         if part[0] == 0:
             pose_part = centered_pose
         else:
-            pose_part = ego_pose - ego_pose[:, part[0] : part[0] + 1, :]
+            pose_part = centered_pose - centered_pose[:, part[0] : part[0] + 1, :]
         relative_dxyz = (
             np.diff(
                 pose_part[:, part[1:], :],
                 n=1,
                 axis=0,
-                prepend=pose[0:1, part[1:], :],
+                prepend=pose_part[0:1, part[1:], :],
             )
             ** 2
         ).sum(axis=-1)

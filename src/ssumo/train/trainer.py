@@ -67,6 +67,14 @@ def train_epoch(
 
             if mode == "train":
                 batch_loss["total"].backward()
+                # total_norm = 0
+                # for p in model.parameters():
+                #     param_norm = p.grad.data.norm(2)
+                #     total_norm += param_norm.item() ** 2
+                # total_norm = total_norm ** (1. / 2)
+                # print(total_norm)
+
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e5)
                 optimizer.step()
                 scheduler.step(epoch + batch_idx / len(loader))
             epoch_loss = {k: v + batch_loss[k] for k, v in epoch_loss.items()}

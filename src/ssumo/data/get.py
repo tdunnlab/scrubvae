@@ -14,6 +14,7 @@ def get_mouse(
     train: bool = True,
     data_keys: List[str] = ["x6d", "root", "offsets"],
     shuffle: bool = False,
+    normalize: List[str] = [],
 ):
     REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
     skeleton_config = read.config(data_config["skeleton_path"])
@@ -31,7 +32,7 @@ def get_mouse(
     speed_key = [key for key in data_keys if "speed" in key]
     assert len(speed_key) < 2
     if (len(speed_key) > 0) or (data_config["remove_speed_outliers"] is not None):
-        if "part_speed" in speed_key:
+        if ("part_speed" in speed_key) or ("avg_speed_3d" in speed_key):
             speed = get_speed_parts(
                 pose=pose,
                 parts=[
@@ -40,6 +41,9 @@ def get_mouse(
                     [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
                 ],
             )
+            if "avg_speed_3d" in speed_key:
+                speed = np.concatenate([speed[:,:2],speed[:,2:].mean(axis=-1,keepdims=True)],axis=-1)
+
         else:
             speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
             speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1)
@@ -125,6 +129,10 @@ def get_mouse(
         data["root"] = root
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
+
+    for key in normalize:
+        data[key] -= data[key].mean(axis=0)
+        data[key] /= (data[key].std(axis=0))
 
     if "target_pose" in data_keys:
         data["target_pose"] = fwd_kin_cont6d_torch(

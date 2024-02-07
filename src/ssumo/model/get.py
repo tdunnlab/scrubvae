@@ -6,6 +6,7 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
         "avg_speed": 1,
         "part_speed": 4,
         "frame_speed": model_config["window"] - 1,
+        "avg_speed_3d": 3,
         "heading": 2,
         "heading_change": 1,
     }
@@ -93,7 +94,7 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
         state_dict["arena_size"] = arena_size.cuda()
         missing_keys, unexpected_keys = vae.load_state_dict(state_dict, strict=False)
 
-        if verbose > 1:
+        if verbose > 0:
             print("Missing Keys: {}".format(missing_keys))
             print("Unexpected Keys: {}".format(unexpected_keys))
 
