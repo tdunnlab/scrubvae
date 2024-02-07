@@ -17,15 +17,15 @@ pose = pose[:, REORDER, :]
 pose_rot = preprocess.rotate_spine(
     preprocess.center_spine(pose, keypt_idx=5), keypt_idx=[5, 4]
 )
-
+import pdb; pdb.set_trace()
 vis.pose.arena3D(
-    pose_rot[(pose_rot[:, 1, 0] - pose_rot[:, 0, 0]) < 0, :, :],
+    pose_rot[(pose_rot[:, 0, 0] - pose_rot[:, 5, 0]) < 0, ...][::5, ...],
     connectivity,
     frames=0,
     centered=False,
     fps=10,
-    N_FRAMES=((pose_rot[:, 1, 0] - pose_rot[:, 0, 0]) < 0).sum(),
+    N_FRAMES=len(pose_rot[(pose_rot[:, 0, 0] - pose_rot[:, 5, 0]) < 0, ...][::5, ...]),
     dpi=100,
-    VID_NAME="test2.mp4",
+    VID_NAME="test4.mp4",
     SAVE_ROOT="./",
 )

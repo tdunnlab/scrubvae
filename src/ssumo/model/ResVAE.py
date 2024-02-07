@@ -219,7 +219,6 @@ class ResidualEncoder(nn.Module):
         sigma = self.fc_sigma(x)
         return mu, sigma
 
-
 class ResidualDecoder(nn.Module):
     def __init__(
         self,
