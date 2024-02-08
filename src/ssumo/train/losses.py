@@ -30,7 +30,7 @@ def prior_loss(mu, L):
         + 2 * torch.log(L.diagonal(dim1=-1, dim2=-2))
         - mu.pow(2)
         - var.diagonal(dim1=-1, dim2=-2)
-    )/mu.shape[0]
+    )/mu.shape[0]/mu.shape[1]
     return KL_div
 
 
