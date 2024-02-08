@@ -32,9 +32,9 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
         self.mlp = nn.Sequential(
             nn.Linear(in_dim, in_dim),
-            nn.ReLU(),
+            nn.PReLU(),
             nn.Linear(in_dim, in_dim),
-            nn.ReLU(),
+            nn.PReLU(),
             nn.Linear(in_dim, out_dim),
         )
 
@@ -61,21 +61,21 @@ class ReversalEnsemble(nn.Module):
 
         self.mlp1 = nn.Sequential(
             nn.Linear(in_dim, in_dim),
-            nn.ReLU(),
+            nn.PReLU(),
             nn.Linear(in_dim, in_dim),
-            nn.ReLU(),
+            nn.PReLU(),
             nn.Linear(in_dim, out_dim),
         )
 
         self.mlp2 = nn.Sequential(
-            nn.Linear(in_dim, in_dim), nn.ReLU(), nn.Linear(in_dim, out_dim)
+            nn.Linear(in_dim, in_dim), nn.PReLU(), nn.Linear(in_dim, out_dim)
         )
 
         self.mlp3 = nn.Sequential(
             nn.Linear(in_dim, in_dim),
-            nn.ReLU(),
+            nn.PReLU(),
             nn.Linear(in_dim, in_dim // 2),
-            nn.ReLU(),
+            nn.PReLU(),
             nn.Linear(in_dim // 2, out_dim),
         )
 
@@ -106,9 +106,9 @@ class LinearDisentangle(nn.Module):
             self.reversal = nn.Sequential(
                 GradientReversalLayer(alpha),
                 nn.Linear(in_dim, in_dim),
-                nn.ReLU(),
+                nn.PReLU(),
                 nn.Linear(in_dim, in_dim),
-                nn.ReLU(),
+                nn.PReLU(),
                 nn.Linear(in_dim, out_dim),
             )
         elif reversal == "linear":

@@ -28,6 +28,7 @@ dataset, loader = ssumo.data.get_mouse(
     data_keys=["x6d", "root", "offsets", "target_pose"]
     + config["disentangle"]["features"],
     shuffle=True,
+    normalize = config["disentangle"]["features"]
 )
 
 # Balance disentanglement losses

@@ -4,18 +4,19 @@ import ssumo
 from base_path import RESULTS_PATH
 
 palette = ssumo.plot.constants.PALETTE_2
-results_path = RESULTS_PATH + "/heading/"
-paths = [
-    "vanilla",
-    "gre1_b1_true_x360",
-    "balanced",
-    "no_gr",
-    "bal_hc_sum",
-    "adamw",
-    "adamw_big_scrub",
-    "adamw_cawr"
-    "bal_var_cawr",
-]
+results_path = RESULTS_PATH + "/fine_tune/"
+paths = ["adamw_bal_var","adamw_cawr_bal_var","adamw_cawr_big_scrub","vanilla"]
+# paths = [
+#     "vanilla",
+#     "gre1_b1_true_x360",
+#     "balanced",
+#     "no_gr",
+#     "bal_hc_sum",
+#     "adamw",
+#     "adamw_big_scrub",
+#     "adamw_cawr"
+#     "bal_var_cawr",
+# ]
 # paths = ["4", "6", "8", "10"]
 dataset_label = "Train"
 

@@ -46,7 +46,7 @@ def get_mouse(
 
         else:
             speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
-            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1)
+            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1,keepdims=True)
 
     if data_config["remove_speed_outliers"] is not None:
         outlier_frames = np.where(
@@ -64,7 +64,7 @@ def get_mouse(
         window_inds = np.delete(window_inds, outlier_frames, 0)
 
     if len(speed_key) > 0:
-        data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1).squeeze()[:, None]
+        data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1)
 
     windowed_yaw = get_frame_yaw(pose, 0, 1)[window_inds]
 
@@ -131,6 +131,7 @@ def get_mouse(
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
     for key in normalize:
+        print("Mean-centering and unit standard deviation scaling decoding variable: {}".format(key))
         data[key] -= data[key].mean(axis=0)
         data[key] /= (data[key].std(axis=0))
 
