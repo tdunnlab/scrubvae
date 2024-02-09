@@ -19,7 +19,7 @@ def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
         print("No beta anneal")
         beta_schedule = torch.zeros(n_epochs) + beta
 
-    return beta_schedule.type(torch.float32)
+    return beta_schedule.type(torch.float32).detach().numpy()
 
 
 def predict_batch(model, data, disentangle_keys=None):
@@ -77,7 +77,7 @@ def train_epoch(
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e5)
                 optimizer.step()
                 scheduler.step(epoch + batch_idx / len(loader))
-            epoch_loss = {k: v + batch_loss[k] for k, v in epoch_loss.items()}
+            epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
 
             # if batch_idx % 500 == 0:
             #     len_batch = len(data["x6d"])

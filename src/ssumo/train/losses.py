@@ -3,6 +3,7 @@ import torch
 from ssumo.data.rotation_conversion import rotation_6d_to_matrix
 from ssumo.data.dataset import fwd_kin_cont6d_torch
 
+
 def rotation_loss(x, x_hat, eps=1e-7):
     assert x.shape[-1] == 6
     assert x_hat.shape[-1] == 6
@@ -81,7 +82,9 @@ def get_batch_loss(data, data_o, loss_scale):
 
     if "jpe" in loss_scale.keys():
         batch_loss["jpe"] = mpjpe_loss(
-            data["target_pose"].reshape(-1, data["x6d"].shape[-2], 3),#data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
+            data["target_pose"].reshape(
+                -1, data["x6d"].shape[-2], 3
+            ),  # data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data_o["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data["kinematic_tree"],
             data["offsets"].view(-1, *data["offsets"].shape[-2:]),
@@ -104,7 +107,7 @@ def get_batch_loss(data, data_o, loss_scale):
             )
 
         if key + "_gr" in loss_scale.keys():
-            if isinstance(data_o["disentangle"][key][1],list):
+            if isinstance(data_o["disentangle"][key][1], list):
                 batch_loss[key + "_gr"] = 0
                 for gr_e in data_o["disentangle"][key][1]:
                     batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="mean")(
@@ -131,8 +134,12 @@ def get_batch_loss(data, data_o, loss_scale):
     if "orthogonal_cov" in loss_scale.keys():
         batch_loss["orthogonal_cov"] = hierarchical_orthogonal_loss(*data_o["L"])
 
+    # for loss in batch_loss.keys():
+    #     if not (loss_scale[loss] > 0):
+    #         batch_loss[loss].detach()
+
     batch_loss["total"] = sum(
-        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys() if loss_scale[k]>0]
+        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys() if loss_scale[k] > 0]
     )
 
     return batch_loss

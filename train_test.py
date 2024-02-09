@@ -35,7 +35,7 @@ dataset, loader = ssumo.data.get_mouse(
 if config["disentangle"]["balance_loss"]:
     print("Balancing disentanglement losses")
     for k in config["disentangle"]["features"]:
-        var = torch.sqrt((dataset[:][k].std(dim=0) ** 2).sum())
+        var = torch.sqrt((dataset[:][k].std(dim=0)**2).sum()).detach().numpy()
         config["loss"][k] /= var
         if k + "_gr" in config["loss"].keys():
             config["loss"][k + "_gr"] /= var
@@ -102,7 +102,7 @@ for epoch in tqdm.trange(
 
         pickle.dump(
             loss_dict,
-            open("{}/losses/loss_dict.pth".format(config["out_path"]), "wb"),
+            open("{}/losses/loss_dict.p".format(config["out_path"]), "wb"),
         )
 
         ssumo.plot.eval.loss(
