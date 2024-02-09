@@ -132,7 +132,7 @@ def get_batch_loss(data, data_o, loss_scale):
         batch_loss["orthogonal_cov"] = hierarchical_orthogonal_loss(*data_o["L"])
 
     batch_loss["total"] = sum(
-        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys()]
+        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys() if loss_scale[k]>0]
     )
 
     return batch_loss
