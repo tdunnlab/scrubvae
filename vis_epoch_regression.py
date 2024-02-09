@@ -24,7 +24,7 @@ else:
 dataset_label = "Train"
 
 metrics = {}
-for an_key in enumerate(analysis_keys):
+for an_key in analysis_keys:
     metrics[an_key] = ssumo.eval.metrics.epoch_adversarial_attack(
         "{}/{}/".format(results_path, an_key), dataset_label, save_load=True
     )
