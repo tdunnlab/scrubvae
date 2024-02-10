@@ -70,7 +70,7 @@ def for_all_epochs(func):
                 ]
                 + disentangle_keys,
                 shuffle=False,
-                # normalize=[],
+                normalize=[],
             )[0]
 
         for epoch_ind, epoch in enumerate(epochs_to_test):
