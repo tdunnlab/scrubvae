@@ -82,7 +82,7 @@ for epoch in tqdm.trange(
         mode="train",
         disentangle_keys=config["disentangle"]["features"],
     )
-    loss_dict = {k: v + [epoch_loss[k].detach()] for k,v in loss_dict.items()}
+    loss_dict = {k: v + [epoch_loss[k]] for k,v in loss_dict.items()}
 
     if epoch % 10 == 0:
         print("Saving model to folder: {}".format(config["out_path"]))
