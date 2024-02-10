@@ -82,7 +82,7 @@ for epoch in tqdm.trange(
         mode="train",
         disentangle_keys=config["disentangle"]["features"],
     )
-    loss_dict = {k: v + [epoch_loss[k]] for k,v in loss_dict.items()}
+    loss_dict = {k: v + [epoch_loss[k].detach()] for k,v in loss_dict.items()}
 
     if epoch % 10 == 0:
         print("Saving model to folder: {}".format(config["out_path"]))
@@ -93,7 +93,7 @@ for epoch in tqdm.trange(
 
         pickle.dump(
             loss_dict,
-            open("{}/losses/loss_dict.pth".format(config["out_path"]), "wb"),
+            open("{}/losses/loss_dict.p".format(config["out_path"]), "wb"),
         )
 
         ssumo.plot.eval.loss( loss_dict, config["out_path"], config["disentangle"]["features"] )
