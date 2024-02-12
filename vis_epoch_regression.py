@@ -55,6 +55,8 @@ if task_id is None:
                 ax_arr[i].legend()
                 ax_arr[i].set_xlabel("Epoch")
 
+                ax_arr[i].set_ylim(bottom=max(min(metrics[p][key][metric]),0))
+
         f.tight_layout()
-        plt.savefig(results_path + "/{}_adv_atk_epoch.png".format(key))
+        plt.savefig("{}/{}_adv_atk_epoch.png".format(results_path, key))
         plt.close()
