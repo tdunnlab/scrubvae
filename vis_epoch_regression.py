@@ -21,7 +21,7 @@ elif task_id.isdigit():
 else:
     analysis_keys = [task_id]
 
-dataset_label = "Train"
+dataset_label = "Test"
 
 metrics = {}
 for an_key in analysis_keys:
@@ -30,7 +30,7 @@ for an_key in analysis_keys:
     )
 
 if task_id is None:
-    disentangle_keys = ["avg_speed", "heading", "heading_change"]
+    disentangle_keys = ["avg_speed_3d", "heading", "heading_change"]
     ## Plot R^2
     for key in disentangle_keys:
         f, ax_arr = plt.subplots(2, 1, figsize=(15, 15))
@@ -54,7 +54,8 @@ if task_id is None:
                 ax_arr[i].set_ylabel(metric)
                 ax_arr[i].legend()
                 ax_arr[i].set_xlabel("Epoch")
+                ax_arr[i].set_ylim(bottom = max(min(metrics[p][key][metric]),0))
 
         f.tight_layout()
-        plt.savefig(results_path + "/{}_adv_atk_epoch.png".format(key))
+        plt.savefig("{}/{}_adv_atk_epoch.png".format(results_path,key))
         plt.close()

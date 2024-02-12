@@ -10,7 +10,7 @@ from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
 import pickle
 import functools
-from ..model.LinearDisentangle import ReversalEnsemble
+from ..model.LinearDisentangle import MLP
 import torch.optim as optim
 import torch
 from tqdm import trange
@@ -70,7 +70,7 @@ def for_all_epochs(func):
                 ]
                 + disentangle_keys,
                 shuffle=False,
-                normalize=[],
+                normalize=disentangle_keys,
             )[0]
 
         for epoch_ind, epoch in enumerate(epochs_to_test):
@@ -149,7 +149,7 @@ def epoch_adversarial_attack(z, y_true, model, key):
 
 
 def train_ensemble(z, y_true, num_epochs=200):
-    model = ReversalEnsemble(z.shape[-1], y_true.shape[-1]).cuda()
+    model = MLP(z.shape[-1], y_true.shape[-1]).cuda()
     torch.backends.cudnn.benchmark = True
     # z = torch.tensor(z, device="cuda")
     z = z.cuda()
@@ -161,9 +161,7 @@ def train_ensemble(z, y_true, num_epochs=200):
             for param in model.parameters():
                 param.grad = None
             output = model(z)
-            loss = 0
-            for pred in output:
-                loss += torch.nn.MSELoss(reduction="sum")(pred, y_true)
+            loss = torch.nn.MSELoss(reduction="sum")(output, y_true)
             
             loss.backward()
             optimizer.step()
@@ -171,6 +169,6 @@ def train_ensemble(z, y_true, num_epochs=200):
     print("Loss: {}".format(loss.item()/len(y_true)))
 
     model.eval()
-    y_pred = torch.stack(model(z),dim=-1).mean(dim=-1)
+    y_pred = model(z)
 
     return model, y_pred.detach().cpu().numpy()
