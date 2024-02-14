@@ -9,7 +9,7 @@ palette = ssumo.plot.constants.PALETTE_2
 experiment_folder = sys.argv[1]
 results_path = Path(RESULTS_PATH + experiment_folder + "/")
 
-if len(sys.argv)>2:
+if len(sys.argv) > 2:
     task_id = sys.argv[2]
 else:
     task_id = None
@@ -17,7 +17,9 @@ else:
 if task_id is None:
     analysis_keys = [f.parts[-1] for f in results_path.iterdir() if f.is_dir()]
 elif task_id.isdigit():
-    analysis_keys = [[f.parts[-1] for f in results_path.iterdir() if f.is_dir()][int(task_id)]]
+    analysis_keys = [
+        [f.parts[-1] for f in results_path.iterdir() if f.is_dir()][int(task_id)]
+    ]
 else:
     analysis_keys = [task_id]
 
@@ -25,8 +27,10 @@ dataset_label = "Test"
 
 metrics = {}
 for an_key in analysis_keys:
+    folder = "{}/{}/".format(results_path, an_key)
+    print("Reading in folder: {}".format(folder))
     metrics[an_key] = ssumo.eval.metrics.epoch_adversarial_attack(
-        "{}/{}/".format(results_path, an_key), dataset_label, save_load=True
+        folder, dataset_label, save_load=True
     )
 
 if task_id is None:
@@ -54,8 +58,10 @@ if task_id is None:
                 ax_arr[i].set_ylabel(metric)
                 ax_arr[i].legend()
                 ax_arr[i].set_xlabel("Epoch")
-                ax_arr[i].set_ylim(bottom = max(min(metrics[p][key][metric]),0))
+                ax_arr[i].set_ylim(bottom=max(min(metrics[p][key][metric]), 0))
+
+                ax_arr[i].set_ylim(bottom=0, top=1)
 
         f.tight_layout()
-        plt.savefig("{}/{}_adv_atk_epoch.png".format(results_path,key))
+        plt.savefig("{}/{}_adv_atk_epoch.png".format(results_path, key))
         plt.close()
