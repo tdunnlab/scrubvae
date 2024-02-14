@@ -67,30 +67,10 @@ def train_epoch(
 
             if mode == "train":
                 batch_loss["total"].backward()
-                # total_norm = 0
-                # for p in model.parameters():
-                #     param_norm = p.grad.data.norm(2)
-                #     total_norm += param_norm.item() ** 2
-                # total_norm = total_norm ** (1. / 2)
-                # print(total_norm)
-
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e5)
                 optimizer.step()
-                scheduler.step(epoch + batch_idx / len(loader))
+                if scheduler is not None:
+                    scheduler.step(epoch + batch_idx / len(loader))
             epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
-
-            # if batch_idx % 500 == 0:
-            #     len_batch = len(data["x6d"])
-            #     print(
-            #         "{} Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
-            #             mode.title(),
-            #             epoch,
-            #             batch_idx * len_batch,
-            #             len(loader.dataset),
-            #             100.0 * batch_idx / len(loader),
-            #             batch_loss["total"].item() / len_batch,
-            #         )
-            #     )
 
         for k, v in epoch_loss.items():
             epoch_loss[k] = v.item() / len(loader.dataset)

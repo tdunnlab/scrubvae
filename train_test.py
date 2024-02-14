@@ -59,8 +59,13 @@ elif config["train"]["optimizer"] == "adamw":
     optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
 elif config["train"]["optimizer"] == "sgd":
     optimizer = optim.SGD(vae.parameters(), lr=config["train"]["lr"], momentum=0.2, nesterov=True)
+else:
+    raise ValueError("No valid optimizer selected")
 
-scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
+if config["train"]["lr_scheduler"] == "cawr":
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
+else:
+    scheduler = None
 
 if "prior" in config["loss"].keys():
     beta_schedule = ssumo.train.get_beta_schedule(
