@@ -1,7 +1,16 @@
 import torch
 import re
 
-def get(model_config, disentangle_config, n_keypts, direction_process, arena_size=None, kinematic_tree=None, verbose=1):
+
+def get(
+    model_config,
+    disentangle_config,
+    n_keypts,
+    direction_process,
+    arena_size=None,
+    kinematic_tree=None,
+    verbose=1,
+):
     feat_dim_dict = {
         "avg_speed": 1,
         "part_speed": 4,
@@ -11,7 +20,7 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
     }
 
     in_channels = n_keypts * 6
-    if direction_process in ["x360","midfwd",None]:
+    if direction_process in ["x360", "midfwd", None]:
         in_channels += 3
 
     invariant_dim = 0
@@ -20,7 +29,9 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
         pass
     elif disentangle_config["method"] == "invariant":
         invariant_dim = sum([feat_dim_dict[k] for k in disentangle_config["features"]])
-    elif ("gr_" in disentangle_config["method"]) or ("linear" in disentangle_config["method"]):
+    elif ("gr_" in disentangle_config["method"]) or (
+        "linear" in disentangle_config["method"]
+    ):
         from ssumo.model.LinearDisentangle import LinearDisentangle
 
         if disentangle_config["method"] == "linear":
@@ -37,10 +48,11 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
                 alpha=disentangle_config["alpha"],
                 do_detach=disentangle_config["detach_gr"],
             )
-    
+
     ### Initialize/load model
     if model_config["type"] == "rcnn":
         from ssumo.model.ResVAE import ResVAE
+
         vae = ResVAE(
             in_channels=in_channels,
             kernel=model_config["kernel"],
@@ -52,8 +64,8 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
             init_dilation=model_config["init_dilation"],
             disentangle=disentangle,
             disentangle_keys=disentangle_config["features"],
-            arena_size = arena_size,
-            kinematic_tree = kinematic_tree,
+            arena_size=arena_size,
+            kinematic_tree=kinematic_tree,
             ch=model_config["channel"],
         )
     elif model_config["type"] == "transformer":
@@ -90,7 +102,7 @@ def get(model_config, disentangle_config, n_keypts, direction_process, arena_siz
         print("Loading Weights from:\n{}".format(load_path))
         # import pdb; pdb.set_trace()
         state_dict = torch.load(load_path)
-        state_dict["arena_size"] = arena_size.cuda()
+        # state_dict["arena_size"] = arena_size.cuda()
         vae.load_state_dict(state_dict)
 
         # spd_decoder_path = "{}/weights/{}_spd_epoch_{}.pth".format(

@@ -92,7 +92,13 @@ def get_batch_loss(data, data_o, loss_scale):
             data_o["root"], data["root"]
         )
 
-    available_dis_keys = ["avg_speed", "frame_speed", "part_speed", "heading_change", "heading"]
+    available_dis_keys = [
+        "avg_speed",
+        "frame_speed",
+        "part_speed",
+        "heading_change",
+        "heading",
+    ]
     num_keys = len([key for key in loss_scale.keys() if key in available_dis_keys])
     for key in available_dis_keys:
         if key in loss_scale.keys():

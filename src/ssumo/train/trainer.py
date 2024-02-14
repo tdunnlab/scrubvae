@@ -1,6 +1,7 @@
 import torch
 from ssumo.train.losses import get_batch_loss
 
+
 def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
     if beta_anneal:
         print("Cyclical beta anneal")
@@ -46,12 +47,30 @@ def predict_batch(vae, data, disentangle_keys=None):
     #     data_o["x6d"], data_o["mu"], data_o["L"], data_o["disentangle"] = vae(
     #         data["x6d"], invariant=invariant
     #     )
-    data_i = {k:v for k,v in data.items() if (k in disentangle_keys) or (k in ["x6d","root"])}
+    data_i = {
+        k: v
+        for k, v in data.items()
+        if (k in disentangle_keys) or (k in ["x6d", "root"])
+    }
 
     return vae(data_i)
 
 
-def train_epoch(vae, optimizer, loader, device, loss_config, epoch, mode="train", disentangle_keys=None):
+def train_epoch(
+    vae,
+    optimizer,
+    loader,
+    device,
+    loss_config,
+    epoch,
+    mode="train",
+    disentangle_keys=None,
+    timer=False,
+):
+    starttotal = torch.cuda.Event(enable_timing=True)
+    endtotal = torch.cuda.Event(enable_timing=True)
+    starttotal.record()
+    times = []
     if mode == "train":
         vae.train()
         grad_env = torch.enable_grad
@@ -60,23 +79,48 @@ def train_epoch(vae, optimizer, loader, device, loss_config, epoch, mode="train"
         grad_env = torch.no_grad
     else:
         raise ValueError("This mode is not recognized.")
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
     epoch_loss = {k: 0 for k in ["total"] + list(loss_config.keys())}
     with grad_env():
         for batch_idx, data in enumerate(loader):
             if mode == "train":
                 optimizer.zero_grad()
-
+            start.record()
             data = {k: v.to(device) for k, v in data.items()}
+            end.record()
+            if timer:
+                torch.cuda.synchronize()
+            times.append(start.elapsed_time(end))
             data["kinematic_tree"] = vae.kinematic_tree
             len_batch = len(data["x6d"])
+            start.record()
             data_o = predict_batch(vae, data, disentangle_keys)
-
+            end.record()
+            if timer:
+                torch.cuda.synchronize()
+            times.append(start.elapsed_time(end))
+            start.record()
             batch_loss = get_batch_loss(data, data_o, loss_config)
+            end.record()
+            if timer:
+                torch.cuda.synchronize()
+            times.append(start.elapsed_time(end))
 
             if mode == "train":
+                start.record()
                 batch_loss["total"].backward()
+                end.record()
+                if timer:
+                    torch.cuda.synchronize()
+                times.append(start.elapsed_time(end))
+                start.record()
                 optimizer.step()
-            epoch_loss = { k: v + batch_loss[k].item() for k, v in epoch_loss.items() }
+                end.record()
+                if timer:
+                    torch.cuda.synchronize()
+                times.append(start.elapsed_time(end))
+            epoch_loss = {k: v + batch_loss[k].item() for k, v in epoch_loss.items()}
 
             if batch_idx % 500 == 0:
                 print(
@@ -92,6 +136,15 @@ def train_epoch(vae, optimizer, loader, device, loss_config, epoch, mode="train"
 
         for k, v in epoch_loss.items():
             epoch_loss[k] = v / len(loader.dataset)
-            print("====> Epoch: {} Average {} loss: {:.4f}".format(epoch, k, epoch_loss[k]))
-
-    return epoch_loss
+            print(
+                "====> Epoch: {} Average {} loss: {:.4f}".format(
+                    epoch, k, epoch_loss[k]
+                )
+            )
+    endtotal.record()
+    if timer:
+        torch.cuda.synchronize()
+        times.append(starttotal.elapsed_time(endtotal))
+        return epoch_loss, times
+    else:
+        return epoch_loss
