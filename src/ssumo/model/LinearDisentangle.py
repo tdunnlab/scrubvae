@@ -2,6 +2,7 @@ from torch.autograd import Function
 import torch.nn as nn
 import torch
 
+
 class GradientReversal(Function):
     @staticmethod
     def forward(ctx, x, alpha):
@@ -26,17 +27,10 @@ class GradientReversalLayer(nn.Module):
     def forward(self, x):
         return revgrad(x, self.alpha)
 
-class MultiReversalEnsemble(nn.Module):
-    def __init__(self, in_dim, out_dim, n_units=3):
-        super(MultiReversalEnsemble, self).__init__()
-
-        self.reversal_ensemble = nn.ModuleList([
-            ReversalEnsemble()
-        ])
-
-        self.lin = nn.Linear(in_dim, out_dim)
-
-        self.mlp1 = nn.Sequential(
+class MLP(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super(MLP, self).__init__()
+        self.mlp = nn.Sequential(
             nn.Linear(in_dim, in_dim),
             nn.ReLU(),
             nn.Linear(in_dim, in_dim),
@@ -44,24 +38,20 @@ class MultiReversalEnsemble(nn.Module):
             nn.Linear(in_dim, out_dim),
         )
 
-        self.mlp2 = nn.Sequential(
-            nn.Linear(in_dim, in_dim), nn.ReLU(), nn.Linear(in_dim, out_dim)
-        )
+    def forward(self, z):
+        return self.mlp(z)
 
-        self.mlp3 = nn.Sequential(
-            nn.Linear(in_dim, in_dim),
-            nn.ReLU(),
-            nn.Linear(in_dim, in_dim // 2),
-            nn.ReLU(),
-            nn.Linear(in_dim // 2, out_dim),
-        )
+class MLPEnsemble(nn.Module):
+    def __init__(self, in_dim, out_dim, n_models=3):
+        super(MLPEnsemble, self).__init__()
+        mlp_list = []
+        for i in range(n_models):
+            mlp_list += [MLP(in_dim, out_dim)]
+        self.ensemble = nn.ModuleList(mlp_list)
 
     def forward(self, z):
-        a = self.lin(z)
-        b = self.mlp1(z)
-        c = self.mlp2(z)
-        d = self.mlp3(z)
-        return a, b, c, d
+        return [mlp(z) for mlp in self.ensemble]
+
 
 class ReversalEnsemble(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -94,10 +84,20 @@ class ReversalEnsemble(nn.Module):
         b = self.mlp1(z)
         c = self.mlp2(z)
         d = self.mlp3(z)
-        return a, b, c, d
+        return [a, b, c, d]
+
 
 class LinearDisentangle(nn.Module):
-    def __init__(self, in_dim, out_dim, bias=False, reversal="linear", alpha=1.0, do_detach=True):
+    def __init__(
+        self,
+        in_dim,
+        out_dim,
+        bias=False,
+        reversal="linear",
+        alpha=1.0,
+        do_detach=True,
+        n_models=None,
+    ):
         super(LinearDisentangle, self).__init__()
         self.do_detach = do_detach
 
@@ -116,9 +116,14 @@ class LinearDisentangle(nn.Module):
                 GradientReversalLayer(alpha), nn.Linear(in_dim, out_dim, bias=True)
             )
         elif reversal == "ensemble":
-            self.reversal = nn.Sequential(
-                GradientReversalLayer(alpha), ReversalEnsemble(in_dim, out_dim)
-            )
+            if (n_models == None) or (n_models == 0):
+                self.reversal = nn.Sequential(
+                    GradientReversalLayer(alpha), ReversalEnsemble(in_dim, out_dim)
+                )
+            else:
+                self.reversal = nn.Sequential(
+                    GradientReversalLayer(alpha), MLPEnsemble(in_dim, out_dim, n_models)
+                )
         else:
             self.reversal = None
 
@@ -132,21 +137,5 @@ class LinearDisentangle(nn.Module):
             z_sub = z - torch.linalg.solve(nrm, x.T).T @ w
 
             return x, self.reversal(z_sub)
-        
+
         return x, None
-    
-    # def forward(self, z):
-    #     x = self.decoder(z)
-
-    #     if self.do_detach:
-    #         w = self.decoder.weight.detach()
-    #     else:
-    #         w = self.decoder.weight
-
-    #     nrm = (w @ w.T).ravel()
-1
-    #     if self.do_detach:
-    #         z_sub = z - (x.detach() @ w) / nrm
-    #     else:
-    #         z_sub = z - (x @ w) / nrm
-    #     return x, self.reversal(z_sub)

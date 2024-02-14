@@ -47,6 +47,7 @@ def get(
                 reversal=reversal,
                 alpha=disentangle_config["alpha"],
                 do_detach=disentangle_config["detach_gr"],
+                n_models=disentangle_config["n_models"],
             )
 
     ### Initialize/load model
@@ -103,7 +104,11 @@ def get(
         # import pdb; pdb.set_trace()
         state_dict = torch.load(load_path)
         # state_dict["arena_size"] = arena_size.cuda()
-        vae.load_state_dict(state_dict)
+        missing_keys, unexpected_keys = vae.load_state_dict(state_dict, strict=False)
+
+        if verbose > 1:
+            print("Missing Keys: {}".format(missing_keys))
+            print("Unexpected Keys: {}".format(unexpected_keys))
 
         # spd_decoder_path = "{}/weights/{}_spd_epoch_{}.pth".format(
         #     model_config["load_model"],

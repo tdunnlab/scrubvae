@@ -1,5 +1,4 @@
 import ssumo
-from torch.utils.data import DataLoader
 import torch
 
 torch.autograd.set_detect_anomaly(True)
@@ -12,7 +11,13 @@ from base_path import RESULTS_PATH
 
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
-print(analysis_key)
+
+if len(sys.argv) > 2:
+    job_id = sys.argv[2]
+    print(job_id)
+    print(sys.argv)
+    analysis_key = "{}/{}/".format(analysis_key, job_id)
+
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 ### Load Dataset
@@ -20,7 +25,8 @@ dataset, loader = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
     train=True,
-    data_keys=["x6d", "root", "offsets"] + config["disentangle"]["features"],
+    data_keys=["x6d", "root", "offsets", "target_pose"]
+    + config["disentangle"]["features"],
     shuffle=True,
 )
 
@@ -28,10 +34,13 @@ dataset, loader = ssumo.data.get_mouse(
 if config["disentangle"]["balance_loss"]:
     print("Balancing disentanglement losses")
     for k in config["disentangle"]["features"]:
-        std = dataset[:][k].std() * dataset[0][k].shape[-1]
-        config["loss"][k] /= std
+        var = torch.sqrt((dataset[:][k].std(dim=0) ** 2).sum()).detach().numpy()
+        config["loss"][k] /= var
         if k + "_gr" in config["loss"].keys():
-            config["loss"][k + "_gr"] /= std
+            config["loss"][k + "_gr"] /= var
+
+    print("Finished disentanglement loss balancing...")
+    print(config["loss"])
 
 vae, device = ssumo.model.get(
     model_config=config["model"],
@@ -42,7 +51,9 @@ vae, device = ssumo.model.get(
     kinematic_tree=dataset.kinematic_tree,
     verbose=1,
 )
-optimizer = optim.Adam(vae.parameters(), lr=0.0001)
+
+optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
+scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
 
 beta_schedule = ssumo.train.get_beta_schedule(
     config["loss"]["prior"],
@@ -53,16 +64,21 @@ beta_schedule = ssumo.train.get_beta_schedule(
 loss_dict_keys = ["total"] + list(config["loss"].keys())
 loss_dict = {k: [] for k in loss_dict_keys}
 avgtime = []
+
+if device == "cuda":
+    torch.backends.cudnn.benchmark = True
+
 for epoch in tqdm.trange(
     config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
 ):
     config["loss"]["prior"] = beta_schedule[epoch - config["model"]["start_epoch"] - 1]
-    print("Beta schedule: {}".format(config["loss"]["prior"]))
+    print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
     # epoch_loss, times = ssumo.train.train_epoch(
     epoch_loss = ssumo.train.train_epoch(
         vae,
         optimizer,
+        scheduler,
         loader,
         device,
         config["loss"],
@@ -92,7 +108,7 @@ for epoch in tqdm.trange(
 
         pickle.dump(
             loss_dict,
-            open("{}/losses/loss_dict.pth".format(config["out_path"]), "wb"),
+            open("{}/losses/loss_dict.p".format(config["out_path"]), "wb"),
         )
 
         ssumo.plot.eval.loss(

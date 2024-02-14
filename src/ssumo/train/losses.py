@@ -41,15 +41,16 @@ def vae_BXEntropy_loss(x, x_hat, mu, log_var):
     return B_XEntropy + KL_div
 
 
-def mpjpe_loss(x, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
-    if root == None:
-        root = torch.zeros((x.shape[0], 3)).to(x.device)
+def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
+    # if root == None:
+    #     root = torch.zeros((x.shape[0], 3), device=x.device)
     if root_hat == None:
-        root_hat = torch.zeros((x.shape[0], 3)).to(x.device)
+        root_hat = torch.zeros((x_hat.shape[0], 3), device=x_hat.device)
 
-    pose = fwd_kin_cont6d_torch(
-        x, kinematic_tree, offsets, root_pos=root, do_root_R=True, eps=1e-8
-    )
+    # pose = fwd_kin_cont6d_torch(
+    #     x, kinematic_tree, offsets, root_pos=root, do_root_R=True, eps=1e-8
+    # )
+    # pose = x
     pose_hat = fwd_kin_cont6d_torch(
         x_hat, kinematic_tree, offsets, root_pos=root_hat, do_root_R=True, eps=1e-8
     )
@@ -81,7 +82,9 @@ def get_batch_loss(data, data_o, loss_scale):
 
     if "jpe" in loss_scale.keys():
         batch_loss["jpe"] = mpjpe_loss(
-            data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
+            data["target_pose"].reshape(
+                -1, data["x6d"].shape[-2], 3
+            ),  # data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data_o["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data["kinematic_tree"],
             data["offsets"].view(-1, *data["offsets"].shape[-2:]),
@@ -110,7 +113,7 @@ def get_batch_loss(data, data_o, loss_scale):
             )
 
         if key + "_gr" in loss_scale.keys():
-            if type(data_o["disentangle"][key][1]) is tuple:
+            if isinstance(data_o["disentangle"][key][1], list):
                 batch_loss[key + "_gr"] = 0
                 for gr_e in data_o["disentangle"][key][1]:
                     batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="sum")(
@@ -129,41 +132,6 @@ def get_batch_loss(data, data_o, loss_scale):
                     / num_keys
                 )
 
-    # if "heading" in loss_scale.keys():
-    #     batch_loss["heading"] = (
-    #         data_o["disentangle"]["heading"][0] * data["heading"]
-    #     ).sum()
-    #     if "heading_gr" in loss_scale.keys():
-    #         if type(data_o["disentangle"]["heading"][1]) is tuple:
-    #             batch_loss["heading_gr"] = 0
-    #             for gr_e in data_o["disentangle"]["heading"][1]:
-    #                 batch_loss["heading_gr"] += (gr_e * data["heading"]).sum()
-    #             batch_loss["heading_gr"] = batch_loss["heading_gr"] / len(
-    #                 data_o["disentangle"]["heading"][1]
-    #             )
-    #         elif torch.is_tensor(data_o["disentangle"]["heading"][1]):
-    #             batch_loss["heading_gr"] = (
-    #                 data_o["disentangle"]["heading"] * data["ehading"]
-    #             ).sum()
-
-    # if "speed" in loss_scale.keys():
-    #     batch_loss["speed"] = torch.nn.MSELoss(reduction="sum")(
-    #         data_o["speed"], data["speed"]
-    #     )
-
-    # if "speed_gr" in loss_scale.keys():
-    #     if type(data_o["speed_gr"]) is tuple:
-    #         batch_loss["speed_gr"] = 0
-    #         for speed_gr in data_o["speed_gr"]:
-    #             batch_loss["speed_gr"] += torch.nn.MSELoss(reduction="sum")(
-    #                 speed_gr, data["speed"]
-    #             )
-    #         batch_loss["speed_gr"] = batch_loss["speed_gr"] / len(data_o["speed_gr"])
-    #     else:
-    #         batch_loss["speed_gr"] = torch.nn.MSELoss(reduction="sum")(
-    #             data_o["speed_gr"], data["speed"]
-    #         )
-
     # if "speed_regularize" in loss_scale.keys():
     #     batch_loss["speed_regularize"] = torch.sum(
     #         torch.diff(data_o["speed_decoder_weight"], n=2, dim=0) ** 2
@@ -172,8 +140,12 @@ def get_batch_loss(data, data_o, loss_scale):
     if "orthogonal_cov" in loss_scale.keys():
         batch_loss["orthogonal_cov"] = hierarchical_orthogonal_loss(*data_o["L"])
 
+    # for loss in batch_loss.keys():
+    #     if not (loss_scale[loss] > 0):
+    #         batch_loss[loss].detach()
+
     batch_loss["total"] = sum(
-        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys()]
+        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys() if loss_scale[k] > 0]
     )
 
     return batch_loss

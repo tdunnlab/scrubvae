@@ -9,7 +9,7 @@ PARAM_KEYS = dict(
         "skeleton_path",
         "stride",
     ],
-    disentangle=["alpha", "balance_loss", "detach_gr", "features", "method"],
+    disentangle=["alpha", "balance_loss", "detach_gr", "features", "method", "n_models"],
     model=[
         "activation",
         "channel",
@@ -22,5 +22,5 @@ PARAM_KEYS = dict(
         "window",
         "z_dim",
     ],
-    train=["beta_anneal", "num_epochs"],
+    train=["beta_anneal", "lr", "num_epochs"],
 )

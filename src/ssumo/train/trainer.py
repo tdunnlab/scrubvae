@@ -17,134 +17,80 @@ def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
             )
     else:
         print("No beta anneal")
-        beta_schedule = torch.ones(n_epochs) * beta
+        beta_schedule = torch.zeros(n_epochs) + beta
 
-    return beta_schedule
+    return beta_schedule.type(torch.float32).detach().numpy()
 
 
-def predict_batch(vae, data, disentangle_keys=None):
-    # data_o = {}
+def predict_batch(model, data, disentangle_keys=None):
 
-    # if vae.invariant_dim > 0:
-    #     invariant = torch.cat([data[key] for key in disentangle_keys], axis=-1)
-    # else:
-    #     invariant = None
-
-    # if "arena_size" in data.keys():
-    #     # x_i = torch.cat(
-    #     #     (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), data["root"]), axis=-1
-    #     # )
-    #     x_o, data_o["mu"], data_o["L"], data_o["disentangle"] = vae(
-    #         x_i, invariant=invariant
-    #     )
-
-    #     data_o["x6d"] = x_o[..., :-3].reshape(data["x6d"].shape)
-    #     import pdb; pdb.set_trace()
-    #     data_o["root"] = inv_normalize_root(x_o[..., -3:], data["arena_size"])
-    #     data["root"] = inv_normalize_root(data["root"], data["arena_size"])
-
-    # else:
-    #     data_o["x6d"], data_o["mu"], data_o["L"], data_o["disentangle"] = vae(
-    #         data["x6d"], invariant=invariant
-    #     )
     data_i = {
         k: v
         for k, v in data.items()
         if (k in disentangle_keys) or (k in ["x6d", "root"])
     }
 
-    return vae(data_i)
+    return model(data_i)
 
 
 def train_epoch(
-    vae,
+    model,
     optimizer,
+    scheduler,
     loader,
     device,
     loss_config,
     epoch,
     mode="train",
     disentangle_keys=None,
-    timer=False,
 ):
-    starttotal = torch.cuda.Event(enable_timing=True)
-    endtotal = torch.cuda.Event(enable_timing=True)
-    starttotal.record()
-    times = []
     if mode == "train":
-        vae.train()
+        model.train()
         grad_env = torch.enable_grad
     elif ("test" or "encode" or "decode") in mode:
-        vae.eval()
+        model.eval()
         grad_env = torch.no_grad
     else:
         raise ValueError("This mode is not recognized.")
-    start = torch.cuda.Event(enable_timing=True)
-    end = torch.cuda.Event(enable_timing=True)
+
     epoch_loss = {k: 0 for k in ["total"] + list(loss_config.keys())}
     with grad_env():
         for batch_idx, data in enumerate(loader):
             if mode == "train":
-                optimizer.zero_grad()
-            start.record()
+                for param in model.parameters():
+                    param.grad = None
+
             data = {k: v.to(device) for k, v in data.items()}
-            end.record()
-            if timer:
-                torch.cuda.synchronize()
-            times.append(start.elapsed_time(end))
-            data["kinematic_tree"] = vae.kinematic_tree
-            len_batch = len(data["x6d"])
-            start.record()
-            data_o = predict_batch(vae, data, disentangle_keys)
-            end.record()
-            if timer:
-                torch.cuda.synchronize()
-            times.append(start.elapsed_time(end))
-            start.record()
+            data["kinematic_tree"] = model.kinematic_tree
+            data_o = predict_batch(model, data, disentangle_keys)
+
             batch_loss = get_batch_loss(data, data_o, loss_config)
-            end.record()
-            if timer:
-                torch.cuda.synchronize()
-            times.append(start.elapsed_time(end))
 
             if mode == "train":
-                start.record()
                 batch_loss["total"].backward()
-                end.record()
-                if timer:
-                    torch.cuda.synchronize()
-                times.append(start.elapsed_time(end))
-                start.record()
                 optimizer.step()
-                end.record()
-                if timer:
-                    torch.cuda.synchronize()
-                times.append(start.elapsed_time(end))
-            epoch_loss = {k: v + batch_loss[k].item() for k, v in epoch_loss.items()}
+                scheduler.step(epoch + batch_idx / len(loader))
+            epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
 
-            if batch_idx % 500 == 0:
-                print(
-                    "{} Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
-                        mode.title(),
-                        epoch,
-                        batch_idx * len_batch,
-                        len(loader.dataset),
-                        100.0 * batch_idx / len(loader),
-                        batch_loss["total"].item() / len_batch,
-                    )
-                )
+            # if batch_idx % 500 == 0:
+            #     len_batch = len(data["x6d"])
+            #     print(
+            #         "{} Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
+            #             mode.title(),
+            #             epoch,
+            #             batch_idx * len_batch,
+            #             len(loader.dataset),
+            #             100.0 * batch_idx / len(loader),
+            #             batch_loss["total"].item() / len_batch,
+            #         )
+            #     )
 
         for k, v in epoch_loss.items():
-            epoch_loss[k] = v / len(loader.dataset)
+            epoch_loss[k] = v.item() / len(loader.dataset)
             print(
                 "====> Epoch: {} Average {} loss: {:.4f}".format(
                     epoch, k, epoch_loss[k]
                 )
             )
-    endtotal.record()
-    if timer:
-        torch.cuda.synchronize()
-        times.append(starttotal.elapsed_time(endtotal))
-        return epoch_loss, times
-    else:
-        return epoch_loss
+
+    return epoch_loss
