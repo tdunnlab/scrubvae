@@ -52,14 +52,28 @@ vae, device = ssumo.model.get(
     verbose=1,
 )
 
-optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
-scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
+if config["train"]["optimizer"] == "adam":
+    optimizer = optim.Adam(vae.parameters(), lr=config["train"]["lr"])
+elif config["train"]["optimizer"] == "adamw":
+    optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
+elif config["train"]["optimizer"] == "sgd":
+    optimizer = optim.SGD(
+        vae.parameters(), lr=config["train"]["lr"], momentum=0.2, nesterov=True
+    )
+else:
+    raise ValueError("No valid optimizer selected")
 
-beta_schedule = ssumo.train.get_beta_schedule(
-    config["loss"]["prior"],
-    config["train"]["num_epochs"] - config["model"]["start_epoch"],
-    config["train"]["beta_anneal"],
-)
+if config["train"]["lr_schedule"] == "cawr":
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
+else:
+    scheduler = None
+
+if "prior" in config["loss"].keys():
+    beta_schedule = ssumo.train.get_beta_schedule(
+        config["loss"]["prior"],
+        config["train"]["num_epochs"] - config["model"]["start_epoch"],
+        config["train"]["beta_anneal"],
+    )
 
 loss_dict_keys = ["total"] + list(config["loss"].keys())
 loss_dict = {k: [] for k in loss_dict_keys}
@@ -70,8 +84,11 @@ if device == "cuda":
 for epoch in tqdm.trange(
     config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
 ):
-    config["loss"]["prior"] = beta_schedule[epoch - config["model"]["start_epoch"] - 1]
-    print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
+    if "prior" in config["loss"].keys():
+        config["loss"]["prior"] = beta_schedule[
+            epoch - config["model"]["start_epoch"] - 1
+        ]
+        print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
     epoch_loss = ssumo.train.train_epoch(
         vae,
