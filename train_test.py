@@ -63,7 +63,6 @@ beta_schedule = ssumo.train.get_beta_schedule(
 
 loss_dict_keys = ["total"] + list(config["loss"].keys())
 loss_dict = {k: [] for k in loss_dict_keys}
-avgtime = []
 
 if device == "cuda":
     torch.backends.cudnn.benchmark = True
@@ -74,7 +73,6 @@ for epoch in tqdm.trange(
     config["loss"]["prior"] = beta_schedule[epoch - config["model"]["start_epoch"] - 1]
     print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
-    # epoch_loss, times = ssumo.train.train_epoch(
     epoch_loss = ssumo.train.train_epoch(
         vae,
         optimizer,
@@ -85,26 +83,15 @@ for epoch in tqdm.trange(
         epoch,
         mode="train",
         disentangle_keys=config["disentangle"]["features"],
-        timer=False,
     )
-    # avgtime.append(times)
     loss_dict = {k: v + [epoch_loss[k]] for k, v in loss_dict.items()}
 
     if epoch % 10 == 0:
-        # print(
-        #     "Average time taken to move to gpu, forward pass, loss calc, gradient calc, optimizer step, and total:\n"
-        # )
-        # [print(i) for i in torch.mean(torch.Tensor(avgtime), 0)]
         print("Saving model to folder: {}".format(config["out_path"]))
         torch.save(
             {k: v.cpu() for k, v in vae.state_dict().items()},
             "{}/weights/epoch_{}.pth".format(config["out_path"], epoch),
         )
-        # timename = ["to_gpu", "forward", "loss", "gradient", "opt_step"]
-        # torch.save(
-        #     {timename[i]: avgtime for i in range(5)},
-        #     "{}/weights/epoch_{}.pth".format(config["out_path"], epoch),
-        # )
 
         pickle.dump(
             loss_dict,

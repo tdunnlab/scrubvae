@@ -288,7 +288,7 @@ class ResVAE(nn.Module):
     def __init__(
         self,
         in_channels,
-        ch=[64, 128],
+        ch=[64, 128, 256, 512, 1024],
         kernel=5,
         z_dim=128,
         window=200,
