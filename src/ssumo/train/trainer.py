@@ -52,6 +52,7 @@ def train_epoch(
         grad_env = torch.no_grad
     else:
         raise ValueError("This mode is not recognized.")
+
     epoch_loss = {k: 0 for k in ["total"] + list(loss_config.keys())}
     with grad_env():
         for batch_idx, data in enumerate(loader):

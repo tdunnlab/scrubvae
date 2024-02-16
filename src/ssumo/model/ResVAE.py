@@ -18,6 +18,7 @@ def find_latent_dim(
 
     return int(l_out)
 
+
 def find_out_dim(latent_dim: int, kernel: int, num_layers: int, dilation=torch.ones(4)):
     stride = 1 if any(dilation > 1) else 2
     layer_out = (
@@ -31,6 +32,7 @@ def find_out_dim(latent_dim: int, kernel: int, num_layers: int, dilation=torch.o
         l_out = layer_out(l_out, dilation[-i])
 
     return int(l_out)
+
 
 class CholeskyL(nn.Module):
     def __init__(
@@ -63,6 +65,7 @@ class CholeskyL(nn.Module):
         # reshape y_hat so we can concatenate it to L
         return L
 
+
 class ResidualBlock(nn.Module):
     def __init__(
         self, in_channels, out_channels, kernel=5, activation="prelu", dilation=1
@@ -78,7 +81,7 @@ class ResidualBlock(nn.Module):
                 stride,
                 kernel // 2,
                 dilation=dilation,
-                #bias=False,
+                bias=True,
             ),
             nn.BatchNorm1d(out_channels // 2, eps=1e-4),
             nn.Tanh() if activation == "tanh" else nn.PReLU(),
@@ -89,7 +92,7 @@ class ResidualBlock(nn.Module):
                 1,
                 kernel // 2,
                 dilation=1,
-                #bias=False,
+                bias=True,
             ),
         )
 
@@ -100,7 +103,7 @@ class ResidualBlock(nn.Module):
             stride,
             kernel // 2,
             dilation=dilation,
-            #bias=False,
+            bias=True,
         )
 
         self.add = nn.Sequential(
@@ -136,7 +139,7 @@ class ResidualBlockTranspose(nn.Module):
                 1,
                 kernel // 2,
                 dilation=1,
-                #bias=False,
+                bias=True,
             ),
             nn.BatchNorm1d(in_channels // 2, eps=1e-4),
             nn.Tanh() if activation == "tanh" else nn.PReLU(),
@@ -147,7 +150,7 @@ class ResidualBlockTranspose(nn.Module):
                 stride,
                 kernel // 2,
                 dilation=dilation,
-                #bias=False,
+                bias=True,
             ),
         )
 
@@ -160,7 +163,7 @@ class ResidualBlockTranspose(nn.Module):
                 1,
                 kernel // 2,
                 dilation=dilation,
-                #bias=False,
+                bias=True,
             ),
         )
 
@@ -179,7 +182,7 @@ class ResidualEncoder(nn.Module):
     def __init__(
         self,
         in_channels,
-        ch=64,
+        ch=[64, 128, 256, 512, 1024],
         kernel=5,
         z_dim=128,
         window=200,
@@ -188,23 +191,24 @@ class ResidualEncoder(nn.Module):
         init_dilation=None,
     ):
         super(ResidualEncoder, self).__init__()
-        self.conv_in = nn.Conv1d(in_channels, ch, 7, 1, 3)
+        self.conv_in = nn.Conv1d(in_channels, ch[0], 7, 1, 3)
         self.activation = nn.Tanh() if activation == "tanh" else nn.PReLU()
 
         if init_dilation is None:
-            dilation = torch.ones(4, dtype=int)
+            dilation = torch.ones(len(ch) - 1, dtype=int)
         else:
-            dilation = init_dilation * 2 ** torch.arange(4)
+            dilation = init_dilation * 2 ** torch.arange(len(ch) - 1)
 
-        self.res_layers = nn.Sequential(
-            ResidualBlock(ch, 2 * ch, kernel, activation, dilation[0].item()),
-            ResidualBlock(2 * ch, 4 * ch, kernel, activation, dilation[1].item()),
-            ResidualBlock(4 * ch, 8 * ch, kernel, activation, dilation[2].item()),
-            ResidualBlock(8 * ch, 16 * ch, kernel, activation, dilation[3].item()),
-        )
+        layers = []
+        for i in range(len(ch) - 1):
+            layers += [
+                ResidualBlock(ch[i], ch[i + 1], kernel, activation, dilation[i].item())
+            ]
+        self.res_layers = nn.Sequential(*layers)
+
         self.flatten = nn.Flatten()
 
-        flatten_dim = find_latent_dim(window, kernel, 4, dilation) * 16 * ch
+        flatten_dim = find_latent_dim(window, kernel, len(ch) - 1, dilation) * ch[-1]
         self.fc_mu = nn.Linear(flatten_dim, z_dim)
         sig_dim = z_dim if is_diag else z_dim * (z_dim + 1) // 2
         self.fc_sigma = nn.Sequential(
@@ -212,18 +216,24 @@ class ResidualEncoder(nn.Module):
         )
 
     def forward(self, x):
+        # import pdb
+
+        # pdb.set_trace()
         x = self.activation(self.conv_in(x))
         x = self.res_layers(x)
         x = self.flatten(x)
+        # print(self.fc_mu)
+        # print(x.shape)
         mu = self.fc_mu(x)
         sigma = self.fc_sigma(x)
         return mu, sigma
+
 
 class ResidualDecoder(nn.Module):
     def __init__(
         self,
         out_channels,
-        ch=64,
+        ch=[64, 128, 256, 512, 1024],
         kernel=5,
         z_dim=128,
         window=200,
@@ -235,51 +245,35 @@ class ResidualDecoder(nn.Module):
         self.invariant_dim = invariant_dim
 
         if init_dilation is None:
-            dilation = torch.ones(4, dtype=int)
+            dilation = torch.ones(len(ch) - 1, dtype=int)
         else:
-            dilation = init_dilation * 2 ** torch.arange(4)
+            dilation = init_dilation * 2 ** torch.arange(len(ch) - 1)
 
-        flatten_dim = find_latent_dim(window, kernel, 4, dilation) * 16 * ch
+        flatten_dim = find_latent_dim(window, kernel, len(ch) - 1, dilation) * ch[-1]
         self.fc_in = nn.Linear(z_dim + invariant_dim, flatten_dim)
-        self.unflatten = nn.Unflatten(1, (16 * ch, -1))
+        self.unflatten = nn.Unflatten(1, (ch[-1], -1))
         # self.conv_in = nn.ConvTranspose1d(int(flatten_dim[0]), ch*16, 3, 1, 1)
 
-        self.res_layers = nn.Sequential(
-            ResidualBlockTranspose(
-                ch * 16,
-                ch * 8,
-                kernel,
-                activation=activation,
-                dilation=dilation[3].item(),
-            ),
-            ResidualBlockTranspose(
-                ch * 8,
-                ch * 4,
-                kernel,
-                activation=activation,
-                dilation=dilation[2].item(),
-            ),
-            ResidualBlockTranspose(
-                ch * 4,
-                ch * 2,
-                kernel,
-                activation=activation,
-                dilation=dilation[1].item(),
-            ),
-            ResidualBlockTranspose(
-                ch * 2,
-                ch,
-                kernel,
-                activation=activation,
-                dilation=dilation[0].item(),
-            ),
-        )
+        layers = []
+        for i in range(1, len(ch)):
+            layers += [
+                ResidualBlockTranspose(
+                    ch[-i],
+                    ch[-i - 1],
+                    kernel,
+                    activation=activation,
+                    dilation=dilation[-i].item(),
+                )
+            ]
+        self.res_layers = nn.Sequential(*layers)
 
-        l_out = find_out_dim(find_latent_dim(window, kernel, 4), kernel, 4)
+        l_out = find_out_dim(
+            find_latent_dim(window, kernel, len(ch) - 1), kernel, len(ch) - 1
+        )
 
         final_kernel = window - l_out + 7
         print("Final ConvOut Kernel: {}".format(final_kernel))
-        self.conv_out = nn.ConvTranspose1d(ch, out_channels, final_kernel, 1, 3)
+        self.conv_out = nn.ConvTranspose1d(ch[0], out_channels, final_kernel, 1, 3)
         # self.activation = nn.Tanh()
 
     def forward(self, x):
@@ -294,7 +288,7 @@ class ResVAE(nn.Module):
     def __init__(
         self,
         in_channels,
-        ch=64,
+        ch=[64, 128, 256, 512, 1024],
         kernel=5,
         z_dim=128,
         window=200,
@@ -309,7 +303,7 @@ class ResVAE(nn.Module):
     ):
         super(ResVAE, self).__init__()
         self.in_channels = in_channels
-        self.ch=ch
+        self.ch = ch
         self.window = window
         self.is_diag = is_diag
         self.invariant_dim = invariant_dim

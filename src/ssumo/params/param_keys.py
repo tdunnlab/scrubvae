@@ -22,5 +22,5 @@ PARAM_KEYS = dict(
         "window",
         "z_dim",
     ],
-    train=["beta_anneal", "lr", "num_epochs", "optimizer", "lr_scheduler"],
+    train=["beta_anneal", "lr", "num_epochs", "optimizer", "lr_schedule"],
 )

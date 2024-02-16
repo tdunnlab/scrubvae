@@ -35,7 +35,7 @@ dataset, loader = ssumo.data.get_mouse(
 if config["disentangle"]["balance_loss"]:
     print("Balancing disentanglement losses")
     for k in config["disentangle"]["features"]:
-        var = torch.sqrt((dataset[:][k].std(dim=0)**2).sum()).detach().numpy()
+        var = torch.sqrt((dataset[:][k].std(dim=0) ** 2).sum()).detach().numpy()
         config["loss"][k] /= var
         if k + "_gr" in config["loss"].keys():
             config["loss"][k + "_gr"] /= var
@@ -58,11 +58,13 @@ if config["train"]["optimizer"] == "adam":
 elif config["train"]["optimizer"] == "adamw":
     optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
 elif config["train"]["optimizer"] == "sgd":
-    optimizer = optim.SGD(vae.parameters(), lr=config["train"]["lr"], momentum=0.2, nesterov=True)
+    optimizer = optim.SGD(
+        vae.parameters(), lr=config["train"]["lr"], momentum=0.2, nesterov=True
+    )
 else:
     raise ValueError("No valid optimizer selected")
 
-if config["train"]["lr_scheduler"] == "cawr":
+if config["train"]["lr_schedule"] == "cawr":
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
 else:
     scheduler = None
@@ -84,7 +86,9 @@ for epoch in tqdm.trange(
     config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
 ):
     if "prior" in config["loss"].keys():
-        config["loss"]["prior"] = beta_schedule[epoch - config["model"]["start_epoch"] - 1]
+        config["loss"]["prior"] = beta_schedule[
+            epoch - config["model"]["start_epoch"] - 1
+        ]
         print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
     epoch_loss = ssumo.train.train_epoch(
@@ -98,7 +102,7 @@ for epoch in tqdm.trange(
         mode="train",
         disentangle_keys=config["disentangle"]["features"],
     )
-    loss_dict = {k: v + [epoch_loss[k]] for k,v in loss_dict.items()}
+    loss_dict = {k: v + [epoch_loss[k]] for k, v in loss_dict.items()}
 
     if epoch % 10 == 0:
         print("Saving model to folder: {}".format(config["out_path"]))
