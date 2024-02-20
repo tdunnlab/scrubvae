@@ -238,11 +238,11 @@ class ResidualDecoder(nn.Module):
         z_dim=128,
         window=200,
         activation="prelu",
-        invariant_dim=0,
+        conditional_dim=0,
         init_dilation=None,
     ):
         super(ResidualDecoder, self).__init__()
-        self.invariant_dim = invariant_dim
+        self.conditional_dim = conditional_dim
 
         if init_dilation is None:
             dilation = torch.ones(len(ch) - 1, dtype=int)
@@ -250,7 +250,7 @@ class ResidualDecoder(nn.Module):
             dilation = init_dilation * 2 ** torch.arange(len(ch) - 1)
 
         flatten_dim = find_latent_dim(window, kernel, len(ch) - 1, dilation) * ch[-1]
-        self.fc_in = nn.Linear(z_dim + invariant_dim, flatten_dim)
+        self.fc_in = nn.Linear(z_dim + conditional_dim, flatten_dim)
         self.unflatten = nn.Unflatten(1, (ch[-1], -1))
         # self.conv_in = nn.ConvTranspose1d(int(flatten_dim[0]), ch*16, 3, 1, 1)
 
@@ -294,7 +294,7 @@ class ResVAE(nn.Module):
         window=200,
         activation="prelu",
         is_diag=False,
-        invariant_dim=0,
+        conditional_dim=0,
         init_dilation=None,
         disentangle=None,
         kinematic_tree=None,
@@ -306,7 +306,7 @@ class ResVAE(nn.Module):
         self.ch = ch
         self.window = window
         self.is_diag = is_diag
-        self.invariant_dim = invariant_dim
+        self.conditional_dim = conditional_dim
         self.kinematic_tree = kinematic_tree
         self.register_buffer("arena_size", arena_size)
         # self.arena_size = arena_size
@@ -328,7 +328,7 @@ class ResVAE(nn.Module):
             z_dim=z_dim,
             window=window,
             activation=activation,
-            invariant_dim=invariant_dim,
+            conditional_dim=conditional_dim,
             init_dilation=init_dilation,
         )
         if disentangle is not None:
@@ -366,20 +366,26 @@ class ResVAE(nn.Module):
         )
         return mu, L
 
-    def decode(self, mu):
+    def decode(self, data):
+        
         data_o = {}
-        x_hat = self.decoder(mu).moveaxis(-1, 1)
+        if self.conditional_dim > 0:
+            z = torch.cat([data["mu"]] + [data[k] for k in self.disentangle_keys], dim=-1)
+
+        x_hat = self.decoder(data["mu"]).moveaxis(-1, 1)
 
         if self.arena_size is not None:
             x6d = x_hat[..., :-3]
             data_o["root"] = self.inv_normalize_root(x_hat[..., -3:]).reshape(
-                mu.shape[0], self.window, 3
+                data["mu"].shape[0], self.window, 3
             )
         else:
             x6d = x_hat
-            data_o["root"] = torch.zeros(mu.shape[0], self.window, 3).to(mu.device)
+            data_o["root"] = torch.zeros(
+                data["mu"].shape[0], self.window, 3, device=data["mu"].device
+            )
 
-        data_o["x6d"] = x6d.reshape(mu.shape[0], self.window, -1, 6)
+        data_o["x6d"] = x6d.reshape(data["mu"].shape[0], self.window, -1, 6)
 
         return data_o
 
@@ -401,13 +407,13 @@ class ResVAE(nn.Module):
         )
         z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
 
-        if self.invariant_dim > 0:
-            z = torch.cat([z] + [data[k] for k in self.disentangle_keys], dim=-1)
-
         # Running disentangle
         data_o["disentangle"] = {
             k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
         }
+
+        if self.conditional_dim > 0:
+            z = torch.cat([z] + [data[k] for k in self.disentangle_keys], dim=-1)
 
         x_hat = self.decoder(z).moveaxis(-1, 1)
 

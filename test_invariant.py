@@ -36,7 +36,7 @@ dataset = MouseDataset(
     stride=2,
     direction_process=config["direction_process"],
     arena_size=config["arena_size"],
-    invariant=config["invariant"],
+    conditional=config["conditional"],
     speed=config["speed_decoder"] is not None,
 )
 loader = DataLoader(dataset=dataset, batch_size=4, shuffle=True)
@@ -44,34 +44,34 @@ kinematic_tree = dataset.kinematic_tree
 n_keypts = dataset.n_keypts
 arena_size = None if config["arena_size"] is None else dataset.arena_size.cuda()
 
-vae, device = utils.init_model(config, n_keypts, config["invariant"])
+vae, device = utils.init_model(config, n_keypts, config["conditional"])
 vae.eval()
 sample_idx = [1000, 100000, 200000, 300000]
 data = {k: v.cuda() for k, v in dataset[sample_idx].items()}
 x_i = torch.cat(
     (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), data["root"]), axis=-1
 )
-if (config["invariant"] == "speed") or (config["speed_decoder"] == "avg"):
+if (config["conditional"] == "speed") or (config["speed_decoder"] == "avg"):
     data["speed"] = data["speed"].mean(dim=-1, keepdim=True)
 
-x6d_o, mu, L = vae(x_i, invariant=data[config["invariant"]].cuda())
+x6d_o, mu, L = vae(x_i, conditional=data[config["conditional"]].cuda())
 n_shifts = 10
-if config["invariant"] == "direction":
-    shifted_invariants = torch.linspace(-np.pi, np.pi, n_shifts, dtype=torch.float32)
-    invariant = torch.zeros(n_shifts + 1, 2)
-    invariant[1:, 0] = torch.cos(shifted_invariants)
-    invariant[1:, 1] = torch.sin(shifted_invariants)
-elif config["invariant"] == "speed":
-    shifted_invariants = torch.linspace(0, 8, n_shifts, dtype=torch.float32)
-    invariant = torch.zeros(n_shifts + 1, 1)
-    invariant[1:, :] = shifted_invariants[:, None]
+if config["conditional"] == "direction":
+    shifted_conditionals = torch.linspace(-np.pi, np.pi, n_shifts, dtype=torch.float32)
+    conditional = torch.zeros(n_shifts + 1, 2)
+    conditional[1:, 0] = torch.cos(shifted_conditionals)
+    conditional[1:, 1] = torch.sin(shifted_conditionals)
+elif config["conditional"] == "speed":
+    shifted_conditionals = torch.linspace(0, 8, n_shifts, dtype=torch.float32)
+    conditional = torch.zeros(n_shifts + 1, 1)
+    conditional[1:, :] = shifted_conditionals[:, None]
 
 
 for i in range(len(sample_idx)):
-    invariant[0, :] = data[config["invariant"]][i]
+    conditional[0, :] = data[config["conditional"]][i]
 
     x_o = vae.decoder(
-        torch.cat((mu[i].repeat(n_shifts + 1, 1), invariant.cuda()), dim=-1)
+        torch.cat((mu[i].repeat(n_shifts + 1, 1), conditional.cuda()), dim=-1)
     ).moveaxis(-1, 1)
     x6d_shifted = x_o[..., :-3].reshape((-1, n_keypts, 6))
     root_o = x_o[..., -3:].reshape(-1, 3)
@@ -109,9 +109,9 @@ for i in range(len(sample_idx)):
         frames=np.arange(n_shifts + 2) * config["window"],
         centered=False,
         subtitles=np.concatenate(
-            [["Raw", "Reconstructed"], shifted_invariants.detach().numpy().astype(str)]
+            [["Raw", "Reconstructed"], shifted_conditionals.detach().numpy().astype(str)]
         ),
-        title="{} data - {} invariant shift".format(dataset_label,config["invariant"]),
+        title="{} data - {} conditional shift".format(dataset_label,config["conditional"]),
         fps=25,
         N_FRAMES=config["window"],
         VID_NAME="{}_invrnt_grid{}.mp4".format(dataset_label, sample_idx[i]),

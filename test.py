@@ -46,7 +46,7 @@ vae, device = ssumo.model.get(
 kinematic_tree = train_dataset.kinematic_tree
 n_keypts = train_dataset.n_keypts
 
-# vae = utils.init_model(config, n_keypts, config["invariant"]).cuda()
+# vae = utils.init_model(config, n_keypts, config["conditional"]).cuda()
 # arena_size = None if config["arena_size"] is None else train_dataset.arena_size.cuda()
 
 

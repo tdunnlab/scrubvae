@@ -3,11 +3,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def loss(loss_dict, out_path, disentangle_keys=None):
-    if any(["_gr" in k for k in loss_dict.keys()]):
-        disentangle_loss_keys = disentangle_keys + [k + "_gr" for k in disentangle_keys]
-    else:
-        disentangle_loss_keys = disentangle_keys
+def loss(loss_dict, out_path, disentangle_keys=[]):
+    gr_keys = [k + "_gr" for k in disentangle_keys]
+    disentangle_loss_keys = [k for k in loss_dict.keys() if k in (disentangle_keys + gr_keys)]
     vae_loss_keys = [k for k in loss_dict.keys() if k not in disentangle_loss_keys]
 
     for keys in [("vae", vae_loss_keys), ("disentangle", disentangle_loss_keys)]:

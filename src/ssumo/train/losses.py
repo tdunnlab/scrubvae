@@ -96,29 +96,29 @@ def get_batch_loss(data, data_o, loss_scale):
         )
 
     available_dis_keys = ["avg_speed", "frame_speed", "part_speed", "heading_change", "heading", "avg_speed_3d"]
-    num_keys = len([key for key in loss_scale.keys() if key in available_dis_keys])
+    num_keys = len(data_o["disentangle"].keys())
     for key in available_dis_keys:
         if key in loss_scale.keys():
             batch_loss[key] = (
                 torch.nn.MSELoss(reduction="mean")(
-                    data_o["disentangle"][key][0], data[key]
+                    data_o["disentangle"][key]["v"], data[key]
                 )
                 / num_keys
             )
 
         if key + "_gr" in loss_scale.keys():
-            if isinstance(data_o["disentangle"][key][1], list):
+            if isinstance(data_o["disentangle"][key]["gr"], list):
                 batch_loss[key + "_gr"] = 0
-                for gr_e in data_o["disentangle"][key][1]:
+                for gr_e in data_o["disentangle"][key]["gr"]:
                     batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="mean")(
                         gr_e, data[key]
                     )
                 batch_loss[key + "_gr"] = (
                     batch_loss[key + "_gr"]
-                    / len(data_o["disentangle"][key][1])
+                    / len(data_o["disentangle"][key]["gr"])
                     / num_keys
                 )
-            elif torch.is_tensor(data_o["disentangle"][key][1]):
+            elif torch.is_tensor(data_o["disentangle"][key]["gr"]):
                 batch_loss[key + "_gr"] = (
                     torch.nn.MSELoss(reduction="mean")(
                         data_o["disentangle"][key], data[key]

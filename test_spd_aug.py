@@ -31,7 +31,7 @@ aug_levels = np.linspace(0.5, 1.5, 7)
 # meta_aug.to_csv(aug_path + "/metadata.csv")
 
 train_ids = np.arange(21).reshape(3, 7)
-vae, spd_decoder, device = utils.init_model(config, 18, config["invariant"])
+vae, spd_decoder, device = utils.init_model(config, 18, config["conditional"])
 vae.eval()
 # raw_pose = []
 # for i, id_set in enumerate(train_ids):
@@ -47,7 +47,7 @@ vae.eval()
 #         get_raw_pose=True,
 #         get_root=True,
 #         arena_size=config["arena_size"],
-#         invariant=None,
+#         conditional=None,
 #         remove_speed_outliers=None,
 #     )
 #     # raw_pose += [dataset[:]["raw_pose"]]

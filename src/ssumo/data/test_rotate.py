@@ -19,7 +19,7 @@ dataset = MouseDataset(
     direction_process=config["direction_process"],
     get_speed=config["speed_decoder"] is not None,
     arena_size=config["arena_size"],
-    invariant=config["invariant"],
+    conditional=config["conditional"],
     get_raw_pose=True,)
 
 idx = 1

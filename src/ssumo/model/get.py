@@ -24,12 +24,26 @@ def get(
     if direction_process in ["x360", "midfwd", None]:
         in_channels += 3
 
-    invariant_dim = 0
+    conditional_dim = 0
     disentangle = None
+    if (disentangle_config["method"] == "conditional") or (
+        disentangle_config["method"] == "gr_conditional"
+    ):
+        conditional_dim = sum(
+            [feat_dim_dict[k] for k in disentangle_config["features"]]
+        )
+
+    
     if disentangle_config["method"] is None:
         pass
-    elif disentangle_config["method"] == "invariant":
-        invariant_dim = sum([feat_dim_dict[k] for k in disentangle_config["features"]])
+    elif disentangle_config["method"] == "gr_conditional":
+        from ssumo.model.LinearDisentangle import Scrubber
+
+        disentangle = {}
+        for feat in disentangle_config["features"]:
+            disentangle[feat] = Scrubber(
+                model_config["z_dim"], feat_dim_dict[feat], disentangle_config["alpha"]
+            )
     elif ("gr_" in disentangle_config["method"]) or (
         "linear" in disentangle_config["method"]
     ):
@@ -37,8 +51,11 @@ def get(
 
         if disentangle_config["method"] == "linear":
             reversal = None
+        elif disentangle_config["method"] == "gr_conditional":
+            reversal = "conditional"
         else:
             reversal = disentangle_config["method"][3:]
+
         disentangle = {}
         for feat in disentangle_config["features"]:
             disentangle[feat] = LinearDisentangle(
@@ -62,7 +79,7 @@ def get(
             window=model_config["window"],
             activation=model_config["activation"],
             is_diag=model_config["diag"],
-            invariant_dim=invariant_dim,
+            conditional_dim=conditional_dim,
             init_dilation=model_config["init_dilation"],
             disentangle=disentangle,
             disentangle_keys=disentangle_config["features"],
@@ -91,7 +108,7 @@ def get(
             window=model_config["window"],
             activation=model_config["activation"],
             is_diag=model_config["diag"],
-            invariant_dim=invariant_dim,
+            conditional_dim=conditional_dim,
             init_dilation=model_config["init_dilation"],
         )
     if verbose > 0:

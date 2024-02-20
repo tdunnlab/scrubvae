@@ -49,8 +49,8 @@ def config(path):
 #     )
 
 #     model_str = config["model_type"][:2] + "_"
-#     invariant_str = (
-#         "" if config["invariant"] is None else (config["invariant"][0] + "i_")
+#     conditional_str = (
+#         "" if config["conditional"] is None else (config["conditional"][0] + "i_")
 #     )
 #     hier_orthgnl_scale = (
 #         "_o{}".format(config["loss_scale"]["hier_orthogonal"])
@@ -93,7 +93,7 @@ def config(path):
 
 #     analysis_key = "{}{}{}{}w{}{}{}_{}_{}{}{}{}".format(
 #         decoder_type,
-#         invariant_str,
+#         conditional_str,
 #         grd_reversal,
 #         model_str,
 #         config["window"],

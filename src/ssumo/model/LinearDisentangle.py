@@ -17,7 +17,9 @@ class GradientReversal(Function):
             grad_input = -alpha * grad_output
         return grad_input, None
 
+
 revgrad = GradientReversal.apply
+
 
 class GradientReversalLayer(nn.Module):
     def __init__(self, alpha):
@@ -26,6 +28,7 @@ class GradientReversalLayer(nn.Module):
 
     def forward(self, x):
         return revgrad(x, self.alpha)
+
 
 class MLP(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -40,6 +43,7 @@ class MLP(nn.Module):
 
     def forward(self, z):
         return self.mlp(z)
+
 
 class MLPEnsemble(nn.Module):
     def __init__(self, in_dim, out_dim, n_models=3):
@@ -85,6 +89,17 @@ class ReversalEnsemble(nn.Module):
         c = self.mlp2(z)
         d = self.mlp3(z)
         return [a, b, c, d]
+
+
+class Scrubber(nn.Module):
+    def __init__(self, in_dim, out_dim, alpha=1.0):
+        super(Scrubber, self).__init__()
+        self.reversal = nn.Sequential(
+            GradientReversalLayer(alpha), ReversalEnsemble(in_dim, out_dim)
+        )
+
+    def forward(self, z):
+        return {"gr": self.reversal(z)}
 
 
 class LinearDisentangle(nn.Module):
@@ -136,6 +151,6 @@ class LinearDisentangle(nn.Module):
             nrm = w @ w.T
             z_sub = z - torch.linalg.solve(nrm, x.T).T @ w
 
-            return x, self.reversal(z_sub)
+            return {"v": x, "gr": self.reversal(z_sub)}
 
-        return x, None
+        return {"v": x}
