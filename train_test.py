@@ -7,6 +7,7 @@ import tqdm
 from ssumo.params import read
 import pickle
 import sys
+import os
 from base_path import RESULTS_PATH
 
 ### Set/Load Parameters
@@ -77,6 +78,11 @@ if "prior" in config["loss"].keys():
 
 loss_dict_keys = ["total"] + list(config["loss"].keys())
 loss_dict = {k: [] for k in loss_dict_keys}
+
+lossdictpath = "{}/losses/loss_dict.p".format(config["out_path"])
+if os.path.isfile(lossdictpath) and config["model"]["start_epoch"] != 0:
+    with open(lossdictpath, "rb") as lossfile:
+        loss_dict = pickle.load(lossfile)
 
 if device == "cuda":
     torch.backends.cudnn.benchmark = True

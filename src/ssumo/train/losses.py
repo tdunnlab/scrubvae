@@ -19,6 +19,17 @@ def rotation_loss(x, x_hat, eps=1e-7):
     return theta
 
 
+def new_rotation_loss(x, x_hat, eps=1e-7):
+    assert x.shape[-1] == 6
+    assert x_hat.shape[-1] == 6
+    m1 = rotation_6d_to_matrix(x).view((-1, 3, 3))
+    m2 = rotation_6d_to_matrix(x_hat).view((-1, 3, 3))
+
+    sin = torch.linalg.matrix_norm(m2 - m1) / (2**1.5)
+    sin = torch.clamp(sin, -1 + eps, 1 - eps)
+    return 2 * torch.asin(sin).sum()
+
+
 def regularize_loss(mu, log_var):
     KL_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
     return KL_div
