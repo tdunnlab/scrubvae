@@ -75,7 +75,7 @@ def train_epoch(
                 # total_norm = total_norm ** (1. / 2)
                 # print(total_norm)
 
-                torch.nn.utils.clip_grad_norm_(model.parameters(),max_norm=1e5)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e5)
 
                 # for p in model.parameters():
                 #     param_norm = p.grad.data.norm(2)
@@ -87,6 +87,7 @@ def train_epoch(
                 optimizer.step()
                 if scheduler is not None:
                     scheduler.step(epoch + batch_idx / len(loader))
+
             epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
 
         for k, v in epoch_loss.items():

@@ -17,9 +17,7 @@ class GradientReversal(Function):
             grad_input = -alpha * grad_output
         return grad_input, None
 
-
 revgrad = GradientReversal.apply
-
 
 class GradientReversalLayer(nn.Module):
     def __init__(self, alpha):
@@ -28,7 +26,6 @@ class GradientReversalLayer(nn.Module):
 
     def forward(self, x):
         return revgrad(x, self.alpha)
-
 
 class MLP(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -90,7 +87,6 @@ class ReversalEnsemble(nn.Module):
         d = self.mlp3(z)
         return [a, b, c, d]
 
-
 class Scrubber(nn.Module):
     def __init__(self, in_dim, out_dim, alpha=1.0):
         super(Scrubber, self).__init__()
@@ -100,7 +96,6 @@ class Scrubber(nn.Module):
 
     def forward(self, z):
         return {"gr": self.reversal(z)}
-
 
 class LinearDisentangle(nn.Module):
     def __init__(

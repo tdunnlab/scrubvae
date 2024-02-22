@@ -105,7 +105,7 @@ def get_batch_loss(data, data_o, loss_scale):
                 )
                 / num_keys
             )
-
+            
         if key + "_gr" in loss_scale.keys():
             if isinstance(data_o["disentangle"][key]["gr"], list):
                 batch_loss[key + "_gr"] = 0
