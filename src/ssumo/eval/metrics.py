@@ -10,7 +10,7 @@ from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
 import pickle
 import functools
-from ..model.LinearDisentangle import MLP
+from ..model.LinearDisentangle import MLP, LinearDisentangle
 import torch.optim as optim
 import torch
 from tqdm import trange
@@ -115,7 +115,7 @@ def epoch_linear_regression(z, y_true, model, key):
     pred = lin_model.predict(z)
 
     r2 = r2_score(y_true, pred)
-    if key in model.disentangle.keys():
+    if (key in model.disentangle.keys()) and (isinstance(model.disentangle[key],LinearDisentangle)):
         dis_w = model.disentangle[key].decoder.weight.detach().cpu().numpy()
     else:
         dis_w = lin_model.coef_
@@ -134,7 +134,8 @@ def epoch_linear_regression(z, y_true, model, key):
 def epoch_adversarial_attack(z, y_true, model, key):
     pred = train_ensemble(z, y_true, 200)[1]
     r2 = r2_score(y_true, pred)
-    if key in model.disentangle.keys():
+    
+    if (key in model.disentangle.keys()) and (isinstance(model.disentangle[key],LinearDisentangle)):
         dis_w = model.disentangle[key].decoder.weight.detach().cpu().numpy()
     else:
         print("No linear disentanglement - fitting SKLearn Linear Regression")
