@@ -108,7 +108,9 @@ if sys.argv[1] != "lossplot":
     visualize_reconstruction(train_loader, "Train")
     visualize_reconstruction(test_loader, "Test")
 else:
+    ## TODO: Have average time be something that is saved during training so you don't have to hardcode it as an input here
     averagetimes = [446, 728, 336, 485, 800, 1121, 1094, 1138, 1000, 1000]
+    ## TODO: Submit each of these as a job array. Reference `vis_epoch_regression.py`
     models = [
         "n_layer/2_layer",
         "n_layer/3_layer",
@@ -123,10 +125,15 @@ else:
     ]
 
     trainlosslist = []
+    ## TODO: If "lossplot/" is a hardcoded string, it should be in the string portion, not the `.format()` portion.
+    ## TODO: I prefer using `.p` instead of `.pkl`. Change to make consistent.
+    ## TODO: Use the already existing `losses` folder in each model folder to save and load 
+    ## TODO: No need to create a separate `(Test or Train)Losses.pkl` file which contains all of the losses models. This seems like file bloat. Just load in every time from model folders. Should be trivial slowdown.
     with open("{}TestLosses.pkl".format(RESULTS_PATH + "lossplot/"), "rb") as lossfile:
-        testlosslist = pickle.load(lossfile)
+        testlosslist = pickle.load(lossfile) ## TODO: testlosslist doesn't look like it's a list.
     # testlosslist = {}
-
+    ## TODO: Implementation of test and train should be standardized so that the same code works for reading/loading both.
+    ## TODO (cont.): Ideally you have a variable `dataset_label` that you can set to "Train" or "Test" and it will plot/calculate losses for the appropriate dataset.
     # Train loss dictionaries
     for j in range(len(models)):
         load_path = "{}/losses/loss_dict.pth".format(RESULTS_PATH + models[j])
@@ -151,11 +158,15 @@ else:
         + config["disentangle"]["features"],
         shuffle=True,
     )
+    ## TODO: `device` is already set later when loading in the model. This is redundant
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
+    ##TODO: This should probably be enumerate. Don't use `j`. It's an uninformative name.
     for j in tqdm(range(len(models))):
-        print(j)
-        i = 10
+        ## TODO: `i` seems to be a hard coded counter variable which loads in files based on epoch? This is unnecessary. 
+        ## Instead use pathlib to look into the `/weights/` folder and load in the list of available saved models. And compare to your test_losses dictionary.
+        ## There's some code in `ssumo.eval.metrics` which shows how to do this. It's used in `vis_epoch_regression.py`
+        i = 10 ##TODO: Don't call this i. It's an uninformative name. I'm guessing this should be `epoch`?
         if models[j] in testlosslist:
             i = len(testlosslist[models[j]]) * 10 + 10
         else:
@@ -173,8 +184,14 @@ else:
             kinematic_tree=dataset.kinematic_tree,
             verbose=1,
         )
+        ## TODO: Don't like while loops. They make too many assumptions. Change this to a for loop.
+        ## Won't need while loop if you use pathlib to pre-load in all filenames in a folder.
+        ## TODO: use `pathlib` instead of `os.path`. There are many examples throughout ssumo of how to use `pathlib`.
         while os.path.isfile("{}/weights/epoch_{}.pth".format(RESULTS_PATH + run, i)):
             print("{}/weights/epoch_{}.pth".format(RESULTS_PATH + run, i))
+            ## TODO: Loading in a model is already handled by `ssumo.model.get`
+            ## Just set `config["load_model"] = config["out_path"]`
+            ## And `config["start_epoch"] = curr_epoch` before `ssumo.model.get`
             state_dict = torch.load(
                 "{}/weights/epoch_{}.pth".format(RESULTS_PATH + run, i)
             )
@@ -182,7 +199,7 @@ else:
             vae.to(device)
             epoch_loss = ssumo.train.train_epoch(
                 vae,
-                "optimizer",
+                "optimizer", ## Why is optimizer a string?
                 None,
                 loader,
                 device,
@@ -194,7 +211,7 @@ else:
             loss.append(epoch_loss)
             i += 10
         testlosslist[run].append(loss)
-        pickle.dump(
+        pickle.dump( ## TODO: dump this in the model `/losses/` folder.
             testlosslist,
             open("{}TestLosses.pkl".format(RESULTS_PATH + "lossplot/"), "wb"),
         )
@@ -218,15 +235,16 @@ else:
     plt.savefig("{}TrainJPElossplot.png".format(RESULTS_PATH))
     plt.close()
 
+    ## TODO: This plotting code looks identical to the code above? Why not make a function?
     plt.figure(figsize=(10, 5))
     plt.title("Test JPE Loss over Time by Model")
-    for i in testlosslist.keys():
+    for i in testlosslist.keys(): # TODO: for key in testlosslist.keys(): ## Or you can use k
         max_epoch = len(testlosslist[i])
         plt.plot(
             np.linspace(
                 0, max_epoch * averagetimes[models.index(i)] * 10 / 60, max_epoch + 1
             )[1:],
-            [j["jpe"] for j in testlosslist[i]],
+            [j["jpe"] for j in testlosslist[i]], # TODO: don't use `j`.
             label=i,
             alpha=0.5,
             linewidth=1,
