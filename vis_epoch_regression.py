@@ -23,7 +23,7 @@ elif task_id.isdigit():
 else:
     analysis_keys = [task_id]
 
-dataset_label = "Test"
+dataset_label = "Train"
 
 metrics = {}
 for an_key in analysis_keys:
