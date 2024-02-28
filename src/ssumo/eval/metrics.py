@@ -15,6 +15,7 @@ import torch.optim as optim
 import torch
 from tqdm import trange
 
+
 def get_all_epochs(path):
     z_path = Path(path + "weights/")
     epochs = [re.findall(r"\d+", f.parts[-1]) for f in list(z_path.glob("epoch*"))]
@@ -164,13 +165,13 @@ def train_ensemble(z, y_true, num_epochs=200):
             loss = 0
             for pred in output:
                 loss += torch.nn.MSELoss(reduction="sum")(pred, y_true)
-            
+
             loss.backward()
             optimizer.step()
 
-    print("Loss: {}".format(loss.item()/len(y_true)))
+    print("Loss: {}".format(loss.item() / len(y_true)))
 
     model.eval()
-    y_pred = torch.stack(model(z),dim=-1).mean(dim=-1)
+    y_pred = torch.stack(model(z), dim=-1).mean(dim=-1)
 
     return model, y_pred.detach().cpu().numpy()

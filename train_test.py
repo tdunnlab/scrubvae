@@ -9,6 +9,7 @@ import pickle
 import sys
 import os
 from base_path import RESULTS_PATH
+import time
 
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
@@ -76,7 +77,7 @@ if "prior" in config["loss"].keys():
         config["train"]["beta_anneal"],
     )
 
-loss_dict_keys = ["total"] + list(config["loss"].keys())
+loss_dict_keys = ["total"] + list(config["loss"].keys()) + ["time"]
 loss_dict = {k: [] for k in loss_dict_keys}
 
 lossdictpath = "{}/losses/loss_dict.p".format(config["out_path"])
@@ -90,6 +91,7 @@ if device == "cuda":
 for epoch in tqdm.trange(
     config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
 ):
+    starttime = time.time()
     if "prior" in config["loss"].keys():
         config["loss"]["prior"] = beta_schedule[
             epoch - config["model"]["start_epoch"] - 1
@@ -107,6 +109,7 @@ for epoch in tqdm.trange(
         mode="train",
         disentangle_keys=config["disentangle"]["features"],
     )
+    epoch_loss["time"] = time.time() - starttime
     loss_dict = {k: v + [epoch_loss[k]] for k, v in loss_dict.items()}
 
     if epoch % 10 == 0:
