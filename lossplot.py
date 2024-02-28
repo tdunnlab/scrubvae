@@ -11,7 +11,9 @@ import pickle
 import sys
 
 
-def plot_loss_curve(lossdict, models=[], dataset="Train", ylimit=False, plotkey="jpe"):
+def plot_loss_curve(lossdict, dataset="Train", models=[], ylimit=False, plotkey="jpe"):
+    if models == []:
+        models = lossdict.keys()
     plt.figure(figsize=(10, 5))
     plt.title(dataset + " " + plotkey + " Loss over Time by Model")
     for model in models:
@@ -28,7 +30,7 @@ def plot_loss_curve(lossdict, models=[], dataset="Train", ylimit=False, plotkey=
     plt.xlabel("Time (minutes)")
     plt.ylabel("Log Loss")
     plt.legend()
-    plt.savefig("{}" + dataset + plotkey + "lossplot.png".format(RESULTS_PATH))
+    plt.savefig("{}".format(RESULTS_PATH) + dataset + plotkey + "lossplot.png")
     plt.close()
 
 
@@ -48,17 +50,17 @@ if task_id == "plot":
     testlossdict = {}
     # Train loss dictionaries
     for model in models:
-        load_path = "{}/losses/loss_dict.p".format(RESULTS_PATH + model)
-        with open(load_path, "rb") as lossfile:
-            loss_dict = pickle.load(lossfile)
+        load_path = "{}/losses/TrainLosses.p".format(RESULTS_PATH + model)
+        with open(load_path, "rb") as trainloss:
+            loss_dict = pickle.load(trainloss)
         trainlossdict[model] = loss_dict
         load_path = "{}/losses/TestLosses.p".format(RESULTS_PATH + model)
         with open(load_path, "rb") as testloss:
             loss_dict = pickle.load(testloss)
         testlossdict[model] = loss_dict
 
-    plot_loss_curve(trainlossdict, models, "Train", ylimit=[70, 1000])
-    plot_loss_curve(testlossdict, models, "Test")
+    plot_loss_curve(trainlossdict, "Train", ylimit=[70, 1000])
+    plot_loss_curve(testlossdict, "Test")
 
 else:
     # Train loss from dict
