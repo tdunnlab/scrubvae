@@ -18,7 +18,9 @@ def plot_loss_curve(lossdict, dataset="Train", models=[], ylimit=False, plotkey=
     plt.title(dataset + " " + plotkey + " Loss over Time by Model")
     for model in models:
         plt.plot(
-            [epoch for epoch in sorted(lossdict[model])],
+            np.cumsum(
+                [lossdict[model][epoch]["time"] for epoch in sorted(lossdict[model])]
+            ),
             [lossdict[model][epoch][plotkey] for epoch in sorted(lossdict[model])],
             label=model,
             alpha=0.5,
