@@ -30,6 +30,7 @@ def for_all_epochs(func):
         path,
         dataset_label,
         save_load=True,
+        disentangle_keys=["avg_speed", "heading", "heading_change"],
         **kwargs,
     ):
         if func.__name__ == "epoch_linear_regression":
@@ -39,11 +40,6 @@ def for_all_epochs(func):
 
         config = read.config(path + "/model_config.yaml")
         config["model"]["load_model"] = config["out_path"]
-
-        if len(config["disentangle"]["features"]) > 0:
-            disentangle_keys = config["disentangle"]["features"]
-        else:  # For vanilla you'll still want to calculate this
-            disentangle_keys = ["avg_speed", "heading", "heading_change"]
 
         pickle_path = "{}/{}_{}.p".format(config["out_path"], label, dataset_label)
         if Path(pickle_path).is_file() and save_load:

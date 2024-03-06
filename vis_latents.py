@@ -14,12 +14,12 @@ gen_samples_cluster = False
 gen_actions = False
 vis_clusters = True
 
-path = "/heading/balanced/"
-vis_path = RESULTS_PATH + path + "/vis_latents_300/"
+path = "/mcmi/cvae_scrub/"
+vis_path = RESULTS_PATH + path + "/vis_latents/"
 config = read.config(RESULTS_PATH + path + "/model_config.yaml")
 k = 25  # Number of clusters
 config["model"]["load_model"] = config["out_path"]
-config["model"]["start_epoch"] = 300
+config["model"]["start_epoch"] = 260
 config["data"]["stride"] = 1
 # config["speed_decoder"] = None
 Path(vis_path).mkdir(parents=True, exist_ok=True)
@@ -27,15 +27,14 @@ Path(vis_path).mkdir(parents=True, exist_ok=True)
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
 dataset_label = "Train"
 ### Load Datasets
-dataset = ssumo.data.get_mouse(
+dataset, loader = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
     train=dataset_label == "Train",
     data_keys=["x6d", "root", "offsets", "raw_pose"]
     + config["disentangle"]["features"],
-)
-loader = DataLoader(
-    dataset=dataset, batch_size=config["train"]["batch_size"], shuffle=False
+    normalize=config["disentangle"]["features"],
+    shuffle=False
 )
 vae, device = ssumo.model.get(
     model_config=config["model"],
@@ -56,6 +55,7 @@ latent_std = latents.std(axis=0)
 num_latents = latents.shape[-1]
 
 if z_null is not None:
+    print("Projecting latents to decoder null space")
     latents = ssumo.eval.project_to_null(
         latents, vae.disentangle[z_null].decoder.weight.cpu().detach().numpy()
     )[0]
@@ -68,12 +68,12 @@ if vis_clusters:
         n_components=k,
         label=label,
         path=vis_path,
-        covariance_type="full",
+        covariance_type="diag",
     )
 
     print(
         np.histogram(
-            k_pred, bins=len(np.unique(k_pred)), range=(-1.5, np.max(k_pred) + 0.5)
+            k_pred, bins=len(np.unique(k_pred)), range=(-0.5, np.max(k_pred) + 0.5)
         )[0]
     )
 

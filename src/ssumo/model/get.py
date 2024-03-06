@@ -26,12 +26,11 @@ def get(
 
     conditional_dim = 0
     disentangle = None
-    if (disentangle_config["method"] == "conditional") or (
-        disentangle_config["method"] == "gr_conditional"
-    ):
-        conditional_dim = sum(
-            [feat_dim_dict[k] for k in disentangle_config["features"]]
-        )
+    if disentangle_config["method"]:
+        if "conditional" in disentangle_config["method"]:
+            conditional_dim = sum(
+                [feat_dim_dict[k] for k in disentangle_config["features"]]
+            )
 
     
     if disentangle_config["method"] is None:

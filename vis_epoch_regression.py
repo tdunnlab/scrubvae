@@ -24,17 +24,17 @@ else:
     analysis_keys = [task_id]
 
 dataset_label = "Train"
+disentangle_keys = ["avg_speed_3d", "heading", "heading_change"]
 
 metrics = {}
 for an_key in analysis_keys:
     folder = "{}/{}/".format(results_path, an_key)
     print("Reading in folder: {}".format(folder))
     metrics[an_key] = ssumo.eval.metrics.epoch_adversarial_attack(
-        folder, dataset_label, save_load=True
+        folder, dataset_label, save_load=True, disentangle_keys = disentangle_keys
     )
 
 if task_id is None:
-    disentangle_keys = ["avg_speed_3d", "heading", "heading_change"]
     ## Plot R^2
     for key in disentangle_keys:
         f, ax_arr = plt.subplots(2, 1, figsize=(15, 15))

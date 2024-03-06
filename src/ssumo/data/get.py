@@ -23,6 +23,7 @@ def get_mouse(
     set_ids = np.in1d(ids, train_ids) if train else ~np.in1d(ids, train_ids)
     pose = pose[set_ids][:, REORDER, :]
 
+    ## Smoothing
     if data_config["filter_pose"]:
         pose = preprocess.median_filter(pose, ids[set_ids], 5)
 
@@ -42,11 +43,13 @@ def get_mouse(
                 ],
             )
             if "avg_speed_3d" in speed_key:
-                speed = np.concatenate([speed[:,:2],speed[:,2:].mean(axis=-1,keepdims=True)],axis=-1)
+                speed = np.concatenate(
+                    [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
+                )
 
         else:
             speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
-            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1,keepdims=True)
+            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
 
     if data_config["remove_speed_outliers"] is not None:
         outlier_frames = np.where(
@@ -131,9 +134,13 @@ def get_mouse(
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
     for key in normalize:
-        print("Mean-centering and unit standard deviation scaling decoding variable: {}".format(key))
+        print(
+            "Mean-centering and unit standard deviation scaling decoding variable: {}".format(
+                key
+            )
+        )
         data[key] -= data[key].mean(axis=0)
-        data[key] /= (data[key].std(axis=0))
+        data[key] /= data[key].std(axis=0)
 
     if "target_pose" in data_keys:
         data["target_pose"] = fwd_kin_cont6d_torch(

@@ -9,7 +9,17 @@ PARAM_KEYS = dict(
         "skeleton_path",
         "stride",
     ],
-    disentangle=["alpha", "balance_loss", "detach_gr", "features", "method", "n_models"],
+    disentangle=[
+        "alpha",
+        "balance_loss",
+        "bandwidth",
+        "detach_gr",
+        "features",
+        "gamma",
+        "method",
+        "n_models",
+        "var_mode",
+    ],
     model=[
         "activation",
         "channel",

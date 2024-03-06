@@ -1,6 +1,6 @@
 import ssumo
 import torch
-
+import functools
 torch.autograd.set_detect_anomaly(True)
 import torch.optim as optim
 import tqdm
@@ -28,7 +28,7 @@ dataset, loader = ssumo.data.get_mouse(
     data_keys=["x6d", "root", "offsets", "target_pose"]
     + config["disentangle"]["features"],
     shuffle=True,
-    normalize = config["disentangle"]["features"]
+    normalize=config["disentangle"]["features"],
 )
 
 # Balance disentanglement losses
@@ -91,7 +91,18 @@ for epoch in tqdm.trange(
         ]
         print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
-    epoch_loss = ssumo.train.train_epoch(
+    if "mcmi" in config["disentangle"]["method"]:
+        train_func = functools.partial(
+            ssumo.train.train_epoch_mcmi,
+            var_mode=config["disentangle"]["var_mode"],
+            gamma=config["disentangle"]["gamma"],
+            bandwidth=config["disentangle"]["bandwidth"],
+        )
+    else:
+        train_func = functools.partial(
+            ssumo.train.train_epoch
+        )
+    epoch_loss = train_func(
         vae,
         optimizer,
         scheduler,

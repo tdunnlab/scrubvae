@@ -110,9 +110,7 @@ def get_batch_loss(data, data_o, loss_scale):
             if isinstance(data_o["disentangle"][key]["gr"], list):
                 batch_loss[key + "_gr"] = 0
                 for gr_e in data_o["disentangle"][key]["gr"]:
-                    batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="mean")(
-                        gr_e, data[key]
-                    )
+                    batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="mean")( gr_e, data[key] )
                 batch_loss[key + "_gr"] = (
                     batch_loss[key + "_gr"]
                     / len(data_o["disentangle"][key]["gr"])
