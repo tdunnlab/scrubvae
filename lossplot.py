@@ -11,17 +11,19 @@ import pickle
 import sys
 
 
-def plot_loss_curve(lossdict, dataset="Train", models=[], ylimit=False, plotkey="jpe"):
+def plot_loss_curve(
+    lossdict, times, dataset="Train", models=[], ylimit=False, plotkey="jpe", nametag=""
+):
     if models == []:
         models = lossdict.keys()
     plt.figure(figsize=(10, 5))
     plt.title(dataset + " " + plotkey + " Loss over Time by Model")
     for model in models:
+        yplot = [lossdict[model][epoch][plotkey] for epoch in sorted(lossdict[model])]
         plt.plot(
-            np.cumsum(
-                [lossdict[model][epoch]["time"] for epoch in sorted(lossdict[model])]
-            ),
-            [lossdict[model][epoch][plotkey] for epoch in sorted(lossdict[model])],
+            np.linspace(0, len(yplot) * times[model], len(yplot)),
+            # [times[model] for epoch in sorted(lossdict[model])],
+            yplot,
             label=model,
             alpha=0.5,
             linewidth=1,
@@ -29,10 +31,12 @@ def plot_loss_curve(lossdict, dataset="Train", models=[], ylimit=False, plotkey=
     plt.yscale("log")
     if ylimit:
         plt.ylim(ylimit[0], ylimit[1])
-    plt.xlabel("Time (minutes)")
+    plt.xlabel("Time (Hours)")
     plt.ylabel("Log Loss")
     plt.legend()
-    plt.savefig("{}".format(RESULTS_PATH) + dataset + plotkey + "lossplot.png")
+    plt.savefig(
+        "{}".format(RESULTS_PATH) + dataset + plotkey + "lossplot" + nametag + ".png"
+    )
     plt.close()
 
 
@@ -48,6 +52,7 @@ else:
 
 if task_id == "plot":
     models = [f.parts[-1] for f in Path(RESULTS_PATH).iterdir() if f.is_dir()]
+
     trainlossdict = {}
     testlossdict = {}
     # Train loss dictionaries
@@ -60,9 +65,18 @@ if task_id == "plot":
         with open(load_path, "rb") as testloss:
             loss_dict = pickle.load(testloss)
         testlossdict[model] = loss_dict
-
-    plot_loss_curve(trainlossdict, "Train", ylimit=[70, 1000])
-    plot_loss_curve(testlossdict, "Test")
+    times = {
+        model: np.average(
+            [
+                trainlossdict[model][epoch]["time"]
+                for epoch in sorted(trainlossdict[model])
+            ]
+        )
+        / 360
+        for model in trainlossdict.keys()
+    }
+    plot_loss_curve(trainlossdict, times, "Train", models=models, ylimit=[70, 1000])
+    plot_loss_curve(testlossdict, times, "Test", models=models)
 
 else:
     # Train loss from dict
