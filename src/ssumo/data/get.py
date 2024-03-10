@@ -134,13 +134,23 @@ def get_mouse(
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
     for key in normalize:
-        print(
-            "Mean-centering and unit standard deviation scaling decoding variable: {}".format(
-                key
+        if key == "heading":
+            pass
+        else:
+            print(
+                "Rescaling decoding variable, {}, to be between -1 and 1".format(
+                    key
+                )
             )
-        )
-        data[key] -= data[key].mean(axis=0)
-        data[key] /= data[key].std(axis=0)
+            key_min = data[key].min(dim=0)[0] - data[key].min(dim=0)[0]*0.1
+            # data[key] -= data[key].mean(axis=0)
+            # data[key] /= data[key].std(axis=0)
+            data[key] -= key_min
+            key_max = data[key].max(dim=0)[0] + data[key].max(dim=0)[0]*0.1
+            data[key] = 2 * data[key] / key_max - 1
+            assert data[key].max() < 1
+            assert data[key].min() > -1
+        # norm_root = 2 * norm_root / (self.arena_size[1] - self.arena_size[0]) - 1
 
     if "target_pose" in data_keys:
         data["target_pose"] = fwd_kin_cont6d_torch(
