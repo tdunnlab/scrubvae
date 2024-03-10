@@ -81,10 +81,10 @@ class ReversalEnsemble(nn.Module):
         )
 
     def forward(self, z):
-        a = torch.nn.Tanh(self.lin(z))
-        b = torch.nn.Tanh(self.mlp1(z))
-        c = torch.nn.Tanh(self.mlp2(z))
-        d = torch.nn.Tanh(self.mlp3(z))
+        a = torch.tanh(self.lin(z))
+        b = torch.tanh(self.mlp1(z))
+        c = torch.tanh(self.mlp2(z))
+        d = torch.tanh(self.mlp3(z))
         return [a, b, c, d]
 
 class Scrubber(nn.Module):
