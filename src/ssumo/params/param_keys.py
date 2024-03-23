@@ -5,6 +5,7 @@ PARAM_KEYS = dict(
         "data_path",
         "direction_process",
         "filter_pose",
+        "normalize",
         "remove_speed_outliers",
         "skeleton_path",
         "stride",

@@ -91,7 +91,8 @@ for epoch in tqdm.trange(
         ]
         print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
-    if "mcmi" in config["disentangle"]["method"]:
+    if "mcmi" in str(config["disentangle"]["method"]):
+        print("Running MCMI optimization")
         train_func = functools.partial(
             ssumo.train.train_epoch_mcmi,
             var_mode=config["disentangle"]["var_mode"],

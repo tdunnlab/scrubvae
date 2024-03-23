@@ -24,7 +24,7 @@ else:
     analysis_keys = [task_id]
 
 dataset_label = "Train"
-disentangle_keys = ["avg_speed_3d", "heading", "heading_change"]
+disentangle_keys = ["avg_speed_3d", "heading"]
 
 metrics = {}
 for an_key in analysis_keys:
