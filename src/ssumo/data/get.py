@@ -153,6 +153,7 @@ def get_mouse(
                 assert data[key].min() > -1
             # norm_root = 2 * norm_root / (self.arena_size[1] - self.arena_size[0]) - 1
         elif data_config["normalize"] == "z_score":
+            print("Mean centering and unit standard deviation-scaling {}".format(key))
             data[key] -= data[key].mean(axis=0)
             data[key] /= data[key].std(axis=0)
 

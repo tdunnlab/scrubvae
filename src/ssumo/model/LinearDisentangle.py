@@ -17,7 +17,9 @@ class GradientReversal(Function):
             grad_input = -alpha * grad_output
         return grad_input, None
 
+
 revgrad = GradientReversal.apply
+
 
 class GradientReversalLayer(nn.Module):
     def __init__(self, alpha):
@@ -26,6 +28,7 @@ class GradientReversalLayer(nn.Module):
 
     def forward(self, x):
         return revgrad(x, self.alpha)
+
 
 class MLP(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -55,10 +58,13 @@ class MLPEnsemble(nn.Module):
 
 
 class ReversalEnsemble(nn.Module):
-    def __init__(self, in_dim, out_dim):
+    def __init__(self, in_dim, out_dim, bound=False):
         super(ReversalEnsemble, self).__init__()
 
-        self.lin = nn.Linear(in_dim, out_dim)
+        self.lin = nn.Sequential(
+            nn.Linear(in_dim, out_dim),
+            nn.Tanh() if bound else None,
+        )
 
         self.mlp1 = nn.Sequential(
             nn.Linear(in_dim, in_dim),
@@ -66,10 +72,14 @@ class ReversalEnsemble(nn.Module):
             nn.Linear(in_dim, in_dim),
             nn.ReLU(),
             nn.Linear(in_dim, out_dim),
+            nn.Tanh() if bound else None,
         )
 
         self.mlp2 = nn.Sequential(
-            nn.Linear(in_dim, in_dim), nn.ReLU(), nn.Linear(in_dim, out_dim)
+            nn.Linear(in_dim, in_dim),
+            nn.ReLU(),
+            nn.Linear(in_dim, out_dim),
+            nn.Tanh() if bound else None,
         )
 
         self.mlp3 = nn.Sequential(
@@ -78,24 +88,27 @@ class ReversalEnsemble(nn.Module):
             nn.Linear(in_dim, in_dim // 2),
             nn.ReLU(),
             nn.Linear(in_dim // 2, out_dim),
+            nn.Tanh() if bound else None,
         )
 
     def forward(self, z):
-        a = torch.tanh(self.lin(z))
-        b = torch.tanh(self.mlp1(z))
-        c = torch.tanh(self.mlp2(z))
-        d = torch.tanh(self.mlp3(z))
+        a = self.lin(z)
+        b = self.mlp1(z)
+        c = self.mlp2(z)
+        d = self.mlp3(z)
         return [a, b, c, d]
 
+
 class Scrubber(nn.Module):
-    def __init__(self, in_dim, out_dim, alpha=1.0):
+    def __init__(self, in_dim, out_dim, alpha=1.0, bound=False):
         super(Scrubber, self).__init__()
         self.reversal = nn.Sequential(
-            GradientReversalLayer(alpha), ReversalEnsemble(in_dim, out_dim)
+            GradientReversalLayer(alpha), ReversalEnsemble(in_dim, out_dim, bound)
         )
 
     def forward(self, z):
         return {"gr": self.reversal(z)}
+
 
 class LinearDisentangle(nn.Module):
     def __init__(

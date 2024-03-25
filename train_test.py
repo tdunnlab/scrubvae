@@ -50,6 +50,7 @@ vae, device = ssumo.model.get(
     direction_process=config["data"]["direction_process"],
     arena_size=dataset.arena_size,
     kinematic_tree=dataset.kinematic_tree,
+    bound=config["data"]["normalize"] is not None,
     verbose=1,
 )
 
@@ -83,7 +84,8 @@ if device == "cuda":
     torch.backends.cudnn.benchmark = True
 
 for epoch in tqdm.trange(
-    config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
+    config["model"]["start_epoch"] + 1, 
+    config["train"]["num_epochs"] + 1
 ):
     if "prior" in config["loss"].keys():
         config["loss"]["prior"] = beta_schedule[

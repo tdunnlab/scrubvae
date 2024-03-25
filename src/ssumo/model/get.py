@@ -9,6 +9,7 @@ def get(
     direction_process,
     arena_size=None,
     kinematic_tree=None,
+    bound=False,
     verbose=1,
 ):
     feat_dim_dict = {
@@ -41,7 +42,7 @@ def get(
         disentangle = {}
         for feat in disentangle_config["features"]:
             disentangle[feat] = Scrubber(
-                model_config["z_dim"], feat_dim_dict[feat], disentangle_config["alpha"]
+                model_config["z_dim"], feat_dim_dict[feat], disentangle_config["alpha"], bound=bound
             )
     elif ("gr_" in disentangle_config["method"]) or (
         "linear" in disentangle_config["method"]

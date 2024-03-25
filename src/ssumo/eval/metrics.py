@@ -79,6 +79,7 @@ def for_all_epochs(func):
                 direction_process=config["data"]["direction_process"],
                 arena_size=dataset.arena_size,
                 kinematic_tree=dataset.kinematic_tree,
+                bound=config["data"]["normalize"] is not None,
                 verbose=-1,
             )
 

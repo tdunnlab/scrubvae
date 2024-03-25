@@ -129,8 +129,8 @@ def train_epoch_mcmi(
     with grad_env():
         for batch_idx, data in enumerate(loader):
             # if mode == "train":
-                # for param in model.parameters():
-                #     param.grad = None
+            # for param in model.parameters():
+            #     param.grad = None
 
             data = {k: v.to(device) for k, v in data.items()}
             data["kinematic_tree"] = model.kinematic_tree
@@ -140,22 +140,21 @@ def train_epoch_mcmi(
             batch_loss = get_batch_loss(data, data_o, loss_config)
             if batch_idx > 0:
                 batch_loss["mcmi"] = mi_estimator(data_o["mu"], variables)
-                batch_loss["total"] = batch_loss["mcmi"]*1000
-                # batch_loss["total"] += loss_config["mcmi"]*batch_loss["mcmi"]
+                # batch_loss["total"] += batch_loss["mcmi"]*1000
+                batch_loss["total"] += loss_config["mcmi"]*batch_loss["mcmi"]
             else:
                 batch_loss["mcmi"] = batch_loss["total"]
 
             if mode == "train":
-                print(batch_loss["mcmi"])
+                # print(batch_loss["mcmi"])
                 batch_loss["total"].backward()
-                # import pdb; pdb.set_trace()
 
-                total_norm = 0
-                for p in model.parameters():
-                    param_norm = p.grad.data.norm(2)
-                    total_norm += param_norm.item() ** 2
-                total_norm = total_norm ** (1. / 2)
-                print(total_norm)
+                # total_norm = 0
+                # for p in model.parameters():
+                #     param_norm = p.grad.data.norm(2)
+                #     total_norm += param_norm.item() ** 2
+                # total_norm = total_norm ** (1.0 / 2)
+                # print(total_norm)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e5)
 
                 optimizer.step()
@@ -163,12 +162,19 @@ def train_epoch_mcmi(
                     scheduler.step(epoch + batch_idx / len(loader))
 
             if var_mode == "diagonal":
-                L_sample = data_o["L"].detach()
-                var_sample = L_sample.diagonal(dim1=-2, dim2=-1)**2 + bandwidth
+                L_sample = data_o["L"].detach().clone()
+                var_sample = L_sample.diagonal(dim1=-2, dim2=-1) ** 2 + bandwidth
             else:
                 var_sample = bandwidth
-
-            mi_estimator = MutInfoEstimator( data_o["mu"].detach(), variables, var_sample, gamma=gamma, var_mode=var_mode, device=device )
+            
+            mi_estimator = MutInfoEstimator(
+                data_o["mu"].detach().clone(),
+                variables.clone(),
+                var_sample,
+                gamma=gamma,
+                var_mode=var_mode,
+                device=device,
+            )
             epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
 
         for k, v in epoch_loss.items():
