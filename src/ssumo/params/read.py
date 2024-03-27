@@ -3,6 +3,7 @@ from dappy import read
 from pathlib import Path
 from ssumo.params import PARAM_KEYS
 
+
 def config(path):
     config = read.config(path)
 
@@ -28,6 +29,7 @@ def config(path):
     f.close()
 
     return config
+
 
 # def read_config_old(path):
 #     config = read.config(path)
@@ -117,6 +119,3 @@ def config(path):
 #     f.close()
 
 #     return config
-
-
-

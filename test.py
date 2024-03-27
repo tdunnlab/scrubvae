@@ -1,7 +1,7 @@
 from ssumo.data.dataset import fwd_kin_cont6d_torch
 
 from torch.utils.data import DataLoader
-from dappy import read
+from dappy import read as dappyread
 import torch
 from dappy import vis
 import ssumo
@@ -22,7 +22,7 @@ config["model"]["load_model"] = config["out_path"]
 config["data"]["stride"] = 10
 config["data"]["batch_size"] = 10
 
-connectivity = read.connectivity_config(config["data"]["skeleton_path"])
+connectivity = dappyread.connectivity_config(config["data"]["skeleton_path"])
 
 ### Load Datasets
 train_dataset, train_loader = ssumo.data.get_mouse(
