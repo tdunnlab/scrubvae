@@ -14,12 +14,12 @@ gen_samples_cluster = False
 gen_actions = False
 vis_clusters = True
 
-path = "/mcmi/cvae_scrub/"
+path = "/mcmi_32/diag/"
 vis_path = RESULTS_PATH + path + "/vis_latents/"
 config = read.config(RESULTS_PATH + path + "/model_config.yaml")
 k = 25  # Number of clusters
 config["model"]["load_model"] = config["out_path"]
-config["model"]["start_epoch"] = 260
+config["model"]["start_epoch"] = 600
 config["data"]["stride"] = 1
 # config["speed_decoder"] = None
 Path(vis_path).mkdir(parents=True, exist_ok=True)
@@ -43,6 +43,7 @@ vae, device = ssumo.model.get(
     direction_process=config["data"]["direction_process"],
     arena_size=dataset.arena_size,
     kinematic_tree=dataset.kinematic_tree,
+    bound=config["data"]["normalize"] is not None,
     verbose=1,
 )
 kinematic_tree = dataset.kinematic_tree

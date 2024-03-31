@@ -128,9 +128,9 @@ def train_epoch_mcmi(
     epoch_loss = {k: 0 for k in ["total"] + list(loss_config.keys())}
     with grad_env():
         for batch_idx, data in enumerate(loader):
-            # if mode == "train":
-            # for param in model.parameters():
-            #     param.grad = None
+            if mode == "train":
+                for param in model.parameters():
+                    param.grad = None
 
             data = {k: v.to(device) for k, v in data.items()}
             data["kinematic_tree"] = model.kinematic_tree

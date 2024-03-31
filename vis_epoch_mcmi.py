@@ -10,7 +10,6 @@ import sys
 from base_path import RESULTS_PATH
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-import numpy as np
 from ssumo.train.mutual_inf import MutInfoEstimator
 
 torch.manual_seed(50)
@@ -91,7 +90,6 @@ for epoch_ind, epoch in enumerate(epochs_to_test):
         epochs_to_test[: epoch_ind + 1],
         mcmi,
     )
-    # import pdb; pdb.set_trace()
     plt.xlabel("Epoch")
     plt.ylabel("MI")
     plt.legend()
