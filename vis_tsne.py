@@ -10,12 +10,12 @@ from cmocean.cm import phase
 import colorcet as cc
 from ssumo.plot import scatter_cmap
 
-path = "/mcmi_32/vanilla/"
+path = "/mcmi_32/diag/"
 config = read.config(RESULTS_PATH + path + "/model_config.yaml")
 config["model"]["load_model"] = config["out_path"]
 config["model"]["start_epoch"] = 600
 
-dataset_label = "Train"
+dataset_label = "Test"
 dataset, loader = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
@@ -49,7 +49,7 @@ embedder = Embed(
     lr="auto",
 )
 embed_vals = embedder.embed(z, save_self=True)
-np.save(config["out_path"] + "tSNE_z.npy", embed_vals)
+np.save(config["out_path"] + "tSNE_z_{}.npy".format(dataset_label), embed_vals)
 
 # embed_vals = np.load(config["out_path"] + "tSNE_z.npy")
 
@@ -57,6 +57,8 @@ downsample = 10
 scatter_cmap(
     embed_vals[::downsample, :], yaw[::downsample], "z_yaw", path=config["out_path"]
 )
+# k_pred = np.load(config["out_path"] + "vis_latents/z_gmm.npy")
+# scatter_cmap(embed_vals[::downsample, :], k_pred[::downsample], "gmm", path=config["out_path"], cmap=plt.get_cmap("gist_rainbow"))
 
 # z_null = ssumo.eval.project_to_null(
 #     z, vae.disentangle["heading"].decoder.weight.detach().cpu().numpy()

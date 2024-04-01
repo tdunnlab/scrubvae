@@ -159,14 +159,12 @@ def get_mouse(
 
 
     if "target_pose" in data_keys:
-        data["target_pose"] = fwd_kin_cont6d_torch(
-            data["x6d"],
-            skeleton_config["KINEMATIC_TREE"],
-            data["offsets"],
-            root_pos=torch.zeros(data["x6d"].shape[0], 3),
-            do_root_R=True,
-            eps=1e-8,
-        )
+        reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
+        if data_config["direction_process"]=="midfwd":
+            offsets = data["offsets"][window_inds].reshape(reshaped_x6d.shape[:2] + (-1,))
+        else:
+            offsets = data["offsets"]
+        data["target_pose"] = fwd_kin_cont6d_torch( reshaped_x6d, skeleton_config["KINEMATIC_TREE"], offsets, root_pos=torch.zeros(reshaped_x6d.shape[0], 3), do_root_R=True, eps=1e-8, ).reshape(data["x6d"].shape[:-1] + (3,))
 
     dataset = MouseDataset(
         data,
