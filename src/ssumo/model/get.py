@@ -33,21 +33,23 @@ def get(
                 [feat_dim_dict[k] for k in disentangle_config["features"]]
             )
 
-    
     if disentangle_config["method"] is None:
         pass
     elif disentangle_config["method"] == "gr_conditional":
-        from ssumo.model.LinearDisentangle import Scrubber
+        from ssumo.model.disentangle import Scrubber
 
         disentangle = {}
         for feat in disentangle_config["features"]:
             disentangle[feat] = Scrubber(
-                model_config["z_dim"], feat_dim_dict[feat], disentangle_config["alpha"], bound=bound
+                model_config["z_dim"],
+                feat_dim_dict[feat],
+                disentangle_config["alpha"],
+                bound=bound,
             )
     elif ("gr_" in disentangle_config["method"]) or (
         "linear" in disentangle_config["method"]
     ):
-        from ssumo.model.LinearDisentangle import LinearDisentangle
+        from ssumo.model.disentangle import LinearDisentangle
 
         if disentangle_config["method"] == "linear":
             reversal = None
@@ -66,6 +68,14 @@ def get(
                 alpha=disentangle_config["alpha"],
                 do_detach=disentangle_config["detach_gr"],
                 n_models=disentangle_config["n_models"],
+            )
+            
+    elif disentangle_config["moving_avg_lsq"] is True:
+        from ssumo.model.disentangle import MovingAvgLeastSquares
+        disentangle = {}
+        for feat in disentangle_config["features"]:
+            disentangle[feat] = MovingAvgLeastSquares(
+                model_config["z_dim"], feat_dim_dict[feat]
             )
 
     ### Initialize/load model
@@ -87,30 +97,7 @@ def get(
             kinematic_tree=kinematic_tree,
             ch=model_config["channel"],
         )
-    elif model_config["type"] == "transformer":
-        from ssumo.model.TransformerVAE import TransformerVAE
 
-        vae = TransformerVAE(
-            in_channels=in_channels,
-            window=model_config["window"],
-            z_dim=model_config["z_dim"],
-            activation=model_config["activation"],
-            is_diag=model_config["diag"],
-            n_heads=model_config["n_heads"],
-        )
-    elif model_config["type"] == "hrcnn":
-        from ssumo.model.ResVAE import HResVAE
-
-        vae = HResVAE(
-            in_channels=in_channels,
-            kernel=model_config["kernel"],
-            z_dim=model_config["z_dim"],
-            window=model_config["window"],
-            activation=model_config["activation"],
-            is_diag=model_config["diag"],
-            conditional_dim=conditional_dim,
-            init_dilation=model_config["init_dilation"],
-        )
     if verbose > 0:
         print(vae)
 
@@ -120,31 +107,12 @@ def get(
         )
         print("Loading Weights from:\n{}".format(load_path))
         state_dict = torch.load(load_path)
-        # state_dict["arena_size"] = arena_size.cuda()
         missing_keys, unexpected_keys = vae.load_state_dict(state_dict, strict=False)
 
         if verbose > 0:
             print("Missing Keys: {}".format(missing_keys))
             print("Unexpected Keys: {}".format(unexpected_keys))
 
-        # spd_decoder_path = "{}/weights/{}_spd_epoch_{}.pth".format(
-        #     model_config["load_model"],
-        #     model_config["speed_decoder"],
-        #     model_config["load_epoch"],
-        # )
-        # if Path(spd_decoder_path).exists() and (
-        #     model_config["speed_decoder"] is not None
-        # ):
-        #     print(
-        #         "Found {} speed decoder weights - Loading ...".format(
-        #             model_config["speed_decoder"]
-        #         )
-        #     )
-        #     speed_decoder.load_state_dict(torch.load(spd_decoder_path))
-
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-    # if model_config["speed_decoder"] == None:
     return vae.to(device), device
-    # else:
-    #     return vae.to(device), speed_decoder.to(device) device

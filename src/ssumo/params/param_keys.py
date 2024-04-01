@@ -18,6 +18,7 @@ PARAM_KEYS = dict(
         "features",
         "gamma",
         "method",
+        "moving_avg_lsq",
         "n_models",
         "var_mode",
     ],

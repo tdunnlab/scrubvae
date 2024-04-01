@@ -11,8 +11,8 @@ class MutInfoEstimator(torch.nn.Module):
         device: "cuda" or "cpu"
         """
         super().__init__()
-        self.x_s = x_s
-        self.y_s = y_s
+        self.register_buffer("x_s", x_s)
+        self.register_buffer("y_s",y_s)
         log2pi = torch.log(torch.tensor([2 * torch.pi], device=device))
         self.num_s = x_s.shape[0]
         assert y_s.shape[0] == self.num_s
@@ -21,28 +21,24 @@ class MutInfoEstimator(torch.nn.Module):
         self.var_mode = var_mode
 
         if self.var_mode == "sphere":
-            self.var_s = torch.tensor([var_s], device=device, requires_grad=False)
-            self.logA_x = self.x_dim * (log2pi + torch.log(self.var_s))
+            self.register_buffer("var_s",torch.tensor([var_s], device=device, requires_grad=False))
+            logA_x = self.x_dim * (log2pi + torch.log(self.var_s))
             if gamma == None:
                 self.gamma = self.var_s
             else:
                 self.gamma = gamma
         elif self.var_mode == "diagonal":
-            self.var_s = var_s
-            self.logA_x = (
+            self.register_buffer("var_s", var_s)
+            logA_x = (
                 self.x_dim * log2pi + torch.sum(torch.log(self.var_s), dim=-1)
             )[None, :]
             self.gamma = gamma
 
-        self.logA_y = self.y_dim * (
+        logA_y = self.y_dim * (
             log2pi + torch.log(torch.tensor([gamma], device=device))
         )
-
-    def cuda(self):
-        self.x_s = self.x_s.cuda()
-        self.y_s = self.y_s.cuda()
-        self.var_s = self.var_s.cuda()
-        return self
+        self.register_buffer("logA_x", logA_x)
+        self.register_buffer("logA_y", logA_y)
 
     def forward(self, x, y):
         """
@@ -84,3 +80,4 @@ class MutInfoEstimator(torch.nn.Module):
         E_log_py = torch.logsumexp(log_py_each, axis=-1)
 
         return (E_log_pxy - E_log_px - E_log_py).mean() # - 1/num_samples
+ 

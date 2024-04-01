@@ -216,14 +216,9 @@ class ResidualEncoder(nn.Module):
         )
 
     def forward(self, x):
-        # import pdb
-
-        # pdb.set_trace()
         x = self.activation(self.conv_in(x))
         x = self.res_layers(x)
         x = self.flatten(x)
-        # print(self.fc_mu)
-        # print(x.shape)
         mu = self.fc_mu(x)
         sigma = self.fc_sigma(x)
         return mu, sigma

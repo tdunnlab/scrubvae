@@ -1,6 +1,83 @@
 from torch.autograd import Function
 import torch.nn as nn
 import torch
+from torch.nn.functional import mse_loss
+
+
+class MovingAvgLeastSquares(torch.nn.Module):
+
+    def __init__(self, nx, ny, lamdiff=1e-1, delta=1e-4):
+        super().__init__()
+        # Running average of covariances for first linear decoder
+        self.register_buffer("Sxx0", torch.eye(nx))
+        self.register_buffer("Sxy0", torch.zeros(nx, ny))
+
+        # Running average of covariances for first linear decoder
+        self.register_buffer("Sxx1", torch.eye(nx))
+        self.register_buffer("Sxy1", torch.zeros(nx, ny))
+
+        # Forgetting factor for the first linear decoder
+        self.lam0 = 0.83
+
+        # Forgetting factor for the second linear decoder
+        self.lam1 = self.lam0 + lamdiff
+
+        # Update parameters for the forgetting factors
+        self.delta = delta
+        self.lamdiff = lamdiff
+
+    def forward(self, x):
+        # Solve optimal decoder weights (normal equations)
+        W0 = torch.linalg.solve(self.Sxx0, self.Sxy0)
+        W1 = torch.linalg.solve(self.Sxx1, self.Sxy1)
+
+        # Predicted values for y
+        yhat0 = x @ W0
+        yhat1 = x @ W1
+        return [yhat0, yhat1]
+
+    def evaluate_loss(self, yhat0, yhat1, x, y):
+        """
+        Parameters
+        ----------
+        x : torch.tensor
+            (nx x batch_size) matrix of independent variables.
+
+        y : torch.tensor
+            (ny x batch_size) matrix of dependent variables.
+
+        Returns
+        -------
+        loss : torch.tensor
+            Scalar loss reflecting average mean squared error of the
+            two moving average estimates of the linear decoder.
+        """
+        # Loss for each decoder
+        l0 = mse_loss(y, yhat0)
+        l1 = mse_loss(y, yhat1)
+
+        # If lam0 performed better than lam1, we decrease the forgetting factors
+        # by self.delta
+        if l0 < l1:
+            self.lam0 = torch.clamp(self.lam0 - self.delta, 0.0, 1.0)
+            self.lam1 = self.lam0 + self.lamdiff
+
+        # If lam1 performed better than lam0, we increase the forgetting factors
+        # by self.delta
+        else:
+            self.lam1 = torch.clamp(self.lam1 + self.delta, 0.0, 1.0)
+            self.lam0 = self.lam1 - self.lamdiff
+
+        # Compute moving averages for the next batch of data
+        self.Sxx0 = self.lam0 * self.Sxx0 + x.T @ x
+        self.Sxy0 = self.lam0 * self.Sxy0 + x.T @ y
+        self.Sxx1 = self.lam1 * self.Sxx1 + x.T @ x
+        self.Sxy1 = self.lam1 * self.Sxy1 + x.T @ y
+
+        print("Lam0: {:4f},   Lam1: {:4f}".format(self.lam0, self.lam1))
+
+        # Return average loss of the two linear decoders
+        return (l0 + l1) * 0.5
 
 
 class GradientReversal(Function):
@@ -19,6 +96,7 @@ class GradientReversal(Function):
 
 
 revgrad = GradientReversal.apply
+
 
 class GradientReversalLayer(nn.Module):
     def __init__(self, alpha):
@@ -95,7 +173,7 @@ class ReversalEnsemble(nn.Module):
         b = self.mlp1(z)
         c = self.mlp2(z)
         d = self.mlp3(z)
-        return [b, c, d] #a,
+        return [b, c, d]  # a,
 
 
 class Scrubber(nn.Module):

@@ -81,7 +81,6 @@ class MovingAvgLeastSquares:
         # Return average loss of the two linear decoders
         return (l0 + l1) * 0.5, (yhat0 + yhat1) * 0.5
     
-
 path = "/mcmi_32/vanilla/"
 config = read.config(RESULTS_PATH + path + "/model_config.yaml")
 config["model"]["load_model"] = config["out_path"]

@@ -1,7 +1,7 @@
 import torch
 from ssumo.train.losses import get_batch_loss
 from ssumo.train.mutual_inf import MutInfoEstimator
-
+from ssumo.model.disentangle import MovingAvgLeastSquares
 
 def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
     if beta_anneal:
@@ -65,26 +65,16 @@ def train_epoch(
             data["kinematic_tree"] = model.kinematic_tree
             data_o = predict_batch(model, data, disentangle_keys)
 
-            batch_loss = get_batch_loss(data, data_o, loss_config)
+            batch_loss = get_batch_loss(data, data_o, loss_config, )
+
+            if len(model.disentangle.keys())>0:
+                if isinstance(model.disentangle.values()[0], MovingAvgLeastSquares):
+                    for k,v in model.disentangle.items():
+                        batch_loss += 
 
             if mode == "train":
                 batch_loss["total"].backward()
-                # total_norm = 0
-                # for p in model.parameters():
-                #     param_norm = p.grad.data.norm(2)
-                #     total_norm += param_norm.item() ** 2
-                # total_norm = total_norm ** (1. / 2)
-                # print(total_norm)
-
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e5)
-
-                # for p in model.parameters():
-                #     param_norm = p.grad.data.norm(2)
-                #     total_norm += param_norm.item() ** 2
-                # total_norm = total_norm ** (1. / 2)
-                # print(total_norm)
-                # import pdb; pdb.set_trace()
-
                 optimizer.step()
                 if scheduler is not None:
                     scheduler.step(epoch + batch_idx / len(loader))
@@ -111,9 +101,9 @@ def train_epoch_mcmi(
     loss_config,
     epoch,
     disentangle_keys,
-    bandwidth=1.5,
+    bandwidth=1,
     var_mode="sphere",
-    gamma=1.5,
+    gamma=1,
     mode="train",
 ):
     if mode == "train":
@@ -146,15 +136,7 @@ def train_epoch_mcmi(
                 batch_loss["mcmi"] = batch_loss["total"]
 
             if mode == "train":
-                # print(batch_loss["mcmi"])
                 batch_loss["total"].backward()
-
-                # total_norm = 0
-                # for p in model.parameters():
-                #     param_norm = p.grad.data.norm(2)
-                #     total_norm += param_norm.item() ** 2
-                # total_norm = total_norm ** (1.0 / 2)
-                # print(total_norm)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e5)
 
                 optimizer.step()
