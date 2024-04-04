@@ -73,7 +73,7 @@ def visualize_reconstruction(loader, label):
         )
 
         pose_array = torch.cat(
-            [data["target_pose"].reshape(-1, n_keypts, 3), pose, pose_hat], axis=0
+            [data["raw_pose"].reshape(-1, n_keypts, 3), pose, pose_hat], axis=0
         )
 
         vis.pose.grid3D(

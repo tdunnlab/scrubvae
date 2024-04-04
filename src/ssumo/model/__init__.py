@@ -1,4 +1,4 @@
 from .get import *
-from . import LinearDisentangle
+from . import disentangle
 from . import ResVAE
 from . import TransformerVAE

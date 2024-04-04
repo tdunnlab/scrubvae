@@ -67,10 +67,10 @@ def train_epoch(
 
             batch_loss = get_batch_loss(data, data_o, loss_config, )
 
-            if len(model.disentangle.keys())>0:
-                if isinstance(model.disentangle.values()[0], MovingAvgLeastSquares):
-                    for k,v in model.disentangle.items():
-                        batch_loss += 
+            # if len(model.disentangle.keys())>0:
+            #     if isinstance(model.disentangle.values()[0], MovingAvgLeastSquares):
+            #         for k,v in model.disentangle.items():
+            #             batch_loss += 
 
             if mode == "train":
                 batch_loss["total"].backward()
