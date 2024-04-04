@@ -14,7 +14,7 @@ gen_samples_cluster = False
 gen_actions = False
 vis_clusters = True
 
-path = "/mcmi_32/diag/"
+path = "/mcmi_32/cvae/"
 vis_path = RESULTS_PATH + path + "/vis_latents/"
 config = read.config(RESULTS_PATH + path + "/model_config.yaml")
 k = 25  # Number of clusters
