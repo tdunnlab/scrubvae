@@ -281,13 +281,36 @@ class ResidualDecoder(nn.Module):
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
+        return self
     
     def sampling(self, mu, L):
+        """Reparameterization trick
+
+        Parameters
+        ----------
+        mu : torch.tensor
+            Batch_size x latent dimensions
+        L : torch.tensor
+            Batch_size x latent dimensions x latent dimensions. Lower triangular or diagonal matrix.
+        """
         eps = torch.randn_like(mu)
         return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
+    
+    def forward(self, data):
+        data_o = self.encode(data)
+        z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+
+        # Running disentangle
+        data_o["disentangle"] = {
+            k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
+        }
+
+        data_o.update(self.decode(z, data))
+
+        return data_o
 
 
-class ResVAE(nn.Module):
+class ResVAE(VAE):
     def __init__(
         self,
         in_channels,
@@ -304,7 +327,7 @@ class ResVAE(nn.Module):
         arena_size=None,
         disentangle_keys=None,
     ):
-        super(ResVAE, self).__init__()
+        super().__init__()
         self.in_channels = in_channels
         self.ch = ch
         self.window = window
@@ -312,7 +335,6 @@ class ResVAE(nn.Module):
         self.conditional_dim = conditional_dim
         self.kinematic_tree = kinematic_tree
         self.register_buffer("arena_size", arena_size)
-        # self.arena_size = arena_size
         self.disentangle_keys = disentangle_keys
         self.encoder = ResidualEncoder(
             in_channels,
@@ -349,9 +371,9 @@ class ResVAE(nn.Module):
         root += self.arena_size[0]
         return root
 
-    def sampling(self, mu, L):
-        eps = torch.randn_like(mu)
-        return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
+    # def sampling(self, mu, L):
+    #     eps = torch.randn_like(mu)
+    #     return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
 
     def encode(self, data):
         if self.arena_size is not None:
@@ -390,15 +412,15 @@ class ResVAE(nn.Module):
 
         return data_o
 
-    def forward(self, data):
-        data_o = self.encode(data)
-        z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+    # def forward(self, data):
+    #     data_o = self.encode(data)
+    #     z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
 
-        # Running disentangle
-        data_o["disentangle"] = {
-            k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
-        }
+    #     # Running disentangle
+    #     data_o["disentangle"] = {
+    #         k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
+    #     }
 
-        data_o.update(self.decode(z, data))
+    #     data_o.update(self.decode(z, data))
 
-        return data_o
+    #     return data_o
