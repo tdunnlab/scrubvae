@@ -1,6 +1,8 @@
 import torch.optim as optim
 import torch
 from ssumo.train.mutual_inf import MutInfoEstimator
+import matplotlib.pyplot as plt
+import numpy as np
 
 class CorrelatedGaussians(torch.nn.Module):
     def __init__(self, x_dim=128, y_dim=6, init_correlation = 1):
@@ -19,31 +21,43 @@ class CorrelatedGaussians(torch.nn.Module):
         ) * torch.randn_like(z[:, : self.y_dim])
         return x, y
 
-bandwidth = 1
-cgauss = CorrelatedGaussians(x_dim=128, y_dim=5, init_correlation=0.5)
-cgauss.cuda()
-optimizer = optim.SGD(cgauss.parameters(), lr=0.1)
-with torch.enable_grad():
-    for i in range(50):
-        for param in cgauss.parameters():
-            param.grad = None
-        x, y = cgauss(n_samples=2048)
+bandwidths = [1, 1.5, 2]
+init_correlations = [0.5, 0.9, 1]
+f = plt.figure(figsize=(10,5))
+for bw in bandwidths:
+    for ic in init_correlations:
+        cgauss = CorrelatedGaussians(x_dim=128, y_dim=5, init_correlation=ic)
+        cgauss.cuda()
+        optimizer = optim.SGD(cgauss.parameters(), lr=0.1)
+        correlation = []
+        with torch.enable_grad():
+            for i in range(50):
+                for param in cgauss.parameters():
+                    param.grad = None
+                x, y = cgauss(n_samples=2048)
 
-        if i > 0:
-            loss = mi_estimator(x, y)
-            loss.backward()
-            optimizer.step()
-            cgauss.correlation.data.clamp_(0.0,1.0)
+                if i > 0:
+                    loss = mi_estimator(x, y)
+                    loss.backward()
+                    optimizer.step()
+                    cgauss.correlation.data.clamp_(0.0,1.0)
 
-        print(cgauss.correlation)
-        mi_estimator = MutInfoEstimator(
-            x.detach().clone(),
-            y.detach().clone(),
-            bandwidth,
-            gamma=bandwidth,
-            var_mode="sphere",
-            device="cuda",
-        )
+                mi_estimator = MutInfoEstimator(
+                    x.detach().clone(),
+                    y.detach().clone(),
+                    bw,
+                    gamma=bw,
+                    var_mode="sphere",
+                    device="cuda",
+                )
+                correlation += [cgauss.correlation.item()]
+
+        plt.plot(np.arange(50), correlation, label = "Bandwidth: {}, Init_corr: {}".format(bw, ic))
+        plt.xlabel("Iteration")
+        plt.ylabel("Correlation")
+
+plt.legend()
+plt.savefig("./mi_correlation_train_demo.png")
 
 
 # class MutInfoEstimator(torch.nn.Module):

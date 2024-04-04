@@ -22,7 +22,7 @@ train_dataset, train_loader = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
     train=True,
-    data_keys=["x6d", "root", "offsets", "raw_pose"],
+    data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose"],
     shuffle=True,
 )
 
@@ -30,7 +30,7 @@ test_dataset, test_loader = ssumo.data.get_mouse(
     data_config=config["data"],
     window=config["model"]["window"],
     train=False,
-    data_keys=["x6d", "root", "offsets", "raw_pose"],
+    data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose"],
     shuffle=True,
 )
 
@@ -45,10 +45,6 @@ vae, device = ssumo.model.get(
 )
 kinematic_tree = train_dataset.kinematic_tree
 n_keypts = train_dataset.n_keypts
-
-# vae = utils.init_model(config, n_keypts, config["conditional"]).cuda()
-# arena_size = None if config["arena_size"] is None else train_dataset.arena_size.cuda()
-
 
 def visualize_reconstruction(loader, label):
     vae.eval()
@@ -77,7 +73,7 @@ def visualize_reconstruction(loader, label):
         )
 
         pose_array = torch.cat(
-            [data["raw_pose"].reshape(-1, n_keypts, 3), pose, pose_hat], axis=0
+            [data["target_pose"].reshape(-1, n_keypts, 3), pose, pose_hat], axis=0
         )
 
         vis.pose.grid3D(
