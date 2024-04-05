@@ -8,6 +8,7 @@ from ssumo.params import read
 import pickle
 import sys
 from base_path import RESULTS_PATH
+
 torch.backends.cudnn.benchmark = True
 
 ### Set/Load Parameters
@@ -21,27 +22,12 @@ if len(sys.argv) > 2:
 
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
-### Load Dataset
-dataset, loader = ssumo.data.get_mouse(
-    data_config=config["data"],
-    window=config["model"]["window"],
-    train=True,
+dataset, loader, model = ssumo.get.data_and_model(
+    config,
+    dataset_label="Train",
     data_keys=["x6d", "root", "offsets", "target_pose"]
     + config["disentangle"]["features"],
     shuffle=True,
-    normalize=config["disentangle"]["features"],
-)
-
-model = ssumo.model.get(
-    model_config=config["model"],
-    disentangle_config=config["disentangle"],
-    n_keypts=dataset.n_keypts,
-    direction_process=config["data"]["direction_process"],
-    arena_size=dataset.arena_size,
-    kinematic_tree=dataset.kinematic_tree,
-    bound=config["data"]["normalize"] is not None,
-    device="cuda",
-    verbose=1,
 )
 
 # Balance disentanglement losses
@@ -50,7 +36,7 @@ config = ssumo.train.losses.balance_disentangle(config, dataset)
 optimizer, scheduler = ssumo.train.get_optimizer_and_lr_scheduler(
     model,
     config["train"]["optimizer"],
-    config["train"]["lr_scheduler"],
+    config["train"]["lr_schedule"],
     config["train"]["lr"],
 )
 
@@ -59,6 +45,8 @@ if "prior" in config["loss"].keys():
         config["loss"]["prior"],
         config["train"]["beta_anneal"],
     )
+else:
+    beta_scheduler=None
 
 loss_dict_keys = ["total"] + list(config["loss"].keys())
 loss_dict = {k: [] for k in loss_dict_keys}

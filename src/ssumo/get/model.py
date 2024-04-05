@@ -2,6 +2,8 @@ import torch
 
 def model(
     model_config,
+    load_model,
+    epoch,
     disentangle_config,
     n_keypts,
     direction_process,
@@ -100,9 +102,9 @@ def model(
     if verbose > 0:
         print(vae)
 
-    if model_config["load_model"] is not None:
+    if load_model is not None:
         load_path = "{}/weights/epoch_{}.pth".format(
-            model_config["load_model"], model_config["start_epoch"]
+            load_model, epoch
         )
         print("Loading Weights from:\n{}".format(load_path))
         state_dict = torch.load(load_path)

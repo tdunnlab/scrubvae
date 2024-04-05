@@ -5,22 +5,20 @@ from dappy import visualization as vis
 import numpy as np
 from pathlib import Path
 from scipy.stats import circvar
+import sys
 
 from base_path import RESULTS_PATH
 
-path = "/mcmi_32/diag/"
-vis_path = RESULTS_PATH + path + "/vis_latents/"
-config = read.config(RESULTS_PATH + path + "/model_config.yaml")
-config["model"]["load_model"] = config["out_path"]
-config["model"]["start_epoch"] = 600
+analysis_key = sys.argv[1]
+vis_path = RESULTS_PATH + analysis_key + "/vis_latents/"
+config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 dataset_label = "Train"
-dataset, loader = ssumo.data.get_mouse(
+dataset, loader = ssumo.get.mouse_data(
     data_config=config["data"],
     window=config["model"]["window"],
     train=dataset_label == "Train",
-    data_keys=["x6d", "root", "offsets", "raw_pose"]
-    + ["heading", "avg_speed"],#config["disentangle"]["features"],
+    data_keys=["heading", "avg_speed"],
     shuffle=False,
 )
 k_pred = np.load(vis_path + "z_gmm.npy")

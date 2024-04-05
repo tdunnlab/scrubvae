@@ -4,12 +4,33 @@ import tqdm
 import torch
 import numpy as np
 
-def dataset_latents(model, dataset, config, device, dataset_label):
+def latents(config, model=None, dataset=None, device="cuda", dataset_label="Train"):
+    """NOT FOR TRAINING
+
+    Parameters
+    ----------
+    config : _type_
+        _description_
+    model : _type_, optional
+        _description_, by default None
+    dataset : _type_, optional
+        _description_, by default None
+    device : str, optional
+        _description_, by default "cuda"
+    dataset_label : str, optional
+        _description_, by default "Train"
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
     if model is not None:
         model.eval()
     latent_path = "{}/latents/{}_{}.npy".format(
         config["out_path"], dataset_label, config["model"]["start_epoch"]
     )
+    
     if not Path(latent_path).exists():
         loader = DataLoader(
             dataset=dataset, batch_size=config["data"]["batch_size"], shuffle=False, num_workers=5
@@ -19,7 +40,7 @@ def dataset_latents(model, dataset, config, device, dataset_label):
         with torch.no_grad():
             for _, data in enumerate(tqdm.tqdm(loader)):
                 data = {k:v.to(device) for k,v in data.items() if k in ["x6d", "root"]}
-                latents += [model.encode(data)[0].detach().cpu()]
+                latents += [model.encode(data)["mu"].detach().cpu()]
 
         latents = torch.cat(latents, axis=0)
         np.save(

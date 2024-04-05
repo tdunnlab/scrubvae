@@ -37,7 +37,7 @@ def get_beta_schedule(schedule, beta):
         #     beta_schedule = torch.cat(
         #         [beta_schedule, torch.ones(n_epochs - len(beta_schedule)) * beta]
         #     )
-    elif schedule is None:
+    else:
         print("No beta annealing selected")
         beta_scheduler = None
 

@@ -134,7 +134,7 @@ def mouse_data(
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
     for key in normalize:
-        if key != "heading":
+        if (key != "heading") and (key in data_keys):
             if data_config["normalize"] == "bounded":
                 print(
                     "Rescaling decoding variable, {}, to be between -1 and 1".format(
