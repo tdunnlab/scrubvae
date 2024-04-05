@@ -61,10 +61,11 @@ def for_all_epochs(func):
             )[0]
 
         for epoch_ind, epoch in enumerate(epochs_to_test):
-            config["model"]["start_epoch"] = epoch
 
-            vae, device = get(
+            model = get.model(
                 model_config=config["model"],
+                load_model=config["out_path"],
+                epoch=epoch,
                 disentangle_config=config["disentangle"],
                 n_keypts=dataset.n_keypts,
                 direction_process=config["data"]["direction_process"],
@@ -74,12 +75,12 @@ def for_all_epochs(func):
                 verbose=-1,
             )
 
-            z = get.latents(vae, dataset, config, device, dataset_label)
+            z = get.latents(config, model, dataset, "cuda", dataset_label)
 
             for key in disentangle_keys:
                 print("Decoding Feature: {}".format(key))
 
-                r2, r2_null = func(z, dataset[:][key].detach().cpu().numpy(), vae, key)
+                r2, r2_null = func(z, dataset[:][key].detach().cpu().numpy(), model, key)
 
                 metrics[key]["R2"] += [r2]
                 metrics[key]["R2_Null"] += [r2_null]
