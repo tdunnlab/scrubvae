@@ -1,8 +1,6 @@
 import torch
-import re
 
-
-def get(
+def model(
     model_config,
     disentangle_config,
     n_keypts,
@@ -10,6 +8,7 @@ def get(
     arena_size=None,
     kinematic_tree=None,
     bound=False,
+    device="cuda",
     verbose=1,
 ):
     feat_dim_dict = {
@@ -80,7 +79,7 @@ def get(
 
     ### Initialize/load model
     if model_config["type"] == "rcnn":
-        from ssumo.model.ResVAE import ResVAE
+        from ssumo.model.residual import ResVAE
 
         vae = ResVAE(
             in_channels=in_channels,
@@ -113,6 +112,4 @@ def get(
             print("Missing Keys: {}".format(missing_keys))
             print("Unexpected Keys: {}".format(unexpected_keys))
 
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-    return vae.to(device), device
+    return vae.to(device)

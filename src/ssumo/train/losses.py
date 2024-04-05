@@ -3,6 +3,19 @@ import torch
 from ssumo.data.rotation_conversion import rotation_6d_to_matrix
 from ssumo.data.dataset import fwd_kin_cont6d_torch
 
+def balance_disentangle(config, dataset):
+    # Balance disentanglement losses
+    if config["disentangle"]["balance_loss"]:
+        print("Balancing disentanglement losses")
+        for k in config["disentangle"]["features"]:
+            var = torch.sqrt((dataset[:][k].std(dim=0) ** 2).sum()).detach().numpy()
+            config["loss"][k] /= var
+            if k + "_gr" in config["loss"].keys():
+                config["loss"][k + "_gr"] /= var
+
+        print("Finished disentanglement loss balancing...")
+        print(config["loss"])
+    return config
 
 def rotation_loss(x, x_hat, eps=1e-7):
     assert x.shape[-1] == 6

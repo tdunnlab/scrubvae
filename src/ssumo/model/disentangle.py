@@ -191,7 +191,7 @@ class LinearDisentangle(nn.Module):
     def __init__(
         self,
         in_dim,
-        out_dim,
+        out_dim, 
         bias=False,
         reversal="linear",
         alpha=1.0,

@@ -13,7 +13,7 @@ config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["model"]["start_epoch"] = sys.argv[2]
 config["model"]["load_model"] = config["out_path"]
 config["data"]["stride"] = 10
-config["data"]["batch_size"] = 10
+config["data"]["batch_size"] = 5
 
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
 

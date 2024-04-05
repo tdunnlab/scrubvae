@@ -4,7 +4,7 @@ import tqdm
 import torch
 import numpy as np
 
-def latents(model, dataset, config, device, dataset_label):
+def dataset_latents(model, dataset, config, device, dataset_label):
     if model is not None:
         model.eval()
     latent_path = "{}/latents/{}_{}.npy".format(

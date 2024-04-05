@@ -1,10 +1,10 @@
 import numpy as np
-import re
 from pathlib import Path
 from dappy import read
-from ..data import get_mouse
-from ..model import get
-from .get import latents
+import ssumo.get as get
+# from ..data import get_mouse
+# from ..model import get
+# from .get import latents
 from . import project_to_null
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
@@ -14,15 +14,6 @@ from ..model.disentangle import MLP, LinearDisentangle
 import torch.optim as optim
 import torch
 from tqdm import trange
-
-def get_all_epochs(path):
-    z_path = Path(path + "weights/")
-    epochs = [re.findall(r"\d+", f.parts[-1]) for f in list(z_path.glob("epoch*"))]
-    epochs = np.sort(np.array(epochs).astype(int).squeeze())
-    print("Epochs found: {}".format(epochs))
-
-    return epochs
-
 
 def for_all_epochs(func):
     @functools.wraps(func)
@@ -45,18 +36,18 @@ def for_all_epochs(func):
         if Path(pickle_path).is_file() and save_load:
             metrics = pickle.load(open(pickle_path, "rb"))
             epochs_to_test = [
-                e for e in get_all_epochs(path) if e not in metrics["epochs"]
+                e for e in get.all_saved_epochs(path) if e not in metrics["epochs"]
             ]
             metrics["epochs"] = np.concatenate(
                 [metrics["epochs"], epochs_to_test]
             ).astype(int)
         else:
             metrics = {k: {"R2": [], "R2_Null": []} for k in disentangle_keys}
-            metrics["epochs"] = get_all_epochs(path)
+            metrics["epochs"] = get.all_saved_epochs(path)
             epochs_to_test = metrics["epochs"]
 
         if len(epochs_to_test) > 0:
-            dataset = get_mouse(
+            dataset = get.mouse_data(
                 data_config=config["data"],
                 window=config["model"]["window"],
                 train=dataset_label == "Train",
@@ -83,7 +74,7 @@ def for_all_epochs(func):
                 verbose=-1,
             )
 
-            z = latents(vae, dataset, config, device, dataset_label)
+            z = get.latents(vae, dataset, config, device, dataset_label)
 
             for key in disentangle_keys:
                 print("Decoding Feature: {}".format(key))

@@ -371,13 +371,8 @@ class ResVAE(VAE):
         root += self.arena_size[0]
         return root
 
-    # def sampling(self, mu, L):
-    #     eps = torch.randn_like(mu)
-    #     return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
-
     def encode(self, data):
         if self.arena_size is not None:
-            # self.arena_size.to("cuda" if data["root"].is_cuda else "cpu")
             norm_root = self.normalize_root(data["root"])
 
             x_in = torch.cat(
@@ -411,16 +406,3 @@ class ResVAE(VAE):
         data_o["x6d"] = x6d.reshape(z.shape[0], self.window, -1, 6)
 
         return data_o
-
-    # def forward(self, data):
-    #     data_o = self.encode(data)
-    #     z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
-
-    #     # Running disentangle
-    #     data_o["disentangle"] = {
-    #         k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
-    #     }
-
-    #     data_o.update(self.decode(z, data))
-
-    #     return data_o

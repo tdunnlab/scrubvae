@@ -2,25 +2,46 @@ import torch
 from ssumo.train.losses import get_batch_loss
 from ssumo.train.mutual_inf import MutInfoEstimator
 from ssumo.model.disentangle import MovingAvgLeastSquares
+import torch.optim as optim
 
-def get_beta_schedule(beta, n_epochs, beta_anneal=False, M=4, R=0.75):
-    if beta_anneal:
-        print("Cyclical beta anneal")
-        cycle_len = n_epochs // M
-        beta_increase = torch.linspace(0, beta ** (1 / 4), int(cycle_len * R)) ** 4
-        beta_plateau = torch.ones(cycle_len - len(beta_increase)) * beta
 
-        beta_schedule = torch.cat([beta_increase, beta_plateau]).repeat(M)
+class CyclicalBetaAnnealing(torch.nn.Module):
+    def __init__(self, beta_max=1, len_cycle=100, R=0.5):
+        self.beta_max = beta_max
+        self.len_cycle = len_cycle
+        self.R = R
+        self.len_increasing = int(len_cycle * R)
 
-        if len(beta_schedule) < n_epochs:
-            beta_schedule = torch.cat(
-                [beta_schedule, torch.ones(n_epochs - len(beta_schedule)) * beta]
-            )
-    else:
-        print("No beta anneal")
-        beta_schedule = torch.zeros(n_epochs) + beta
+    def get(self, epoch):
+        remainder = (epoch-1) % self.len_cycle
+        if remainder >= self.len_increasing:
+            beta = self.beta_max
+        else:
+            beta = self.beta_max*remainder/self.len_increasing
 
-    return beta_schedule.type(torch.float32).detach().numpy()
+        return beta
+
+    
+
+def get_beta_schedule(schedule, beta):
+    if schedule == "cyclical":
+        print("Initializing cyclical beta annealing")
+        beta_scheduler = CyclicalBetaAnnealing(beta_max=beta)
+        # cycle_len = n_epochs // M
+        # beta_increase = torch.linspace(0, beta ** (1 / 4), int(cycle_len * R)) ** 4
+        # beta_plateau = torch.ones(cycle_len - len(beta_increase)) * beta
+
+        # beta_schedule = torch.cat([beta_increase, beta_plateau]).repeat(M)
+
+        # if len(beta_schedule) < n_epochs:
+        #     beta_schedule = torch.cat(
+        #         [beta_schedule, torch.ones(n_epochs - len(beta_schedule)) * beta]
+        #     )
+    elif schedule is None:
+        print("No beta annealing selected")
+        beta_scheduler = None
+
+    return beta_scheduler
 
 
 def predict_batch(model, data, disentangle_keys=None):
@@ -33,6 +54,29 @@ def predict_batch(model, data, disentangle_keys=None):
 
     return model(data_i)
 
+def get_optimizer_and_lr_scheduler(model, optimization="adamw", lr_schedule="cawr", lr=1e-7):
+    if optimization == "adam":
+        print("Initializing Adam optimizer ...")
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+    elif optimization == "adamw":
+        print("Initializing AdamW optimizer ...")
+        optimizer = optim.AdamW(model.parameters(), lr=lr)
+    elif optimization == "sgd":
+        print("Initializing SGD optimizer ...")
+        optimizer = optim.SGD(
+            model.parameters(), lr=lr, momentum=0.2, nesterov=True
+        )
+    else:
+        raise ValueError("No valid optimizer selected")
+
+    if lr_schedule == "cawr":
+        print("Initializing cosine annealing w/warm restarts learning rate scheduler")
+        scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
+    elif lr_schedule is None:
+        print("No learning rate scheduler selected")
+        scheduler = None
+
+    return optimizer, scheduler
 
 def train_epoch(
     model,

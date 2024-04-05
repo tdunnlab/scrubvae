@@ -1,13 +1,14 @@
 import ssumo
 import torch
 import functools
+
 torch.autograd.set_detect_anomaly(True)
-import torch.optim as optim
 import tqdm
 from ssumo.params import read
 import pickle
 import sys
 from base_path import RESULTS_PATH
+torch.backends.cudnn.benchmark = True
 
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
@@ -31,19 +32,7 @@ dataset, loader = ssumo.data.get_mouse(
     normalize=config["disentangle"]["features"],
 )
 
-# Balance disentanglement losses
-if config["disentangle"]["balance_loss"]:
-    print("Balancing disentanglement losses")
-    for k in config["disentangle"]["features"]:
-        var = torch.sqrt((dataset[:][k].std(dim=0) ** 2).sum()).detach().numpy()
-        config["loss"][k] /= var
-        if k + "_gr" in config["loss"].keys():
-            config["loss"][k + "_gr"] /= var
-
-    print("Finished disentanglement loss balancing...")
-    print(config["loss"])
-
-vae, device = ssumo.model.get(
+model = ssumo.model.get(
     model_config=config["model"],
     disentangle_config=config["disentangle"],
     n_keypts=dataset.n_keypts,
@@ -51,50 +40,37 @@ vae, device = ssumo.model.get(
     arena_size=dataset.arena_size,
     kinematic_tree=dataset.kinematic_tree,
     bound=config["data"]["normalize"] is not None,
+    device="cuda",
     verbose=1,
 )
 
-if config["train"]["optimizer"] == "adam":
-    optimizer = optim.Adam(vae.parameters(), lr=config["train"]["lr"])
-elif config["train"]["optimizer"] == "adamw":
-    optimizer = optim.AdamW(vae.parameters(), lr=config["train"]["lr"])
-elif config["train"]["optimizer"] == "sgd":
-    optimizer = optim.SGD(
-        vae.parameters(), lr=config["train"]["lr"], momentum=0.2, nesterov=True
-    )
-else:
-    raise ValueError("No valid optimizer selected")
+# Balance disentanglement losses
+config = ssumo.train.losses.balance_disentangle(config, dataset)
 
-if config["train"]["lr_schedule"] == "cawr":
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
-else:
-    scheduler = None
+optimizer, scheduler = ssumo.train.get_optimizer_and_lr_scheduler(
+    model,
+    config["train"]["optimizer"],
+    config["train"]["lr_scheduler"],
+    config["train"]["lr"],
+)
 
 if "prior" in config["loss"].keys():
-    beta_schedule = ssumo.train.get_beta_schedule(
+    beta_scheduler = ssumo.train.get_beta_schedule(
         config["loss"]["prior"],
-        config["train"]["num_epochs"] - config["model"]["start_epoch"],
         config["train"]["beta_anneal"],
     )
 
 loss_dict_keys = ["total"] + list(config["loss"].keys())
 loss_dict = {k: [] for k in loss_dict_keys}
-
-if device == "cuda":
-    torch.backends.cudnn.benchmark = True
-
 for epoch in tqdm.trange(
-    config["model"]["start_epoch"] + 1, 
-    config["train"]["num_epochs"] + 1
+    config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
 ):
-    if "prior" in config["loss"].keys():
-        config["loss"]["prior"] = beta_schedule[
-            epoch - config["model"]["start_epoch"] - 1
-        ]
+    if beta_scheduler is not None:
+        config["loss"]["prior"] = beta_scheduler.get(epoch)
         print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
     if "mcmi" in str(config["disentangle"]["method"]):
-        print("Running MCMI optimization")
+        print("Running Monte-Carlo mutual information optimization for disentanglement")
         train_func = functools.partial(
             ssumo.train.train_epoch_mcmi,
             var_mode=config["disentangle"]["var_mode"],
@@ -102,15 +78,13 @@ for epoch in tqdm.trange(
             bandwidth=config["disentangle"]["bandwidth"],
         )
     else:
-        train_func = functools.partial(
-            ssumo.train.train_epoch
-        )
+        train_func = functools.partial(ssumo.train.train_epoch)
     epoch_loss = train_func(
-        vae,
+        model,
         optimizer,
         scheduler,
         loader,
-        device,
+        "cuda",
         config["loss"],
         epoch,
         mode="train",
@@ -121,7 +95,7 @@ for epoch in tqdm.trange(
     if epoch % 10 == 0:
         print("Saving model to folder: {}".format(config["out_path"]))
         torch.save(
-            {k: v.cpu() for k, v in vae.state_dict().items()},
+            {k: v.cpu() for k, v in model.state_dict().items()},
             "{}/weights/epoch_{}.pth".format(config["out_path"], epoch),
         )
 

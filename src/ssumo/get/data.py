@@ -7,7 +7,7 @@ from ssumo.data.dataset import *
 from torch.utils.data import DataLoader
 
 
-def get_mouse(
+def mouse_data(
     data_config: dict,
     window: int = 51,
     train_ids: List = [0, 1, 2],
@@ -134,37 +134,43 @@ def get_mouse(
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
     for key in normalize:
-        if data_config["normalize"] == "bounded":
-            if key == "heading":
-                pass
-            else:
+        if key != "heading":
+            if data_config["normalize"] == "bounded":
                 print(
                     "Rescaling decoding variable, {}, to be between -1 and 1".format(
                         key
                     )
                 )
-                key_min = data[key].min(dim=0)[0] - data[key].min(dim=0)[0]*0.1
-                # data[key] -= data[key].mean(axis=0)
-                # data[key] /= data[key].std(axis=0)
+                key_min = data[key].min(dim=0)[0] - data[key].min(dim=0)[0] * 0.1
                 data[key] -= key_min
-                key_max = data[key].max(dim=0)[0] + data[key].max(dim=0)[0]*0.1
+                key_max = data[key].max(dim=0)[0] + data[key].max(dim=0)[0] * 0.1
                 data[key] = 2 * data[key] / key_max - 1
                 assert data[key].max() < 1
                 assert data[key].min() > -1
-            # norm_root = 2 * norm_root / (self.arena_size[1] - self.arena_size[0]) - 1
-        elif data_config["normalize"] == "z_score":
-            print("Mean centering and unit standard deviation-scaling {}".format(key))
-            data[key] -= data[key].mean(axis=0)
-            data[key] /= data[key].std(axis=0)
-
+            elif data_config["normalize"] == "z_score":
+                print(
+                    "Mean centering and unit standard deviation-scaling {}".format(key)
+                )
+                data[key] -= data[key].mean(axis=0)
+                data[key] /= data[key].std(axis=0)
 
     if "target_pose" in data_keys:
         reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
-        if data_config["direction_process"]=="midfwd":
-            offsets = data["offsets"][window_inds].reshape(reshaped_x6d.shape[:2] + (-1,))
+        if data_config["direction_process"] == "midfwd":
+            offsets = data["offsets"][window_inds].reshape(
+                reshaped_x6d.shape[:2] + (-1,)
+            )
         else:
             offsets = data["offsets"]
-        data["target_pose"] = fwd_kin_cont6d_torch( reshaped_x6d, skeleton_config["KINEMATIC_TREE"], offsets, root_pos=torch.zeros(reshaped_x6d.shape[0], 3), do_root_R=True, eps=1e-8, ).reshape(data["x6d"].shape[:-1] + (3,))
+
+        data["target_pose"] = fwd_kin_cont6d_torch(
+            reshaped_x6d,
+            skeleton_config["KINEMATIC_TREE"],
+            offsets,
+            root_pos=torch.zeros(reshaped_x6d.shape[0], 3),
+            do_root_R=True,
+            eps=1e-8,
+        ).reshape(data["x6d"].shape[:-1] + (3,))
 
     dataset = MouseDataset(
         data,
@@ -174,6 +180,7 @@ def get_mouse(
         pose.shape[-2],
         label="Train" if train else "Test",
     )
+    
     loader = DataLoader(
         dataset=dataset,
         batch_size=data_config["batch_size"],
