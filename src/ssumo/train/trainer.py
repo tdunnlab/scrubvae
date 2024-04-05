@@ -1,8 +1,12 @@
 import torch
-from ssumo.train.losses import get_batch_loss
+from ssumo.train.losses import get_batch_loss, balance_disentangle
 from ssumo.train.mutual_inf import MutInfoEstimator
 from ssumo.model.disentangle import MovingAvgLeastSquares
+from ssumo.plot.eval import loss as plt_loss
 import torch.optim as optim
+import tqdm
+import pickle
+import functools
 
 
 class CyclicalBetaAnnealing(torch.nn.Module):
@@ -13,15 +17,14 @@ class CyclicalBetaAnnealing(torch.nn.Module):
         self.len_increasing = int(len_cycle * R)
 
     def get(self, epoch):
-        remainder = (epoch-1) % self.len_cycle
+        remainder = (epoch - 1) % self.len_cycle
         if remainder >= self.len_increasing:
             beta = self.beta_max
         else:
-            beta = self.beta_max*remainder/self.len_increasing
+            beta = self.beta_max * remainder / self.len_increasing
 
         return beta
 
-    
 
 def get_beta_schedule(schedule, beta):
     if schedule == "cyclical":
@@ -54,7 +57,10 @@ def predict_batch(model, data, disentangle_keys=None):
 
     return model(data_i)
 
-def get_optimizer_and_lr_scheduler(model, optimization="adamw", lr_schedule="cawr", lr=1e-7):
+
+def get_optimizer_and_lr_scheduler(
+    model, optimization="adamw", lr_schedule="cawr", lr=1e-7
+):
     if optimization == "adam":
         print("Initializing Adam optimizer ...")
         optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -63,9 +69,7 @@ def get_optimizer_and_lr_scheduler(model, optimization="adamw", lr_schedule="caw
         optimizer = optim.AdamW(model.parameters(), lr=lr)
     elif optimization == "sgd":
         print("Initializing SGD optimizer ...")
-        optimizer = optim.SGD(
-            model.parameters(), lr=lr, momentum=0.2, nesterov=True
-        )
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.2, nesterov=True)
     else:
         raise ValueError("No valid optimizer selected")
 
@@ -77,6 +81,7 @@ def get_optimizer_and_lr_scheduler(model, optimization="adamw", lr_schedule="caw
         scheduler = None
 
     return optimizer, scheduler
+
 
 def train_epoch(
     model,
@@ -109,12 +114,16 @@ def train_epoch(
             data["kinematic_tree"] = model.kinematic_tree
             data_o = predict_batch(model, data, disentangle_keys)
 
-            batch_loss = get_batch_loss(data, data_o, loss_config, )
+            batch_loss = get_batch_loss(
+                data,
+                data_o,
+                loss_config,
+            )
 
             # if len(model.disentangle.keys())>0:
             #     if isinstance(model.disentangle.values()[0], MovingAvgLeastSquares):
             #         for k,v in model.disentangle.items():
-            #             batch_loss += 
+            #             batch_loss +=
 
             if mode == "train":
                 batch_loss["total"].backward()
@@ -175,7 +184,7 @@ def train_epoch_mcmi(
             if batch_idx > 0:
                 batch_loss["mcmi"] = mi_estimator(data_o["mu"], variables)
                 # batch_loss["total"] += batch_loss["mcmi"]*1000
-                batch_loss["total"] += loss_config["mcmi"]*batch_loss["mcmi"]
+                batch_loss["total"] += loss_config["mcmi"] * batch_loss["mcmi"]
             else:
                 batch_loss["mcmi"] = batch_loss["total"]
 
@@ -192,7 +201,7 @@ def train_epoch_mcmi(
                 var_sample = L_sample.diagonal(dim1=-2, dim2=-1) ** 2 + bandwidth
             else:
                 var_sample = bandwidth
-            
+
             mi_estimator = MutInfoEstimator(
                 data_o["mu"].detach().clone(),
                 variables.clone(),
@@ -212,3 +221,75 @@ def train_epoch_mcmi(
             )
 
     return epoch_loss
+
+
+def train(model, loader):
+    torch.autograd.set_detect_anomaly(True)
+    torch.backends.cudnn.benchmark = True
+    # Balance disentanglement losses
+    config = balance_disentangle(config, loader.dataset)
+
+    optimizer, scheduler = get_optimizer_and_lr_scheduler(
+        model,
+        config["train"]["optimizer"],
+        config["train"]["lr_schedule"],
+        config["train"]["lr"],
+    )
+
+    if "prior" in config["loss"].keys():
+        beta_scheduler = get_beta_schedule(
+            config["loss"]["prior"],
+            config["train"]["beta_anneal"],
+        )
+    else:
+        beta_scheduler = None
+
+    loss_dict_keys = ["total"] + list(config["loss"].keys())
+    loss_dict = {k: [] for k in loss_dict_keys}
+    for epoch in tqdm.trange(
+        config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
+    ):
+        if beta_scheduler is not None:
+            config["loss"]["prior"] = beta_scheduler.get(epoch)
+            print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
+
+        if "mcmi" in str(config["disentangle"]["method"]):
+            print(
+                "Running Monte-Carlo mutual information optimization for disentanglement"
+            )
+            train_func = functools.partial(
+                train_epoch_mcmi,
+                var_mode=config["disentangle"]["var_mode"],
+                gamma=config["disentangle"]["gamma"],
+                bandwidth=config["disentangle"]["bandwidth"],
+            )
+        else:
+            train_func = functools.partial(train_epoch)
+        epoch_loss = train_func(
+            model,
+            optimizer,
+            scheduler,
+            loader,
+            "cuda",
+            config["loss"],
+            epoch,
+            mode="train",
+            disentangle_keys=config["disentangle"]["features"],
+        )
+        loss_dict = {k: v + [epoch_loss[k]] for k, v in loss_dict.items()}
+
+        if epoch % 10 == 0:
+            print("Saving model to folder: {}".format(config["out_path"]))
+            torch.save(
+                {k: v.cpu() for k, v in model.state_dict().items()},
+                "{}/weights/epoch_{}.pth".format(config["out_path"], epoch),
+            )
+
+            pickle.dump(
+                loss_dict,
+                open("{}/losses/loss_dict.p".format(config["out_path"]), "wb"),
+            )
+
+            plt_loss(loss_dict, config["out_path"], config["disentangle"]["features"])
+
+    return model
