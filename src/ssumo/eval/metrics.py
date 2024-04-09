@@ -1,10 +1,7 @@
 import numpy as np
 from pathlib import Path
 from dappy import read
-import ssumo.get as get
-# from ..data import get_mouse
-# from ..model import get
-# from .get import latents
+from ssumo import get
 from . import project_to_null
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
@@ -121,27 +118,26 @@ def epoch_linear_regression(z, y_true, model, key):
 
 @for_all_epochs
 def epoch_adversarial_attack(z, y_true, model, key):
-    pred = train_ensemble(z, y_true, 200)[1]
+    pred = train_MLP(z, y_true, 200)[1]
     r2 = r2_score(y_true, pred)
     
     if (key in model.disentangle.keys()) and (isinstance(model.disentangle[key],LinearDisentangle)):
         dis_w = model.disentangle[key].decoder.weight.detach().cpu().numpy()
     else:
-        print("No linear disentanglement - fitting SKLearn Linear Regression")
+        print("No linear decoder - fitting SKLearn Linear Regression")
         lin_model = LinearRegression().fit(z, y_true)
         dis_w = lin_model.coef_
 
     ## Null space projection
     z_null = project_to_null(z, dis_w)[0]
-    pred_null = train_ensemble(z_null, y_true, 200)[1]
+    pred_null = train_MLP(z_null, y_true, 200)[1]
     r2_null = r2_score(y_true, pred_null)
     return r2, r2_null
 
 
-def train_ensemble(z, y_true, num_epochs=200):
+def train_MLP(z, y_true, num_epochs=200):
     model = MLP(z.shape[-1], y_true.shape[-1]).cuda()
     torch.backends.cudnn.benchmark = True
-    # z = torch.tensor(z, device="cuda")
     z = z.cuda()
     y_true = torch.tensor(y_true, device="cuda")
     optimizer = optim.Adam(model.parameters(), lr=0.01)

@@ -2,22 +2,22 @@ from torch.autograd import Function
 import torch.nn as nn
 import torch
 from torch.nn.functional import mse_loss
+import numpy as np
 
-
-class MovingAvgLeastSquares(torch.nn.Module):
+class MovingAvgLeastSquares(nn.Module):
 
     def __init__(self, nx, ny, lamdiff=1e-1, delta=1e-4):
         super().__init__()
         # Running average of covariances for first linear decoder
-        self.register_buffer("Sxx0", torch.eye(nx))
-        self.register_buffer("Sxy0", torch.zeros(nx, ny))
+        self.register_buffer("Sxx0", torch.eye(nx, requires_grad=False))
+        self.register_buffer("Sxy0", torch.zeros(nx, ny, requires_grad=False))
 
         # Running average of covariances for first linear decoder
-        self.register_buffer("Sxx1", torch.eye(nx))
-        self.register_buffer("Sxy1", torch.zeros(nx, ny))
+        self.register_buffer("Sxx1", torch.eye(nx, requires_grad=False))
+        self.register_buffer("Sxy1", torch.zeros(nx, ny, requires_grad=False))
 
         # Forgetting factor for the first linear decoder
-        self.lam0 = 0.83
+        self.lam0 = 0.9
 
         # Forgetting factor for the second linear decoder
         self.lam1 = self.lam0 + lamdiff
@@ -35,16 +35,26 @@ class MovingAvgLeastSquares(torch.nn.Module):
         yhat0 = x @ W0
         yhat1 = x @ W1
         return [yhat0, yhat1]
+    
+    def update(self, x, y):
+        xx = (x.T @ x).detach()
+        xy = (x.T @ y).detach()
+        # Compute moving averages for the next batch of data
+        self.Sxx0 = self.lam0 * self.Sxx0 + xx
+        self.Sxy0 = self.lam0 * self.Sxy0 + xy
+        self.Sxx1 = self.lam1 * self.Sxx1 + xx
+        self.Sxy1 = self.lam1 * self.Sxy1 + xy
+        return self
 
     def evaluate_loss(self, yhat0, yhat1, x, y):
         """
         Parameters
         ----------
         x : torch.tensor
-            (nx x batch_size) matrix of independent variables.
+            (batch_size x nx) matrix of independent variables.
 
         y : torch.tensor
-            (ny x batch_size) matrix of dependent variables.
+            (batch_size x ny) matrix of dependent variables.
 
         Returns
         -------
@@ -53,32 +63,23 @@ class MovingAvgLeastSquares(torch.nn.Module):
             two moving average estimates of the linear decoder.
         """
         # Loss for each decoder
-        l0 = mse_loss(y, yhat0)
-        l1 = mse_loss(y, yhat1)
+        l0 = mse_loss(y, yhat0, reduction="sum")
+        l1 = mse_loss(y, yhat1, reduction="sum")
 
         # If lam0 performed better than lam1, we decrease the forgetting factors
         # by self.delta
         if l0 < l1:
-            self.lam0 = torch.clamp(self.lam0 - self.delta, 0.0, 1.0)
+            self.lam0 = np.clip(self.lam0 - self.delta, 0.0, 1.0)
             self.lam1 = self.lam0 + self.lamdiff
 
         # If lam1 performed better than lam0, we increase the forgetting factors
         # by self.delta
         else:
-            self.lam1 = torch.clamp(self.lam1 + self.delta, 0.0, 1.0)
+            self.lam1 = np.clip(self.lam1 + self.delta, 0.0, 1.0)
             self.lam0 = self.lam1 - self.lamdiff
-
-        # Compute moving averages for the next batch of data
-        self.Sxx0 = self.lam0 * self.Sxx0 + x.T @ x
-        self.Sxy0 = self.lam0 * self.Sxy0 + x.T @ y
-        self.Sxx1 = self.lam1 * self.Sxx1 + x.T @ x
-        self.Sxy1 = self.lam1 * self.Sxy1 + x.T @ y
-
-        print("Lam0: {:4f},   Lam1: {:4f}".format(self.lam0, self.lam1))
 
         # Return average loss of the two linear decoders
         return (l0 + l1) * 0.5
-
 
 class GradientReversal(Function):
     @staticmethod

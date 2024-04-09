@@ -23,4 +23,4 @@ dataset, loader, model = ssumo.get.data_and_model(
     shuffle=True,
 )
 
-model = ssumo.train.train(model,loader)
+model = ssumo.train.train(config, model, loader)

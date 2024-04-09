@@ -2,7 +2,7 @@ import yaml
 from dappy import read
 from pathlib import Path
 from ssumo.params import PARAM_KEYS
-import sys
+from pathlib import Path
 
 def config(path):
     config = read.config(path)
@@ -18,6 +18,9 @@ def config(path):
     if config["disentangle"]["features"] == None:
         config["disentangle"]["features"] = []
 
+    if config["out_path"] == "current":
+        config["out_path"] = str(Path(path).parent) + "/"
+    
     print("Saving folder: {}".format(config["out_path"]))
 
     sub_folders = ["weights/", "losses/", "latents/"]

@@ -2,6 +2,8 @@ import torch.nn.functional as F
 import torch
 from ssumo.data.rotation_conversion import rotation_6d_to_matrix
 from ssumo.data.dataset import fwd_kin_cont6d_torch
+from ssumo.model.disentangle import MovingAvgLeastSquares
+
 
 def balance_disentangle(config, dataset):
     # Balance disentanglement losses
@@ -17,9 +19,11 @@ def balance_disentangle(config, dataset):
         print(config["loss"])
     return config
 
+
 def rotation_loss(x, x_hat, eps=1e-7):
     assert x.shape[-1] == 6
     assert x_hat.shape[-1] == 6
+    batch_size = x.shape[0]
     m1 = rotation_6d_to_matrix(x).view((-1, 3, 3))
     m2 = rotation_6d_to_matrix(x_hat).view((-1, 3, 3))
 
@@ -27,7 +31,7 @@ def rotation_loss(x, x_hat, eps=1e-7):
 
     cos = (m[:, 0, 0] + m[:, 1, 1] + m[:, 2, 2] - 1) / 2
     cos = torch.clamp(cos, -1 + eps, 1 - eps)
-    theta = torch.acos(cos).mean()
+    theta = torch.acos(cos).sum() / batch_size
 
     return theta
 
@@ -44,8 +48,8 @@ def prior_loss(mu, L):
         + 2 * torch.log(L.diagonal(dim1=-1, dim2=-2))
         - mu.pow(2)
         - var.diagonal(dim1=-1, dim2=-2)
-    )/mu.shape[0]
-    return KL_div
+    )
+    return KL_div / mu.shape[0]
 
 
 def vae_BXEntropy_loss(x, x_hat, mu, log_var):
@@ -58,18 +62,23 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
     # if root == None:
     #     root = torch.zeros((x.shape[0], 3), device=x.device)
     if root_hat == None:
-        root_hat = torch.zeros((x_hat.shape[0], 3), device=x_hat.device)
+        root_hat = torch.zeros_like(pose[..., 0, :])
 
     # pose = fwd_kin_cont6d_torch(
     #     x, kinematic_tree, offsets, root_pos=root, do_root_R=True, eps=1e-8
     # )
     # pose = x
     pose_hat = fwd_kin_cont6d_torch(
-        x_hat, kinematic_tree, offsets, root_pos=root_hat, do_root_R=True, eps=1e-8
+        x_hat,
+        kinematic_tree,
+        offsets,
+        root_pos=root_hat,
+        do_root_R=True,
+        eps=1e-8,
     )
 
-    loss = torch.mean((pose - pose_hat) ** 2)
-    # loss = loss / (pose.shape[-1] * pose.shape[-2])
+    loss = torch.sum((pose - pose_hat) ** 2)
+    loss = loss / (pose.shape[0] * pose.shape[-1] * pose.shape[-2])
     return loss
 
 
@@ -79,7 +88,8 @@ def hierarchical_orthogonal_loss(L1, L2):
     return torch.sum(torch.matmul(Sig1, Sig2).diagonal(dim1=-1, dim2=-2))
 
 
-def get_batch_loss(data, data_o, loss_scale):
+def get_batch_loss(model, data, data_o, loss_scale):
+    batch_size = data["x6d"].shape[0]
     batch_loss = {}
 
     if "rotation" in loss_scale.keys():
@@ -87,6 +97,7 @@ def get_batch_loss(data, data_o, loss_scale):
 
     if "prior" in loss_scale.keys():
         if type(data_o["mu"]) is tuple:
+            # For if you have multiple latent spaces (e.g. hierarchical)
             batch_loss["prior"] = 0
             for mu, L in zip(data_o["mu"], data_o["L"]):
                 batch_loss["prior"] += prior_loss(mu, L)
@@ -95,46 +106,59 @@ def get_batch_loss(data, data_o, loss_scale):
 
     if "jpe" in loss_scale.keys():
         batch_loss["jpe"] = mpjpe_loss(
-            data["target_pose"].reshape(
-                -1, data["x6d"].shape[-2], 3
-            ),  # data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
-            data_o["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
-            data["kinematic_tree"],
-            data["offsets"].view(-1, *data["offsets"].shape[-2:]),
+            data["target_pose"],  # data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
+            data_o["x6d"],
+            model.kinematic_tree,
+            data["offsets"],
         )
 
     if "root" in loss_scale.keys():
-        batch_loss["root"] = torch.nn.MSELoss(reduction="mean")(
-            data_o["root"], data["root"]
+        batch_loss["root"] = (
+            torch.nn.MSELoss(reduction="sum")(data_o["root"], data["root"]) / batch_size
         )
 
-    available_dis_keys = ["avg_speed", "frame_speed", "part_speed", "heading_change", "heading", "avg_speed_3d"]
     num_keys = len(data_o["disentangle"].keys())
-    for key in available_dis_keys:
+    for key in model.disentangle_keys:
         if key in loss_scale.keys():
-            batch_loss[key] = (
-                torch.nn.MSELoss(reduction="mean")(
-                    data_o["disentangle"][key]["v"], data[key]
+            if isinstance(model.disentangle[key], MovingAvgLeastSquares):
+                batch_loss[key] = (
+                    model.disentangle[key].evaluate_loss(
+                        data_o["disentangle"][key][0],
+                        data_o["disentangle"][key][1],
+                        data_o["mu"],
+                        data[key],
+                    )
+                    / batch_size
                 )
-                / num_keys
-            )
-            
+            else:
+                batch_loss[key] = (
+                    torch.nn.MSELoss(reduction="sum")(
+                        data_o["disentangle"][key]["v"], data[key]
+                    )
+                    / num_keys
+                    / batch_size
+                )
+
         if key + "_gr" in loss_scale.keys():
             if isinstance(data_o["disentangle"][key]["gr"], list):
                 batch_loss[key + "_gr"] = 0
                 for gr_e in data_o["disentangle"][key]["gr"]:
-                    batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="mean")( gr_e, data[key] )
+                    batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="sum")(
+                        gr_e, data[key]
+                    )
                 batch_loss[key + "_gr"] = (
                     batch_loss[key + "_gr"]
                     / len(data_o["disentangle"][key]["gr"])
                     / num_keys
+                    / batch_size
                 )
             elif torch.is_tensor(data_o["disentangle"][key]["gr"]):
                 batch_loss[key + "_gr"] = (
-                    torch.nn.MSELoss(reduction="mean")(
+                    torch.nn.MSELoss(reduction="sum")(
                         data_o["disentangle"][key], data[key]
                     )
                     / num_keys
+                    / batch_size
                 )
 
     # if "speed_regularize" in loss_scale.keys():
