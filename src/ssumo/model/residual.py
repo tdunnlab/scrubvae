@@ -216,14 +216,9 @@ class ResidualEncoder(nn.Module):
         )
 
     def forward(self, x):
-        # import pdb
-
-        # pdb.set_trace()
         x = self.activation(self.conv_in(x))
         x = self.res_layers(x)
         x = self.flatten(x)
-        # print(self.fc_mu)
-        # print(x.shape)
         mu = self.fc_mu(x)
         sigma = self.fc_sigma(x)
         return mu, sigma
@@ -238,11 +233,11 @@ class ResidualDecoder(nn.Module):
         z_dim=128,
         window=200,
         activation="prelu",
-        invariant_dim=0,
+        conditional_dim=0,
         init_dilation=None,
     ):
         super(ResidualDecoder, self).__init__()
-        self.invariant_dim = invariant_dim
+        self.conditional_dim = conditional_dim
 
         if init_dilation is None:
             dilation = torch.ones(len(ch) - 1, dtype=int)
@@ -250,7 +245,7 @@ class ResidualDecoder(nn.Module):
             dilation = init_dilation * 2 ** torch.arange(len(ch) - 1)
 
         flatten_dim = find_latent_dim(window, kernel, len(ch) - 1, dilation) * ch[-1]
-        self.fc_in = nn.Linear(z_dim + invariant_dim, flatten_dim)
+        self.fc_in = nn.Linear(z_dim + conditional_dim, flatten_dim)
         self.unflatten = nn.Unflatten(1, (ch[-1], -1))
         # self.conv_in = nn.ConvTranspose1d(int(flatten_dim[0]), ch*16, 3, 1, 1)
 
@@ -283,8 +278,39 @@ class ResidualDecoder(nn.Module):
         x = torch.tanh(self.conv_out(x))
         return x
 
+class VAE(nn.Module):
+    def __init__(self):
+        super(VAE, self).__init__()
+        return self
+    
+    def sampling(self, mu, L):
+        """Reparameterization trick
 
-class ResVAE(nn.Module):
+        Parameters
+        ----------
+        mu : torch.tensor
+            Batch_size x latent dimensions
+        L : torch.tensor
+            Batch_size x latent dimensions x latent dimensions. Lower triangular or diagonal matrix.
+        """
+        eps = torch.randn_like(mu)
+        return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
+    
+    def forward(self, data):
+        data_o = self.encode(data)
+        z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+
+        # Running disentangle
+        data_o["disentangle"] = {
+            k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
+        }
+
+        data_o.update(self.decode(z, data))
+
+        return data_o
+
+
+class ResVAE(VAE):
     def __init__(
         self,
         in_channels,
@@ -294,22 +320,21 @@ class ResVAE(nn.Module):
         window=200,
         activation="prelu",
         is_diag=False,
-        invariant_dim=0,
+        conditional_dim=0,
         init_dilation=None,
         disentangle=None,
         kinematic_tree=None,
         arena_size=None,
         disentangle_keys=None,
     ):
-        super(ResVAE, self).__init__()
+        super().__init__()
         self.in_channels = in_channels
         self.ch = ch
         self.window = window
         self.is_diag = is_diag
-        self.invariant_dim = invariant_dim
+        self.conditional_dim = conditional_dim
         self.kinematic_tree = kinematic_tree
         self.register_buffer("arena_size", arena_size)
-        # self.arena_size = arena_size
         self.disentangle_keys = disentangle_keys
         self.encoder = ResidualEncoder(
             in_channels,
@@ -328,7 +353,7 @@ class ResVAE(nn.Module):
             z_dim=z_dim,
             window=window,
             activation=activation,
-            invariant_dim=invariant_dim,
+            conditional_dim=conditional_dim,
             init_dilation=init_dilation,
         )
         if disentangle is not None:
@@ -346,13 +371,8 @@ class ResVAE(nn.Module):
         root += self.arena_size[0]
         return root
 
-    def sampling(self, mu, L):
-        eps = torch.randn_like(mu)
-        return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
-
     def encode(self, data):
         if self.arena_size is not None:
-            # self.arena_size.to("cuda" if data["root"].is_cuda else "cpu")
             norm_root = self.normalize_root(data["root"])
 
             x_in = torch.cat(
@@ -360,61 +380,29 @@ class ResVAE(nn.Module):
             )
         else:
             x_in = data["x6d"]
-
-        mu, L = self.encoder(
-            x_in.moveaxis(1, -1).view(-1, self.in_channels, self.window)
-        )
-        return mu, L
-
-    def decode(self, mu):
-        data_o = {}
-        x_hat = self.decoder(mu).moveaxis(-1, 1)
-
-        if self.arena_size is not None:
-            x6d = x_hat[..., :-3]
-            data_o["root"] = self.inv_normalize_root(x_hat[..., -3:]).reshape(
-                mu.shape[0], self.window, 3
-            )
-        else:
-            x6d = x_hat
-            data_o["root"] = torch.zeros(mu.shape[0], self.window, 3).to(mu.device)
-
-        data_o["x6d"] = x6d.reshape(mu.shape[0], self.window, -1, 6)
-
-        return data_o
-
-    def forward(self, data):
-        if self.arena_size is not None:
-            # self.arena_size.to("cuda" if data["root"].is_cuda else "cpu")
-            norm_root = self.normalize_root(data["root"])
-
-            x_in = torch.cat(
-                (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), norm_root), axis=-1
-            )
-        else:
-            x_in = data["x6d"]
-            in_shape = x_in.shape
 
         data_o = {}
         data_o["mu"], data_o["L"] = self.encoder(
             x_in.moveaxis(1, -1).view(-1, self.in_channels, self.window)
         )
-        z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+        return data_o
 
-        if self.invariant_dim > 0:
+    def decode(self, z, data):
+        
+        data_o = {}
+        if self.conditional_dim > 0:
             z = torch.cat([z] + [data[k] for k in self.disentangle_keys], dim=-1)
-
-        # Running disentangle
-        data_o["disentangle"] = {
-            k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
-        }
 
         x_hat = self.decoder(z).moveaxis(-1, 1)
 
-        if self.arena_size is not None:
-            data_o["x6d"] = x_hat[..., :-3].reshape(data["x6d"].shape)
-            data_o["root"] = self.inv_normalize_root(x_hat[..., -3:])
+        if self.arena_size is None:
+            x6d = x_hat
         else:
-            data_o["x6d"] = x_hat.reshape(in_shape)
+            x6d = x_hat[..., :-3]
+            data_o["root"] = self.inv_normalize_root(x_hat[..., -3:]).reshape(
+                z.shape[0], self.window, 3
+            )
+
+        data_o["x6d"] = x6d.reshape(z.shape[0], self.window, -1, 6)
 
         return data_o

@@ -231,7 +231,6 @@ def feature_ridge(
         style="white", rc={"axes.facecolor": (0, 0, 0, 0), "figure.figsize": (20, 20)}
     )
     df = pd.DataFrame({"x": feature, "y": labels})
-    print(len(np.unique(labels)))
     height = 0.75
     pal = sns.cubehelix_palette(len(np.unique(labels)), rot=-0.25, light=0.7)
     grid = sns.FacetGrid(
@@ -245,6 +244,7 @@ def feature_ridge(
         bins=n_bins,
         binrange=binrange,
         common_norm=False,
+        common_bins=True,
         fill=True,
         alpha=0.5,
     )
