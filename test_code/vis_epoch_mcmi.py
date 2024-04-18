@@ -46,7 +46,7 @@ for epoch_ind, epoch in enumerate(epochs_to_test):
     )
     model.eval()
 
-    dataset.data["mu"] = ssumo.eval.get.latents(model, dataset, config, device, "Train")
+    dataset.data["mu"] = ssumo.eval.get.latents(model, epoch, dataset, config, device, "Train")
 
     loader_mc = DataLoader(
         dataset=dataset,

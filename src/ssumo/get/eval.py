@@ -4,7 +4,7 @@ import tqdm
 import torch
 import numpy as np
 
-def latents(config, model=None, dataset=None, device="cuda", dataset_label="Train"):
+def latents(config, model=None, epoch=None, dataset=None, device="cuda", dataset_label="Train"):
     """NOT FOR TRAINING
 
     Parameters
@@ -28,7 +28,7 @@ def latents(config, model=None, dataset=None, device="cuda", dataset_label="Trai
     if model is not None:
         model.eval()
     latent_path = "{}/latents/{}_{}.npy".format(
-        config["out_path"], dataset_label, config["model"]["start_epoch"]
+        config["out_path"], dataset_label, epoch
     )
     
     if not Path(latent_path).exists():

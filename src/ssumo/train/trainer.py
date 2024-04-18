@@ -156,6 +156,8 @@ def train_epoch(
                 for k, v in model.disentangle.items():
                     if isinstance(v, MovingAvgLeastSquares):
                         model.disentangle[k].update(data_o["mu"], data[k])
+                        if batch_idx % 10 == 0:
+                            print("lam0 {}: {}".format(k, model.disentangle[k].lam0))
 
         epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
 

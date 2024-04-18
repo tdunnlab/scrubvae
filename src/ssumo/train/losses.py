@@ -69,13 +69,13 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
     # )
     # pose = x
     pose_hat = fwd_kin_cont6d_torch(
-        x_hat,
+        x_hat.reshape((-1,) + x_hat.shape[-2:]),
         kinematic_tree,
-        offsets,
-        root_pos=root_hat,
+        offsets.reshape((-1,) + offsets.shape[-2:]),
+        root_pos=root_hat.reshape((-1, 3)),
         do_root_R=True,
         eps=1e-8,
-    )
+    ).reshape(pose.shape)
 
     loss = torch.sum((pose - pose_hat) ** 2)
     loss = loss / (pose.shape[0] * pose.shape[-1] * pose.shape[-2])
@@ -125,7 +125,6 @@ def get_batch_loss(model, data, data_o, loss_scale):
                     model.disentangle[key].evaluate_loss(
                         data_o["disentangle"][key][0],
                         data_o["disentangle"][key][1],
-                        data_o["mu"],
                         data[key],
                     )
                     / batch_size

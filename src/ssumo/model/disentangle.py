@@ -4,29 +4,39 @@ import torch
 from torch.nn.functional import mse_loss
 import numpy as np
 
+
 class MovingAvgLeastSquares(nn.Module):
 
-    def __init__(self, nx, ny, lamdiff=1e-1, delta=1e-4):
+    def __init__(self, nx, ny, lamdiff=1e-1, delta=1e-4, bias=False):
         super().__init__()
+        self.bias = bias
+        print("Moving Avg Least Squares: {}".format(self.bias))
         # Running average of covariances for first linear decoder
-        self.register_buffer("Sxx0", torch.eye(nx, requires_grad=False))
-        self.register_buffer("Sxy0", torch.zeros(nx, ny, requires_grad=False))
+        self.register_buffer("Sxx0", torch.eye(nx + self.bias, requires_grad=False))
+        self.register_buffer(
+            "Sxy0", torch.zeros(nx + self.bias, ny, requires_grad=False)
+        )
 
         # Running average of covariances for first linear decoder
-        self.register_buffer("Sxx1", torch.eye(nx, requires_grad=False))
-        self.register_buffer("Sxy1", torch.zeros(nx, ny, requires_grad=False))
+        self.register_buffer("Sxx1", torch.eye(nx + self.bias, requires_grad=False))
+        self.register_buffer(
+            "Sxy1", torch.zeros(nx + self.bias, ny, requires_grad=False)
+        )
 
         # Forgetting factor for the first linear decoder
-        self.lam0 = 0.9
+        self.register_buffer("lam0", torch.tensor([0.9], requires_grad=False))
 
         # Forgetting factor for the second linear decoder
-        self.lam1 = self.lam0 + lamdiff
+        self.register_buffer("lam1", self.lam0 + lamdiff)
 
         # Update parameters for the forgetting factors
         self.delta = delta
         self.lamdiff = lamdiff
 
     def forward(self, x):
+        if self.bias:
+            x = torch.column_stack((x, torch.ones(x.shape[0], 1, device="cuda")))
+
         # Solve optimal decoder weights (normal equations)
         W0 = torch.linalg.solve(self.Sxx0, self.Sxy0)
         W1 = torch.linalg.solve(self.Sxx1, self.Sxy1)
@@ -35,8 +45,10 @@ class MovingAvgLeastSquares(nn.Module):
         yhat0 = x @ W0
         yhat1 = x @ W1
         return [yhat0, yhat1]
-    
+
     def update(self, x, y):
+        if self.bias:
+            x = torch.column_stack((x, torch.ones(x.shape[0], 1, device="cuda")))
         xx = (x.T @ x).detach()
         xy = (x.T @ y).detach()
         # Compute moving averages for the next batch of data
@@ -46,7 +58,7 @@ class MovingAvgLeastSquares(nn.Module):
         self.Sxy1 = self.lam1 * self.Sxy1 + xy
         return self
 
-    def evaluate_loss(self, yhat0, yhat1, x, y):
+    def evaluate_loss(self, yhat0, yhat1, y):
         """
         Parameters
         ----------
@@ -69,17 +81,18 @@ class MovingAvgLeastSquares(nn.Module):
         # If lam0 performed better than lam1, we decrease the forgetting factors
         # by self.delta
         if l0 < l1:
-            self.lam0 = np.clip(self.lam0 - self.delta, 0.0, 1.0)
+            self.lam0 = torch.clamp(self.lam0 - self.delta, 0.0, 1.0)
             self.lam1 = self.lam0 + self.lamdiff
 
         # If lam1 performed better than lam0, we increase the forgetting factors
         # by self.delta
         else:
-            self.lam1 = np.clip(self.lam1 + self.delta, 0.0, 1.0)
+            self.lam1 = torch.clamp(self.lam1 + self.delta, 0.0, 1.0)
             self.lam0 = self.lam1 - self.lamdiff
 
         # Return average loss of the two linear decoders
         return (l0 + l1) * 0.5
+
 
 class GradientReversal(Function):
     @staticmethod
@@ -192,7 +205,7 @@ class LinearDisentangle(nn.Module):
     def __init__(
         self,
         in_dim,
-        out_dim, 
+        out_dim,
         bias=False,
         reversal="linear",
         alpha=1.0,
@@ -230,13 +243,14 @@ class LinearDisentangle(nn.Module):
 
     def forward(self, z):
         x = self.decoder(z)
+        w = self.decoder.weight
+
+        nrm = w @ w.T
+        z_null = z - torch.linalg.solve(nrm, x.T).T @ w
+
+        data_o = {"v": x, "mu_null": z_null}
 
         if self.reversal is not None:
-            w = self.decoder.weight
+            data_o["gr"] = self.reversal(z_null)
 
-            nrm = w @ w.T
-            z_sub = z - torch.linalg.solve(nrm, x.T).T @ w
-
-            return {"v": x, "gr": self.reversal(z_sub)}
-
-        return {"v": x}
+        return data_o

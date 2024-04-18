@@ -28,11 +28,13 @@ def mouse_data(
         pose = preprocess.median_filter(pose, ids[set_ids], 5)
 
     data = {"raw_pose": pose} if "raw_pose" in data_keys else {}
+    if "ids" in data_keys:
+        data["ids"] = ids[set_ids]
     window_inds = get_window_indices(ids[set_ids], data_config["stride"], window)
 
     speed_key = [key for key in data_keys if "speed" in key]
     assert len(speed_key) < 2
-    if (len(speed_key) > 0) or (data_config["remove_speed_outliers"] is not None):
+    if (len(speed_key) > 0):
         if ("part_speed" in speed_key) or ("avg_speed_3d" in speed_key):
             speed = get_speed_parts(
                 pose=pose,
@@ -46,15 +48,16 @@ def mouse_data(
                 speed = np.concatenate(
                     [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
                 )
-
         else:
             speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
             speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
 
     if data_config["remove_speed_outliers"] is not None:
+        avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
+        avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
         outlier_frames = np.where(
-            speed[window_inds[:, 1:], ...].mean(
-                axis=tuple(range(1, len(speed.shape) + 1))
+            avg_spd[window_inds[:, 1:], ...].mean(
+                axis=tuple(range(1, len(avg_spd.shape) + 1))
             )
             > data_config["remove_speed_outliers"]
         )[0]

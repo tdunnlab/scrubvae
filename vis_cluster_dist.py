@@ -23,7 +23,7 @@ dataset, loader = ssumo.get.mouse_data(
 )
 k_pred = np.load(vis_path + "z_gmm.npy")
 
-for key in ["heading"]:
+for key in ["heading", "ids"]:
     # k_pred_null = np.load(vis_path + "z_{}_gmm.npy".format(key))
     if key == "heading":
         heading = dataset[:]["heading"].cpu().detach().numpy()

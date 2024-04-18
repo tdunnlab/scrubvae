@@ -34,7 +34,7 @@ dataset, _, model = ssumo.get.data_and_model(
 )
 
 latents = ssumo.get.latents(
-    config, model, dataset, device="cuda", dataset_label=dataset_label
+    config, model, sys.argv[2], dataset, device="cuda", dataset_label=dataset_label
 )
 
 if z_null is not None:
@@ -66,10 +66,6 @@ if vis_clusters:
         connectivity,
         "{}/vis_clusters_{}/".format(vis_path, "" if z_null is None else z_null),
     )
-
-import pdb
-
-pdb.set_trace()
 
 
 # mean_offsets = dataset.data["offsets"].mean(axis=(0, -1)).cuda()
