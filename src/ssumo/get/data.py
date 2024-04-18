@@ -7,6 +7,202 @@ from ssumo.data.dataset import *
 from torch.utils.data import DataLoader
 
 
+def babel_data(
+    data_config: dict,
+    window: int = 51,
+    train: bool = True,
+    data_keys: List[str] = ["x6d", "root", "offsets"],
+    shuffle: bool = False,
+    recompute: bool = True,
+    save: bool = False,
+):
+    """Read in BABEL dataset
+    Punnakkal, Abhinanda R, et al
+    "BABEL: Bodies, Action and Behavior with English Labels",
+    Proceedings IEEE/CVF Conf.~on Computer Vision and Pattern Recognition (CVPR), 2021
+    https://babel.is.tue.mpg.de/
+
+    Args:
+        data_config (dict): Dict of parameter options for loading in data.
+        window (int, optional): # of frames per sample to be given by DataLoader class. Defaults to 51.
+        train (bool, optional): Read in train or test set. Defaults to True.
+        data_keys (List[str], optional): Data fields to be given by DataLoader class. Defaults to ["x6d", "root", "offsets"].
+        shuffle (bool, optional): Whether DataLoader shuffles. Defaults to False.
+        recompute (bool, optional): Whether to recompute inverse kinematics and more, or load a preprocessed file. Defaults to True.
+        save (bool, optional): Whether to save computed inverse kinematics and more. Defaults to False.
+
+    """
+
+    skeleton_config = read.config(data_config["skeleton_path"])
+
+    pose, ids = read.pose_h5(data_config["data_path"])
+
+    vidlen = np.unique(ids[1], return_counts=True)[1]
+    vidlenfilter = np.argwhere(vidlen >= window + data_config["stride"])[:, 0]
+    vidlenfilter = np.in1d(ids[1], vidlenfilter)
+
+    ids = ids[:, vidlenfilter]
+    pose = pose[vidlenfilter]
+
+    pose = pose[ids[0] == int(train)]
+    ids = ids[1][ids[0] == int(train)]
+
+    pose = pose[:, [3, 1, 2, 0] + [i for i in range(4, 22)] + [24, 36, 39, 51]]
+
+    # Load or index train or test
+    if data_config["filter_pose"]:
+        pose = preprocess.median_filter(pose, ids, 5)
+
+    # Save raw pose in dataset if specified
+    data = {"raw_pose": pose} if "raw_pose" in data_keys else {}
+
+    # Get windowed indices (n_frames x window)
+    window_inds = get_window_indices(ids, data_config["stride"], window)
+
+    windowed_yaw = get_frame_yaw(pose, [0, 2, 1])[window_inds]
+
+    yaw = windowed_yaw[:, window // 2][..., None]
+
+    if "heading" in data_keys:
+        data["heading"] = get_angle2D(yaw)
+
+    if ("root" or "x6d") in data_keys:
+        root = pose[..., 0, :]
+        if data_config["direction_process"] in ["midfwd", "x360"]:
+            # Centering root
+            root = pose[..., 0, :][window_inds]
+            root_center = np.zeros(root.shape)
+            root_center[..., [0, 1]] = root[:, window // 2, [0, 1]][:, None, :]
+
+            root -= root_center
+        elif data_config["direction_process"] == "fwd":
+            root[..., [0, 1]] = 0
+
+    if "x6d" in data_keys:
+        if recompute:
+            print("Applying inverse kinematics ...")
+            local_qtn = inv_kin(
+                pose,
+                skeleton_config["KINEMATIC_TREE"],
+                np.array(skeleton_config["OFFSET"]),
+                forward_indices=[0, 2, 1],
+            )
+            if save:
+                np.save(
+                    data_config["data_path"][: data_config["data_path"].rfind("/")]
+                    + "/babel_invkin"
+                    + ["test", "train"][train]
+                    + ".npy",
+                    local_qtn,
+                    allow_pickle=True,
+                )
+        else:
+            print("Loading inverse kinematics ...")
+            local_qtn = np.load(
+                data_config["data_path"][: data_config["data_path"].rfind("/")]
+                + "/babel_invkin"
+                + ["test", "train"][train]
+                + ".npy",
+                allow_pickle=True,
+            )
+        if "midfwd" in data_config["direction_process"]:
+            ## Center frame of a window is translated to center and rotated to x+
+            fwd_qtn = np.zeros((len(window_inds), 4))
+            fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
+
+            local_qtn = local_qtn[window_inds]
+            fwd_qtn = np.repeat(fwd_qtn[:, None, :], window, axis=1)
+
+            local_qtn[..., 0, :] = qtn.qmul_np(fwd_qtn, local_qtn[..., 0, :])
+
+            if "root" in data_keys:
+                root = qtn.qrot_np(fwd_qtn, root)
+
+            assert len(root) == len(window_inds)
+            assert len(local_qtn) == len(window_inds)
+
+        data["x6d"] = qtn.quaternion_to_cont6d_np(local_qtn)
+
+    # Scale offsets by segment lengths
+    if "offsets" in data_keys:
+        if recompute:
+            data["offsets"] = get_segment_len(
+                pose,
+                skeleton_config["KINEMATIC_TREE"],
+                np.array(skeleton_config["OFFSET"]),
+            )
+            if save:
+                np.save(
+                    data_config["data_path"][: data_config["data_path"].rfind("/")]
+                    + "/babel_offsets"
+                    + ["test", "train"][train]
+                    + ".npy",
+                    data["offsets"],
+                    allow_pickle=True,
+                )
+        else:
+            data["offsets"] = np.load(
+                data_config["data_path"][: data_config["data_path"].rfind("/")]
+                + "/babel_offsets"
+                + ["test", "train"][train]
+                + ".npy",
+                allow_pickle=True,
+            )
+
+    if "root" in data_keys:
+        data["root"] = root
+
+    # Move everything to tensors
+    data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
+
+    if "target_pose" in data_keys:
+        if recompute:
+            data["target_pose"] = fwd_kin_cont6d_torch(
+                data["x6d"],
+                skeleton_config["KINEMATIC_TREE"],
+                data["offsets"],
+                root_pos=torch.zeros(data["x6d"].shape[0], 3),
+                do_root_R=True,
+                eps=1e-8,
+            )
+            if save:
+                np.save(
+                    data_config["data_path"][: data_config["data_path"].rfind("/")]
+                    + "/babel_targetpose"
+                    + ["test", "train"][train]
+                    + ".npy",
+                    data["target_pose"],
+                    allow_pickle=True,
+                )
+        else:
+            data["target_pose"] = np.load(
+                data_config["data_path"][: data_config["data_path"].rfind("/")]
+                + "/babel_targetpose"
+                + ["test", "train"][train]
+                + ".npy",
+                allow_pickle=True,
+            )
+
+    # Initialize Dataset and DataLoaders
+    dataset = MouseDataset(
+        data,
+        window_inds,
+        data_config["arena_size"],
+        skeleton_config["KINEMATIC_TREE"],
+        pose.shape[-2],
+        label="Train" if train else "Test",
+    )
+    loader = DataLoader(
+        dataset=dataset,
+        batch_size=data_config["batch_size"],
+        shuffle=shuffle,
+        num_workers=5,
+        pin_memory=True,
+    )
+
+    return dataset, loader
+
+
 def mouse_data(
     data_config: dict,
     window: int = 51,
@@ -180,7 +376,7 @@ def mouse_data(
         pose.shape[-2],
         label="Train" if train else "Test",
     )
-    
+
     loader = DataLoader(
         dataset=dataset,
         batch_size=data_config["batch_size"],

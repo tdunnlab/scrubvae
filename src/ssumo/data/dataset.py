@@ -7,6 +7,7 @@ import torch
 from numpy.lib.stride_tricks import sliding_window_view
 from tqdm import trange
 
+
 def inv_kin(
     pose: np.ndarray,
     kinematic_tree: Union[List, np.ndarray],
@@ -21,8 +22,14 @@ def inv_kin(
     """
 
     # Find forward root direction
-    forward = pose[:, forward_indices[1], :] - pose[:, forward_indices[0], :]
-    forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
+    if len(forward_indices) == 2:
+        forward = pose[:, forward_indices[1], :] - pose[:, forward_indices[0], :]
+        forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
+    else:
+        v1 = pose[:, forward_indices[0], :] - pose[:, forward_indices[1], :]
+        v2 = pose[:, forward_indices[0], :] - pose[:, forward_indices[2], :]
+        forward = np.cross(v1, v2, axis=1)
+        forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
 
     # Root Rotation
     target = np.array([[1, 0, 0]]).repeat(len(forward), axis=0)
@@ -91,7 +98,7 @@ def fwd_kin_cont6d_torch(
     else:
         offsets = offset
 
-    pose = torch.zeros(continuous_6d.shape[:-1] + (3,),device=continuous_6d.device)
+    pose = torch.zeros(continuous_6d.shape[:-1] + (3,), device=continuous_6d.device)
     pose[..., 0, :] = root_pos
     for chain in kinematic_tree:
         if do_root_R:
@@ -114,6 +121,7 @@ def fwd_kin_cont6d_torch(
             )
     return pose
 
+
 def normalize_root(root, arena_size):
     norm_root = root - arena_size[0]
     norm_root = 2 * norm_root / (arena_size[1] - arena_size[0]) - 1
@@ -124,6 +132,7 @@ def inv_normalize_root(norm_root, arena_size):
     root = 0.5 * (norm_root + 1) * (arena_size[1] - arena_size[0])
     root += arena_size[0]
     return root
+
 
 def get_speed_parts(pose, parts):
     print("Getting speed by body parts")
@@ -180,9 +189,15 @@ def get_window_indices(ids, stride, window):
     return window_inds
 
 
-def get_frame_yaw(pose, root_i=0, front_i=1):
-    forward = pose[:, front_i, :] - pose[:, root_i, :]
-    forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
+def get_frame_yaw(pose, forward_indices=[0, 1]):
+    if len(forward_indices) == 2:
+        forward = pose[:, forward_indices[1], :] - pose[:, forward_indices[0], :]
+        forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
+    else:
+        v1 = pose[:, forward_indices[0], :] - pose[:, forward_indices[1], :]
+        v2 = pose[:, forward_indices[0], :] - pose[:, forward_indices[2], :]
+        forward = np.cross(v1, v2, axis=1)
+        forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
     yaw = -np.arctan2(forward[:, 1], forward[:, 0])
     return yaw
 
@@ -215,6 +230,7 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
             parents[chain[j]] = chain[j - 1]
 
     offsets = np.moveaxis(np.tile(offset[..., None], pose.shape[0]), -1, 0)
+    offsets = offsets.astype(float)
     for i in range(1, offset.shape[0]):
         offsets[:, i] = (
             np.linalg.norm(pose[:, i, :] - pose[:, parents[i], :], axis=1)[..., None]
@@ -223,9 +239,16 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
 
     return offsets
 
+
 class MouseDataset(Dataset):
     def __init__(
-        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train"
+        self,
+        data,
+        window_inds,
+        arena_size=None,
+        kinematic_tree=None,
+        n_keypts=None,
+        label="Train",
     ):
         self.data = data
         self.window_inds = window_inds
