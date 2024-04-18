@@ -156,8 +156,6 @@ def train_epoch(
                 for k, v in model.disentangle.items():
                     if isinstance(v, MovingAvgLeastSquares):
                         model.disentangle[k].update(data_o["mu"], data[k])
-                        if batch_idx % 10 == 0:
-                            print("lam0 {}: {}".format(k, model.disentangle[k].lam0))
 
         epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
 
@@ -243,8 +241,12 @@ def train(config, model, loader):
     else:
         beta_scheduler = None
 
-    loss_dict_keys = ["total"] + list(config["loss"].keys())
-    loss_dict = {k: [] for k in loss_dict_keys}
+    if config["train"]["load_model"] == config["out_path"]:
+        loss_dict = pickle.load(open("{}/losses/loss_dict.p".format(config["train"]["load_model"])))
+    else:
+        loss_dict_keys = ["total"] + list(config["loss"].keys())
+        loss_dict = {k: [] for k in loss_dict_keys}
+    
     for epoch in tqdm.trange(
         config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
     ):
