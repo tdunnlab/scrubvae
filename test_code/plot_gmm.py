@@ -48,7 +48,7 @@ plt.legend()
 plt.savefig(path+"z_ll_sphere.png")
 import pdb; pdb.set_trace()
 
-vae, spd_decoder, device = utils.init_model(config, 18, config["invariant"])
+vae, spd_decoder, device = utils.init_model(config, 18, config["conditional"])
 
 def KL(m1, c1, m2, c2):
     diff = (m2 - m1)[:, None]

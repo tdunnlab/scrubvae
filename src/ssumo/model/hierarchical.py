@@ -70,18 +70,18 @@ class HierarchicalResidualDecoder(nn.Module):
         z_dim=64,
         window=200,
         activation="prelu",
-        invariant_dim=0,
+        conditional_dim=0,
         init_dilation=None,
     ):
         super(HierarchicalResidualDecoder, self).__init__()
-        self.invariant_dim = invariant_dim
+        self.conditional_dim = conditional_dim
         if init_dilation is None:
             dilation = torch.ones(4)
         else:
             dilation = init_dilation * 2 ** torch.arange(4)
         # L_o = window-1)
         flatten_dim = find_latent_dim(window, kernel, 4, dilation)
-        self.fc2_in = nn.Linear(z_dim + invariant_dim, flatten_dim * 16 * ch)
+        self.fc2_in = nn.Linear(z_dim + conditional_dim, flatten_dim * 16 * ch)
         self.unflatten2 = nn.Unflatten(1, (16 * ch, -1))
 
         shallow_dim = find_out_dim(
@@ -152,14 +152,14 @@ class HResVAE(nn.Module):
         window=200,
         activation="prelu",
         is_diag=False,
-        invariant_dim=0,
+        conditional_dim=0,
         init_dilation=None,
     ):
         super(HResVAE, self).__init__()
         self.in_channels = in_channels
         self.window = window
         self.is_diag = is_diag
-        self.invariant_dim = invariant_dim
+        self.conditional_dim = conditional_dim
         self.encoder = HierarchicalResidualEncoder(
             in_channels,
             ch=ch,
@@ -176,14 +176,14 @@ class HResVAE(nn.Module):
             z_dim=z_dim // 2,
             window=window,
             activation=activation,
-            invariant_dim=invariant_dim,
+            conditional_dim=conditional_dim,
         )
 
     def sampling(self, mu, L):
         eps = torch.randn_like(mu)
         return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
 
-    def forward(self, x, invariant=None):
+    def forward(self, x, conditional=None):
         in_shape = x.shape
         mu1, mu2, L1, L2 = self.encoder(
             x.moveaxis(1, -1).view(-1, self.in_channels, self.window)
@@ -191,8 +191,8 @@ class HResVAE(nn.Module):
         z1 = self.sampling(mu1, L1)
         z2 = self.sampling(mu2, L2)
 
-        if invariant is not None:
-            z2 = torch.cat((z2, invariant), dim=-1)
+        if conditional is not None:
+            z2 = torch.cat((z2, conditional), dim=-1)
 
         x_hat = self.decoder(z1, z2).moveaxis(-1, 1).reshape(in_shape)
         return x_hat, (mu1, mu2), (L1, L2)

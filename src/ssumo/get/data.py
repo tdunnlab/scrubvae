@@ -106,13 +106,14 @@ def get_babel(
 # Use pose representation which in which you only center the middle pose on (0,0,Z). 
 # Translate other poses according.
 
-def get_mouse(
+def mouse_data(
     data_config: dict,
     window: int = 51,
     train_ids: List = [0, 1, 2],
     train: bool = True,
     data_keys: List[str] = ["x6d", "root", "offsets"],
     shuffle: bool = False,
+    normalize: List[str] = [],
 ):
     """_summary_
 
@@ -134,16 +135,19 @@ def get_mouse(
     set_ids = np.in1d(ids, train_ids) if train else ~np.in1d(ids, train_ids)
     pose = pose[set_ids][:, REORDER, :]
 
+    ## Smoothing
     if data_config["filter_pose"]:
         pose = preprocess.median_filter(pose, ids[set_ids], 5)
 
     data = {"raw_pose": pose} if "raw_pose" in data_keys else {}
+    if "ids" in data_keys:
+        data["ids"] = ids[set_ids]
     window_inds = get_window_indices(ids[set_ids], data_config["stride"], window)
 
     speed_key = [key for key in data_keys if "speed" in key]
     assert len(speed_key) < 2
-    if (len(speed_key) > 0) or (data_config["remove_speed_outliers"] is not None):
-        if "part_speed" in speed_key:
+    if (len(speed_key) > 0):
+        if ("part_speed" in speed_key) or ("avg_speed_3d" in speed_key):
             speed = get_speed_parts(
                 pose=pose,
                 parts=[
@@ -152,14 +156,20 @@ def get_mouse(
                     [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
                 ],
             )
+            if "avg_speed_3d" in speed_key:
+                speed = np.concatenate(
+                    [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
+                )
         else:
             speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
-            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1)
+            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
 
     if data_config["remove_speed_outliers"] is not None:
+        avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
+        avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
         outlier_frames = np.where(
-            speed[window_inds[:, 1:], ...].mean(
-                axis=tuple(range(1, len(speed.shape) + 1))
+            avg_spd[window_inds[:, 1:], ...].mean(
+                axis=tuple(range(1, len(avg_spd.shape) + 1))
             )
             > data_config["remove_speed_outliers"]
         )[0]
@@ -172,7 +182,7 @@ def get_mouse(
         window_inds = np.delete(window_inds, outlier_frames, 0)
 
     if len(speed_key) > 0:
-        data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1).squeeze()[:, None]
+        data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1)
 
     windowed_yaw = get_frame_yaw(pose, 0, 1)[window_inds]
 
@@ -238,15 +248,44 @@ def get_mouse(
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
+    for key in normalize:
+        if (key != "heading") and (key in data_keys):
+            if data_config["normalize"] == "bounded":
+                print(
+                    "Rescaling decoding variable, {}, to be between -1 and 1".format(
+                        key
+                    )
+                )
+                key_min = data[key].min(dim=0)[0] - data[key].min(dim=0)[0] * 0.1
+                data[key] -= key_min
+                key_max = data[key].max(dim=0)[0] + data[key].max(dim=0)[0] * 0.1
+                data[key] = 2 * data[key] / key_max - 1
+                assert data[key].max() < 1
+                assert data[key].min() > -1
+            elif data_config["normalize"] == "z_score":
+                print(
+                    "Mean centering and unit standard deviation-scaling {}".format(key)
+                )
+                data[key] -= data[key].mean(axis=0)
+                data[key] /= data[key].std(axis=0)
+
     if "target_pose" in data_keys:
+        reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
+        if data_config["direction_process"] == "midfwd":
+            offsets = data["offsets"][window_inds].reshape(
+                reshaped_x6d.shape[:2] + (-1,)
+            )
+        else:
+            offsets = data["offsets"]
+
         data["target_pose"] = fwd_kin_cont6d_torch(
-            data["x6d"],
+            reshaped_x6d,
             skeleton_config["KINEMATIC_TREE"],
-            data["offsets"],
-            root_pos=torch.zeros(data["x6d"].shape[0], 3),
+            offsets,
+            root_pos=torch.zeros(reshaped_x6d.shape[0], 3),
             do_root_R=True,
             eps=1e-8,
-        )
+        ).reshape(data["x6d"].shape[:-1] + (3,))
 
     dataset = MouseDataset(
         data,
@@ -256,6 +295,7 @@ def get_mouse(
         pose.shape[-2],
         label="Train" if train else "Test",
     )
+    
     loader = DataLoader(
         dataset=dataset,
         batch_size=data_config["batch_size"],

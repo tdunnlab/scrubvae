@@ -38,20 +38,25 @@ def traverse_latent(
 
         linspace = torch.linspace(-torch.pi, torch.pi, n_shifts)[:, None].cuda()
         circ = torch.cat([torch.sin(linspace), torch.cos(linspace)], dim=-1)
-        graded_z_shift = circ @ weight.cuda()
-        radius = torch.linalg.norm(z[index : index + 1] @ weight.T)
-        circle_z = circ @ weight.cuda()
-        import pdb
 
-        pdb.set_trace()
+        radius = torch.linalg.norm(z[index : index + 1] @ weight.T)
+
+        circ = circ*radius
+
+        z_null_proj = weight.T @ torch.linalg.solve(weight @ weight.T, weight @ z[index: index+1].T)
+        circle_z = circ @ weight.cuda()
+        circle_z = circle_z/torch.linalg.norm(circle_z,dim=-1)[:,None] * radius
+
+        sample_latent = z[index: index+1].cuda() - z_null_proj.T.cuda() + circle_z
+
     else:
         graded_z_shift = (
             torch.linspace(-minmax, minmax, n_shifts)[:, None].cuda()
             @ weight.sum(dim=0, keepdim=True).cuda()
         )
-    sample_latent = z[index : index + 1].repeat(n_shifts, 1).cuda()
-    print("Latent Norm: {}".format(torch.linalg.norm(sample_latent[0])))
-    sample_latent += graded_z_shift
+        sample_latent = z[index : index + 1].repeat(n_shifts, 1).cuda()
+        print("Latent Norm: {}".format(torch.linalg.norm(sample_latent[0])))
+        sample_latent += graded_z_shift
 
     data_o = vae.decode(sample_latent)
     offsets = dataset[index]["offsets"].cuda()
