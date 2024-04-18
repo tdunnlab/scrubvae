@@ -157,7 +157,9 @@ batch/
 src/ssumo/*/__pycache__
 configs/*.yaml
 !configs/mouse_skeleton.yaml
-
+base_path.py
+*.mp4
+*.png
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

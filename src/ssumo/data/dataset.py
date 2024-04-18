@@ -91,7 +91,7 @@ def fwd_kin_cont6d_torch(
     else:
         offsets = offset
 
-    pose = torch.zeros(continuous_6d.shape[:-1] + (3,)).to(continuous_6d.device)
+    pose = torch.zeros(continuous_6d.shape[:-1] + (3,),device=continuous_6d.device)
     pose[..., 0, :] = root_pos
     for chain in kinematic_tree:
         if do_root_R:
@@ -132,23 +132,23 @@ def get_speed_parts(pose, parts):
     dxyz[:, 0] = np.sqrt(root_spd).sum(axis=-1)
 
     centered_pose = preprocess.center_spine(pose, keypt_idx=0)
-    ego_pose = preprocess.rotate_spine(
-        centered_pose,
-        keypt_idx=[0, 1],
-        lock_to_x=False,
-    )
+    # ego_pose = preprocess.rotate_spine(
+    #     centered_pose,
+    #     keypt_idx=[0, 1],
+    #     lock_to_x=False,
+    # )
 
     for i, part in enumerate(parts):
         if part[0] == 0:
             pose_part = centered_pose
         else:
-            pose_part = ego_pose - ego_pose[:, part[0] : part[0] + 1, :]
+            pose_part = centered_pose - centered_pose[:, part[0] : part[0] + 1, :]
         relative_dxyz = (
             np.diff(
                 pose_part[:, part[1:], :],
                 n=1,
                 axis=0,
-                prepend=pose[0:1, part[1:], :],
+                prepend=pose_part[0:1, part[1:], :],
             )
             ** 2
         ).sum(axis=-1)
@@ -225,7 +225,7 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
 
 class MouseDataset(Dataset):
     def __init__(
-        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None
+        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train"
     ):
         self.data = data
         self.window_inds = window_inds
@@ -239,6 +239,7 @@ class MouseDataset(Dataset):
         self.ind_with_window_inds = [
             k for k, v in self.data.items() if v.shape[0] != len(self.window_inds)
         ]
+        self.label = label
 
     def __len__(self):
         return len(self.window_inds)
@@ -255,188 +256,4 @@ class MouseDataset(Dataset):
                 if k not in self.ind_with_window_inds
             }
         )
-        return query
-
-
-class MouseDatasetOld(Dataset):
-    def __init__(
-        self,
-        data_path: str,
-        skeleton_path: str,
-        train_ids: List = [0, 1, 2],
-        train: bool = True,
-        window: int = 51,
-        stride: int = 1,
-        direction_process: str = "x360",
-        get_speed: str = "avg",
-        get_raw_pose: bool = False,
-        get_x6d: bool = True,
-        get_root: bool = True,
-        arena_size: Optional[List] = None,
-        invariant: Optional[str] = None,
-        remove_speed_outliers: Optional[float] = 4,
-        filter_pose: Optional[bool] = True,
-    ):
-        REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
-        self.window = window
-        skeleton_config = read.config(skeleton_path)
-        self.offset = torch.tensor(skeleton_config["OFFSET"])
-        self.kinematic_tree = skeleton_config["KINEMATIC_TREE"]
-        self.arena_size = torch.tensor(arena_size) if arena_size is not None else None
-        pose, ids = read.pose_h5(data_path, dtype=np.float64)
-
-        if train:
-            pose = pose[np.in1d(ids, train_ids), :][:, REORDER, :]
-            self.ids = ids[np.in1d(ids, train_ids)]
-        else:
-            pose = pose[~np.in1d(ids, train_ids), :][:, REORDER, :]
-            self.ids = ids[~np.in1d(ids, train_ids)]
-
-        if filter_pose:
-            pose = preprocess.median_filter(pose, self.ids, 5)
-
-        # pose = torch.tensor(pose, dtype = torch.float64)
-        self.n_keypts = pose.shape[1]
-        self.data = {"raw_pose": pose} if get_raw_pose else {}
-        self.window_inds = get_window_indices(self.ids, stride, window)
-        if get_speed == "part":
-            dxyz = get_speed_parts(
-                pose=pose,
-                parts=[
-                    [0, 1, 2, 3, 4, 5],  # spine and head
-                    [1, 6, 7, 8, 9, 10, 11],  # arm
-                    [5, 12, 13, 14, 15, 16, 17],  # legs
-                ],
-            )
-        else:
-            dxyz = (
-                np.diff(
-                    pose,
-                    n=1,
-                    axis=0,
-                    prepend=pose[0:1],
-                )
-                ** 2
-            )
-            dxyz = np.sqrt(dxyz.sum(axis=-1)).mean(axis=-1)
-
-        if remove_speed_outliers is not None:
-            outlier_frames = np.where(
-                dxyz[self.window_inds[:, 1:], ...].mean(axis=1) > remove_speed_outliers
-            )[0]
-            outlier_frames = np.unique(outlier_frames)
-            print(
-                "Outlier frames above {}: {}".format(
-                    remove_speed_outliers, len(outlier_frames)
-                )
-            )
-            self.window_inds = np.delete(self.window_inds, outlier_frames, 0)
-
-        if get_speed or (invariant == "speed"):
-            self.data["speed"] = dxyz
-
-        if get_x6d:
-            if (invariant == "direction") or (direction_process == "midfwd"):
-                forward = (
-                    pose[self.window_inds][:, self.window // 2, 1, :]
-                    - pose[self.window_inds][:, self.window // 2, 0, :]
-                )
-                forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
-                yaw = -np.arctan2(forward[:, 1], forward[:, 0])
-
-            if invariant == "direction":
-                self.data["direction"] = np.zeros((len(self.window_inds), 2))
-                self.data["direction"][:, 0] = np.sin(yaw)
-                self.data["direction"][:, 1] = np.cos(yaw)
-
-            if direction_process == "fwd":
-                print("Centering and rotating spine ...")
-                pose = preprocess.rotate_spine(
-                    preprocess.center_spine(pose, keypt_idx=0),
-                    keypt_idx=[0, 1],
-                    lock_to_x=False,
-                )
-
-            print("Applying inverse kinematics ...")
-            local_qtn = inv_kin(
-                pose,
-                self.kinematic_tree,
-                self.offset.cpu().detach().numpy(),
-                forward_indices=[1, 0],
-            )
-
-            if direction_process == "midfwd":
-                ## Center frame of a window is translated to center and rotated to x+
-                local_qtn = local_qtn[self.window_inds]
-                fwd_qtn = np.zeros((len(forward), 1, 4))
-                fwd_qtn[..., 0] = np.cos(yaw / 2)[:, None]
-                fwd_qtn[..., -1] = np.sin(yaw / 2)[:, None]
-                fwd_qtn = np.repeat(fwd_qtn, self.window, axis=1)
-
-                local_qtn[..., 0, :] = qtn.qmul_np(fwd_qtn, local_qtn[..., 0, :])
-
-                self.data["root"] = pose[..., 0, :][self.window_inds]
-                root_center = np.zeros(self.data["root"].shape)
-                root_center[..., [0, 1]] = self.data["root"][
-                    :, self.window // 2, [0, 1]
-                ][:, None, :]
-                self.data["root"] -= root_center
-                self.data["root"] = qtn.qrot_np(fwd_qtn, self.data["root"])
-
-                assert len(self.data["root"]) == len(self)
-                assert len(local_qtn) == len(self)
-            elif direction_process == "x360":
-                self.data["root"] = pose[..., 0, :][self.window_inds]
-                root_center = np.zeros(self.data["root"].shape)
-                root_center[..., [0, 1]] = self.data["root"][
-                    :, self.window // 2, [0, 1]
-                ][:, None, :]
-                self.data["root"] -= root_center
-            else:
-                self.data["root"] = pose[..., 0, :]
-
-            self.data["x6d"] = qtn.quaternion_to_cont6d_np(local_qtn)
-            self.data["offsets"] = get_segment_len(
-                pose, self.kinematic_tree, self.offset.cpu().detach().numpy()
-            )
-
-            if arena_size is not None:
-                self.data["root"] = normalize_root(
-                    self.data["root"], np.array(self.arena_size)
-                )
-        self.data = {
-            k: torch.tensor(v, dtype=torch.float32) for k, v in self.data.items()
-        }
-        self.ids = torch.tensor(ids, dtype=torch.int16)
-        # self.dimensions = self.data["x6d"].shape[1]
-
-        self.get_exclude = ["speed"] if get_raw_pose else ["speed", "raw_pose"]
-        self.get_exclude += [] if get_x6d else ["x6d", "offsets"]
-        self.get_exclude += [] if (arena_size is not None) or (get_root) else ["root"]
-        self.ind_with_window_inds = ["raw_pose", "offsets"]
-        self.ind_with_window_inds += (
-            [] if direction_process == "midfwd" else ["x6d", "root"]
-        )
-
-    def __len__(self):
-        return len(self.window_inds)
-
-    def __getitem__(self, idx):
-        query = {
-            k: self.data[k][self.window_inds[idx]]
-            for k in self.ind_with_window_inds
-            if k not in self.get_exclude
-        }
-
-        query.update(
-            {
-                k: v[idx]
-                for k, v in self.data.items()
-                if k not in self.get_exclude + self.ind_with_window_inds
-            }
-        )
-
-        if "speed" in self.data.keys():
-            query["speed"] = self.data["speed"][self.window_inds[idx, 1:], ...]
-
         return query

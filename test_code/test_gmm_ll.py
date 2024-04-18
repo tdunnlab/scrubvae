@@ -31,7 +31,7 @@ Path(gmm_path).mkdir(parents=True, exist_ok=True)
 #     get_raw_pose=False,
 #     get_root=config["arena_size"] is not None,
 #     arena_size=config["arena_size"],
-#     invariant=config["invariant"],
+#     conditional=config["conditional"],
 # )
 
 latents = np.load(
@@ -40,7 +40,7 @@ latents = np.load(
 # pca = PCA(n_components=11, svd_solver="full").fit(latents)
 
 if z_type == "sub":
-    vae, spd_decoder, device = utils.init_model(config, 18, config["invariant"])
+    vae, spd_decoder, device = utils.init_model(config, 18, config["conditional"])
     spd_decoder.eval()
     if "gr" in path:
         spd_weights = spd_decoder.decoder.weight.cpu().detach().numpy()
@@ -79,7 +79,7 @@ for i in range(n_splits):
     # pca = PCA(n_components=11, svd_solver="full").fit(x_train_i)
 
     # if z_type == "sub":
-    #     vae, spd_decoder, device = utils.init_model(config, 18, config["invariant"])
+    #     vae, spd_decoder, device = utils.init_model(config, 18, config["conditional"])
     #     spd_weights = spd_decoder.weight.cpu().detach().numpy()
     #     # spd_weights = pca.transform(spd_weights)
     #     nrm = (spd_weights @ spd_weights.T).ravel()
