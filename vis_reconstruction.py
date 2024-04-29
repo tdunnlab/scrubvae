@@ -8,7 +8,6 @@ import ssumo
 from base_path import RESULTS_PATH
 import sys
 
-
 def visualize_reconstruction(model, loader, label, connectivity):
     n_keypts = loader.dataset.n_keypts
     kinematic_tree = loader.dataset.kinematic_tree
@@ -62,9 +61,9 @@ config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["data"]["stride"] = 10
 config["data"]["batch_size"] = 5
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
-
-for dataset_label in ["Train", "Test"]:
-    dataset, loader, model = ssumo.get.data_and_model(
+dataset_list = ["Train"] #"Test"
+for dataset_label in dataset_list:
+    loader, model = ssumo.get.data_and_model(
         config,
         load_model=config["out_path"],
         epoch=sys.argv[2],

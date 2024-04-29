@@ -21,21 +21,53 @@ def model(
         "avg_speed_3d": 3,
         "heading": 2,
         "heading_change": 1,
+        "fluorescence": 1,
+        "ids": 1,
     }
 
     in_channels = n_keypts * 6
     if direction_process in ["x360", "midfwd", None]:
         in_channels += 3
 
+    disentangle = {}
+    if disentangle_config["disentangle"] == "linear":
+
+        from ssumo.model.disentangle import LinearProjection
+
+        if disentangle_config["method"] == "linear":
+            reversal = None
+        elif disentangle_config["method"] == "gr_conditional":
+            reversal = "conditional"
+        else:
+            reversal = disentangle_config["method"][3:]
+
+        disentangle = {}
+        for feat in disentangle_config["features"]:
+            disentangle[feat] = LinearDisentangle(
+                model_config["z_dim"],
+                feat_dim_dict[feat],
+                bias=False,
+                reversal=reversal,
+            )
+
+        alpha=disentangle_config["alpha"],
+        do_detach=disentangle_config["detach_gr"],
+        n_models=disentangle_config["n_models"],
+
+    elif disentangle_config["disentangle"] == "conditional":
+        conditional_dim = sum(
+                [feat_dim_dict[k] for k in disentangle_config["features"]]
+            )
+    else:
+        conditional_dim = 0
+        linear_dim = None
+
     conditional_dim = 0
     disentangle = None
     if disentangle_config["method"]:
         if "conditional" in disentangle_config["method"]:
-            conditional_dim = sum(
-                [feat_dim_dict[k] for k in disentangle_config["features"]]
-            )
 
-    if disentangle_config["method"] is None:
+    if disentangle_config["method"] == None:
         pass
     elif disentangle_config["method"] == "gr_conditional":
         from ssumo.model.disentangle import Scrubber
@@ -72,7 +104,7 @@ def model(
                 n_models=disentangle_config["n_models"],
             )
 
-    elif disentangle_config["moving_avg_lsq"] is not None:
+    elif disentangle_config["moving_avg_lsq"] not in [None, False]:
         from ssumo.model.disentangle import MovingAvgLeastSquares
 
         disentangle = {}
@@ -81,6 +113,17 @@ def model(
                 model_config["z_dim"],
                 feat_dim_dict[feat],
                 bias=disentangle_config["moving_avg_lsq"] == "negative",
+                polynomial_order=disentangle_config["polynomial"],
+            )
+
+    if disentangle_config["quadratic_ovr"] not in [None, False]:
+        from ssumo.model.disentangle import QuadraticDiscriminantFilter
+
+        disentangle = {}
+        for feat in disentangle_config["features"]:
+            disentangle[feat] = QuadraticDiscriminantFilter(
+                model_config["z_dim"],
+                disentangle_config["classes"]
             )
 
     ### Initialize/load model

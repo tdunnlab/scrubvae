@@ -4,7 +4,10 @@ import tqdm
 import torch
 import numpy as np
 
-def latents(config, model=None, epoch=None, dataset=None, device="cuda", dataset_label="Train"):
+
+def latents(
+    config, model=None, epoch=None, loader=None, device="cuda", dataset_label="Train"
+):
     """NOT FOR TRAINING
 
     Parameters
@@ -30,16 +33,18 @@ def latents(config, model=None, epoch=None, dataset=None, device="cuda", dataset
     latent_path = "{}/latents/{}_{}.npy".format(
         config["out_path"], dataset_label, epoch
     )
-    
+
     if not Path(latent_path).exists():
-        loader = DataLoader(
-            dataset=dataset, batch_size=config["data"]["batch_size"], shuffle=False, num_workers=5
-        )
+        # loader = DataLoader(
+        #     dataset=dataset, batch_size=config["data"]["batch_size"], shuffle=False, num_workers=5
+        # )
         print("Latent projections not found - Embedding dataset ...")
         latents = []
         with torch.no_grad():
             for _, data in enumerate(tqdm.tqdm(loader)):
-                data = {k:v.to(device) for k,v in data.items() if k in ["x6d", "root"]}
+                data = {
+                    k: v.to(device) for k, v in data.items() if k in ["x6d", "root"]
+                }
                 latents += [model.encode(data)["mu"].detach().cpu()]
 
         latents = torch.cat(latents, axis=0)
@@ -50,7 +55,7 @@ def latents(config, model=None, epoch=None, dataset=None, device="cuda", dataset
     else:
         print("Found existing latent projections - Loading ...")
         latents = np.load(latent_path)
-        assert latents.shape[0] == len(dataset)
+        assert latents.shape[0] == len(loader.dataset)
         latents = torch.tensor(latents)
 
     nonzero_std_z = torch.where(latents.std(dim=0) > 0.1)[0]

@@ -23,7 +23,7 @@ Path(vis_path).mkdir(parents=True, exist_ok=True)
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
 dataset_label = "Train"
 ### Load Datasets
-dataset, _, model = ssumo.get.data_and_model(
+loader, model = ssumo.get.data_and_model(
     config,
     load_model=config["out_path"],
     epoch=sys.argv[2],
@@ -34,7 +34,7 @@ dataset, _, model = ssumo.get.data_and_model(
 )
 
 latents = ssumo.get.latents(
-    config, model, sys.argv[2], dataset, device="cuda", dataset_label=dataset_label
+    config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
 )
 
 if z_null is not None:
@@ -61,7 +61,7 @@ if vis_clusters:
     )
 
     ssumo.plot.sample_clusters(
-        dataset[:]["raw_pose"].detach().cpu().numpy(),
+        loader.dataset[:]["raw_pose"].detach().cpu().numpy(),
         k_pred,
         connectivity,
         "{}/vis_clusters_{}/".format(vis_path, "" if z_null is None else z_null),

@@ -2,7 +2,10 @@ import torch.nn.functional as F
 import torch
 from ssumo.data.rotation_conversion import rotation_6d_to_matrix
 from ssumo.data.dataset import fwd_kin_cont6d_torch
-from ssumo.model.disentangle import MovingAvgLeastSquares
+from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter
+import numpy as np
+
+LN2PI = np.log(2 * np.pi)
 
 
 def balance_disentangle(config, dataset):
@@ -18,6 +21,85 @@ def balance_disentangle(config, dataset):
         print("Finished disentanglement loss balancing...")
         print(config["loss"])
     return config
+
+
+def _gaussian_log_density_unsummed(z, mu, logvar):
+    """First step of Gaussian log-density computation, without summing over dimensions.
+
+    Assumes a diagonal noise covariance matrix.
+
+    Code taken from:
+    Whiteway, Matthew R., et al. "Partitioning variability in animal behavioral
+    videos using semi-supervised variational autoencoders." PLoS computational
+    biology 17.9 (2021): e1009439.
+    """
+    diff_sq = (z - mu) ** 2
+    inv_var = torch.exp(-logvar)
+    return -0.5 * (inv_var * diff_sq + logvar + LN2PI)
+
+
+def total_correlation(z, mu, L):
+    """Estimate total correlation in a batch.
+
+    Compute the expectation over a batch of:
+
+    E_j [log(q(z(x_j))) - log(prod_l q(z(x_j)_l))]
+
+    We ignore the constant as it does not matter for the minimization. The constant should be
+    equal to (n_dims - 1) * log(n_frames * dataset_size).
+
+    Code modified from https://github.com/julian-carpenter/beta-TCVAE/blob/master/nn/losses.py
+
+    Code taken from:
+    Whiteway, Matthew R., et al. "Partitioning variability in animal behavioral
+    videos using semi-supervised variational autoencoders." PLoS computational
+    biology 17.9 (2021): e1009439.
+
+    Parameters
+    ----------
+    z : :obj:`torch.Tensor`
+        sample of shape (n_frames, n_dims)
+    mu : :obj:`torch.Tensor`
+        mean parameter of shape (n_frames, n_dims)
+    logvar : :obj:`torch.Tensor`
+        log variance parameter of shape (n_frames, n_dims)
+
+    Returns
+    -------
+    :obj:`torch.Tensor`
+        total correlation for batch, scalar value
+
+    """
+    logvar = torch.log(torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1))).diagonal(
+        dim1=-1, dim2=-2
+    )
+    # Compute log(q(z(x_j)|x_i)) for every sample/dimension in the batch, which is a tensor of
+    # shape (n_frames, n_dims). In the following comments,
+    # (n_frames, n_frames, n_dims) are indexed by [j, i, l].
+    # z[:, None]: (n_frames, 1, n_dims)
+    # mu[None, :]: (1, n_frames, n_dims)
+    # logvar[None, :]: (1, n_frames, n_dims)
+    log_qz_prob = _gaussian_log_density_unsummed(
+        z[:, None], mu[None, :], logvar[None, :]
+    )
+
+    # Compute log prod_l p(z(x_j)_l) = sum_l(log(sum_i(q(z(x_j)_l|x_i))) + constant) for each
+    # sample in the batch, which is a vector of size (batch_size,).
+    log_qz_product = torch.sum(
+        torch.logsumexp(log_qz_prob, dim=1, keepdim=False),  # logsumexp over batch
+        dim=1,  # sum over gaussian dims
+        keepdim=False,
+    )
+
+    # Compute log(q(z(x_j))) as log(sum_i(q(z(x_j)|x_i))) + constant =
+    # log(sum_i(prod_l q(z(x_j)_l|x_i))) + constant.
+    log_qz = torch.logsumexp(
+        torch.sum(log_qz_prob, dim=2, keepdim=False),  # sum over gaussian dims
+        dim=1,  # logsumexp over batch
+        keepdim=False,
+    )
+
+    return torch.mean(log_qz - log_qz_product)
 
 
 def rotation_loss(x, x_hat, eps=1e-7):
@@ -99,6 +181,15 @@ def hierarchical_orthogonal_loss(L1, L2):
     return torch.sum(torch.matmul(Sig1, Sig2).diagonal(dim1=-1, dim2=-2))
 
 
+def direct_lsq_loss(z, y, bias=False):
+    if bias:
+        z = torch.column_stack((z, torch.ones(z.shape[0], 1, device="cuda")))
+    zz = z.T @ z
+    zy = z.T @ y
+    yhat = z @ torch.linalg.solve(zz, zy)
+    return torch.nn.MSELoss(reduction="sum")(yhat, y)
+
+
 def get_batch_loss(model, data, data_o, loss_scale):
     batch_size = data["x6d"].shape[0]
     batch_loss = {}
@@ -130,6 +221,11 @@ def get_batch_loss(model, data, data_o, loss_scale):
 
     num_keys = len(data_o["disentangle"].keys())
     for key in model.disentangle_keys:
+        if key + "_lsq" in loss_scale.keys():
+            batch_loss[key + "_lsq"] = direct_lsq_loss(
+                data_o["mu"], data[key], bias=loss_scale[key + "_lsq"] < 0
+            )
+
         if key in loss_scale.keys():
             if isinstance(model.disentangle[key], MovingAvgLeastSquares):
                 batch_loss[key] = (
@@ -138,6 +234,11 @@ def get_batch_loss(model, data, data_o, loss_scale):
                         data_o["disentangle"][key][1],
                         data[key],
                     )
+                    / batch_size
+                )
+            elif isinstance(model.disentangle[key], QuadraticDiscriminantFilter):
+                batch_loss[key] = (
+                    model.disentangle[key].evaluate_loss(data_o["mu"], data[key])
                     / batch_size
                 )
             else:
@@ -184,7 +285,7 @@ def get_batch_loss(model, data, data_o, loss_scale):
     #         batch_loss[loss].detach()
 
     batch_loss["total"] = sum(
-        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys() if loss_scale[k] > 0]
+        [loss_scale[k] * batch_loss[k] for k in batch_loss.keys() if loss_scale[k] != 0]
     )
 
     return batch_loss

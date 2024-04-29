@@ -42,6 +42,7 @@ if task_id == "":
     ## Plot R^2
     for key in disentangle_keys:
         f, ax_arr = plt.subplots(rows, 1, figsize=(15, 15))
+        plt.title("R2 of Regression Using {}".format(method.title()))
         for path_i, p in enumerate(analysis_keys):
             for i, metric in enumerate(metrics[p][key].keys()):
                 if rows == 1:

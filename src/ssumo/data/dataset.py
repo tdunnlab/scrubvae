@@ -223,6 +223,23 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
 
     return offsets
 
+def get_speed_outliers(pose, window_inds, threshold=2.25):
+    avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
+    avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
+    outlier_frames = np.where(
+        avg_spd[window_inds[:, 1:], ...].mean(
+            axis=tuple(range(1, len(avg_spd.shape) + 1))
+        )
+        > threshold
+    )[0]
+    outlier_frames = np.unique(outlier_frames)
+    print(
+        "Outlier frames above {}: {}".format(
+            threshold, len(outlier_frames)
+        )
+    )
+    return outlier_frames
+
 class MouseDataset(Dataset):
     def __init__(
         self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train"

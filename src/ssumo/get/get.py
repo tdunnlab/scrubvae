@@ -20,7 +20,7 @@ def data_and_model(
         load_model = config["model"]["load_model"]
 
     ### Load Dataset
-    dataset, loader = ssumo.get.mouse_data(
+    loader = ssumo.get.mouse_data(
         data_config=config["data"],
         window=config["model"]["window"],
         train=dataset_label == "Train",
@@ -34,15 +34,15 @@ def data_and_model(
         load_model=load_model,
         epoch=epoch,
         disentangle_config=config["disentangle"],
-        n_keypts=dataset.n_keypts,
+        n_keypts=loader.dataset.n_keypts,
         direction_process=config["data"]["direction_process"],
-        arena_size=dataset.arena_size,
-        kinematic_tree=dataset.kinematic_tree,
+        arena_size=loader.dataset.arena_size,
+        kinematic_tree=loader.dataset.kinematic_tree,
         bound=config["data"]["normalize"] == "bounded",
         device="cuda",
         verbose=verbose,
     )
-    return dataset, loader, model
+    return loader, model
 
 
 def all_saved_epochs(path):

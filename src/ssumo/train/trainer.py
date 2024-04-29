@@ -1,12 +1,13 @@
 import torch
 from ssumo.train.losses import get_batch_loss, balance_disentangle
 from ssumo.train.mutual_inf import MutInfoEstimator
-from ssumo.model.disentangle import MovingAvgLeastSquares
+from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter
 from ssumo.plot.eval import loss as plt_loss
 import torch.optim as optim
 import tqdm
 import pickle
 import functools
+import time
 
 
 class CyclicalBetaAnnealing(torch.nn.Module):
@@ -24,7 +25,6 @@ class CyclicalBetaAnnealing(torch.nn.Module):
             beta = self.beta_max * remainder / self.len_increasing
 
         return beta
-
 
 def get_beta_schedule(schedule, beta):
     if schedule == "cyclical":
@@ -154,7 +154,9 @@ def train_epoch(
 
             if bool(model.disentangle):
                 for k, v in model.disentangle.items():
-                    if isinstance(v, MovingAvgLeastSquares):
+                    if isinstance(v, MovingAvgLeastSquares) or isinstance(
+                        v, QuadraticDiscriminantFilter
+                    ):
                         model.disentangle[k].update(data_o["mu"], data[k])
 
         epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
@@ -223,7 +225,6 @@ def train_epoch_mcmi(
 def train(config, model, loader):
     torch.autograd.set_detect_anomaly(True)
     torch.backends.cudnn.benchmark = True
-    # Balance disentanglement losses
     config = balance_disentangle(config, loader.dataset)
 
     optimizer, scheduler = get_optimizer_and_lr_scheduler(
@@ -241,12 +242,24 @@ def train(config, model, loader):
     else:
         beta_scheduler = None
 
-    if config["train"]["load_model"] == config["out_path"]:
-        loss_dict = pickle.load(open("{}/losses/loss_dict.p".format(config["train"]["load_model"])))
+    if config["model"]["load_model"] == config["out_path"]:
+        try:
+            loss_dict = pickle.load(
+                open(
+                    "{}/losses/loss_dict.p".format(config["model"]["load_model"]), "rb"
+                )
+            )
+        except:
+            loss_dict = pickle.load(
+                open(
+                    "{}/losses/loss_dict_Train.p".format(config["model"]["load_model"]),
+                    "rb",
+                )
+            )
     else:
-        loss_dict_keys = ["total"] + list(config["loss"].keys())
+        loss_dict_keys = ["total", "time", "epoch"] + list(config["loss"].keys())
         loss_dict = {k: [] for k in loss_dict_keys}
-    
+
     for epoch in tqdm.trange(
         config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
     ):
@@ -267,6 +280,7 @@ def train(config, model, loader):
         else:
             train_func = functools.partial(train_epoch)
 
+        starttime = time.time()
         epoch_loss = train_func(
             model=model,
             optimizer=optimizer,
@@ -277,9 +291,11 @@ def train(config, model, loader):
             epoch=epoch,
             mode="train",
         )
+        epoch_loss["time"] = time.time() - starttime
+        epoch_loss["epoch"] = epoch
         loss_dict = {k: v + [epoch_loss[k]] for k, v in loss_dict.items()}
 
-        if epoch % 10 == 0:
+        if epoch % 2 == 0:
             print("Saving model to folder: {}".format(config["out_path"]))
             torch.save(
                 {k: v.cpu() for k, v in model.state_dict().items()},
@@ -288,7 +304,7 @@ def train(config, model, loader):
 
             pickle.dump(
                 loss_dict,
-                open("{}/losses/loss_dict.p".format(config["out_path"]), "wb"),
+                open("{}/losses/loss_dict_Train.p".format(config["out_path"]), "wb"),
             )
 
             plt_loss(loss_dict, config["out_path"], config["disentangle"]["features"])

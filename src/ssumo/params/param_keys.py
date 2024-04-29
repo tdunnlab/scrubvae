@@ -20,6 +20,8 @@ PARAM_KEYS = dict(
         "method",
         "moving_avg_lsq",
         "n_models",
+        "polynomial",
+        "quadratic_ovr",
         "var_mode",
     ],
     model=[

@@ -41,7 +41,7 @@ def epoch_regression(
         epochs_to_test = metrics["epochs"]
 
     if len(epochs_to_test) > 0:
-        dataset = get.mouse_data(
+        loader = get.mouse_data(
             data_config=config["data"],
             window=config["model"]["window"],
             train=dataset_label == "Train",
@@ -51,7 +51,7 @@ def epoch_regression(
             ]
             + disentangle_keys,
             shuffle=False,
-            normalize=[d for d in disentangle_keys if d is not "ids"],
+            normalize=[d for d in disentangle_keys if d != "ids"],
         )[0]
 
     for _, epoch in enumerate(epochs_to_test):
@@ -61,22 +61,22 @@ def epoch_regression(
             load_model=config["out_path"],
             epoch=epoch,
             disentangle_config=config["disentangle"],
-            n_keypts=dataset.n_keypts,
+            n_keypts=loader.dataset.n_keypts,
             direction_process=config["data"]["direction_process"],
-            arena_size=dataset.arena_size,
-            kinematic_tree=dataset.kinematic_tree,
+            arena_size=loader.dataset.arena_size,
+            kinematic_tree=loader.dataset.kinematic_tree,
             bound=config["data"]["normalize"] is not None,
             verbose=-1,
         )
 
-        z = get.latents(config, model, epoch, dataset, "cuda", dataset_label)
+        z = get.latents(config, model, epoch, loader, "cuda", dataset_label)
 
         for key in disentangle_keys:
             print("Decoding Feature: {}".format(key))
             if key == "ids":
-                y_true = dataset[:][key][:,0].detach().cpu().numpy().astype(np.int)
+                y_true = loader.dataset[:][key].detach().cpu().numpy().astype(np.int)
             else:
-                y_true = dataset[:][key].detach().cpu().numpy()
+                y_true = loader.dataset[:][key].detach().cpu().numpy()
             
             if method == "log_class":
                 accuracy = log_class_regression(z, y_true)
