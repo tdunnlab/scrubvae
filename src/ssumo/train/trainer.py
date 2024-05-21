@@ -26,6 +26,7 @@ class CyclicalBetaAnnealing(torch.nn.Module):
 
         return beta
 
+
 def get_beta_schedule(schedule, beta):
     if schedule == "cyclical":
         print("Initializing cyclical beta annealing")
@@ -127,6 +128,7 @@ def train_epoch(
     loader,
     device,
     loss_config,
+    disentangle_config,
     epoch,
     mode="train",
 ):
@@ -143,6 +145,7 @@ def train_epoch(
             data,
             data_o,
             loss_config,
+            disentangle_config,
         )
 
         if mode == "train":
@@ -153,11 +156,12 @@ def train_epoch(
                 scheduler.step(epoch + batch_idx / len(loader))
 
             if bool(model.disentangle):
-                for k, v in model.disentangle.items():
-                    if isinstance(v, MovingAvgLeastSquares) or isinstance(
-                        v, QuadraticDiscriminantFilter
-                    ):
-                        model.disentangle[k].update(data_o["mu"], data[k])
+                for method in model.disentangle.keys():
+                    if method in ["moving_avg_lsq", "moving_avg", "qda"]:
+                        for k in model.disentangle[method].keys():
+                            model.disentangle[method][k].update(
+                                data_o["mu"].detach().clone(), data[k].detach().clone()
+                            )
 
         epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
 
@@ -172,10 +176,10 @@ def train_epoch_mcmi(
     loader,
     device,
     loss_config,
+    disentangle_config,
     epoch,
     bandwidth=1,
     var_mode="sphere",
-    gamma=1,
     mode="train",
 ):
     epoch_loss = {k: 0 for k in ["total"] + list(loss_config.keys())}
@@ -188,7 +192,9 @@ def train_epoch_mcmi(
         data_o = predict_batch(model, data, model.disentangle_keys)
 
         variables = torch.cat([data[k] for k in model.disentangle_keys], dim=-1)
-        batch_loss = get_batch_loss(model, data, data_o, loss_config)
+        batch_loss = get_batch_loss(
+            model, data, data_o, loss_config, disentangle_config
+        )
         if batch_idx > 0:
             batch_loss["mcmi"] = mi_estimator(data_o["mu"], variables)
             batch_loss["total"] += loss_config["mcmi"] * batch_loss["mcmi"]
@@ -203,17 +209,18 @@ def train_epoch_mcmi(
             if scheduler is not None:
                 scheduler.step(epoch + batch_idx / len(loader))
 
+        updated_data_o = model.encode(data)
         if var_mode == "diagonal":
-            L_sample = data_o["L"].detach().clone()
+            L_sample = updated_data_o["L"].detach().clone()
             var_sample = L_sample.diagonal(dim1=-2, dim2=-1) ** 2 + bandwidth
         else:
             var_sample = bandwidth
 
         mi_estimator = MutInfoEstimator(
-            data_o["mu"].detach().clone(),
+            updated_data_o["mu"].detach().clone(),
             variables.clone(),
             var_sample,
-            gamma=gamma,
+            bandwidth=bandwidth,
             var_mode=var_mode,
             device=device,
         )
@@ -274,7 +281,6 @@ def train(config, model, loader):
             train_func = functools.partial(
                 train_epoch_mcmi,
                 var_mode=config["disentangle"]["var_mode"],
-                gamma=config["disentangle"]["gamma"],
                 bandwidth=config["disentangle"]["bandwidth"],
             )
         else:
@@ -288,14 +294,20 @@ def train(config, model, loader):
             loader=loader,
             device="cuda",
             loss_config=config["loss"],
+            disentangle_config=config["disentangle"],
             epoch=epoch,
             mode="train",
         )
+        
+        if "grad_reversal" in model.disentangle.keys():
+            for key in model.disentangle["grad_reversal"].keys():
+                model.disentangle["grad_reversal"][key].reset_parameters()
+
         epoch_loss["time"] = time.time() - starttime
         epoch_loss["epoch"] = epoch
         loss_dict = {k: v + [epoch_loss[k]] for k, v in loss_dict.items()}
 
-        if epoch % 2 == 0:
+        if epoch % 5 == 0:
             print("Saving model to folder: {}".format(config["out_path"]))
             torch.save(
                 {k: v.cpu() for k, v in model.state_dict().items()},

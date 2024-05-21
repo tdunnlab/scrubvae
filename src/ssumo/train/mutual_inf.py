@@ -2,7 +2,7 @@ import torch
 
 class MutInfoEstimator(torch.nn.Module):
 
-    def __init__(self, x_s, y_s, var_s, var_mode="sphere",gamma=None, device="cuda"):
+    def __init__(self, x_s, y_s, var_s, bandwidth, var_mode="sphere", device="cuda"):
         """
         x_s: array with shape (num_s, x_dim)
         y_s: array with shape (num_s, y_dim)
@@ -23,19 +23,16 @@ class MutInfoEstimator(torch.nn.Module):
         if self.var_mode == "sphere":
             self.register_buffer("var_s",torch.tensor([var_s], device=device, requires_grad=False))
             logA_x = self.x_dim * (log2pi + torch.log(self.var_s))
-            if gamma == None:
-                self.gamma = self.var_s
-            else:
-                self.gamma = gamma
         elif self.var_mode == "diagonal":
             self.register_buffer("var_s", var_s)
             logA_x = (
                 self.x_dim * log2pi + torch.sum(torch.log(self.var_s), dim=-1)
             )[None, :]
-            self.gamma = gamma
+
+        self.gamma = bandwidth
 
         logA_y = self.y_dim * (
-            log2pi + torch.log(torch.tensor([gamma], device=device))
+            log2pi + torch.log(torch.tensor([self.gamma], device=device))
         )
         self.register_buffer("logA_x", logA_x)
         self.register_buffer("logA_y", logA_y)

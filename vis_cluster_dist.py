@@ -27,7 +27,7 @@ for key in ["heading", "ids"]:
     # k_pred_null = np.load(vis_path + "z_{}_gmm.npy".format(key))
     if key == "heading":
         heading = dataset[:]["heading"].cpu().detach().numpy()
-        feat = np.arctan2(heading[:, 1], heading[:, 0])
+        feat = np.arctan2(heading[:, 0], heading[:, 1])
     else:
         feat = dataset[:][key].cpu().detach().numpy().squeeze()
 

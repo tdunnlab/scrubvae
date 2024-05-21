@@ -36,9 +36,11 @@ def data_and_model(
         disentangle_config=config["disentangle"],
         n_keypts=loader.dataset.n_keypts,
         direction_process=config["data"]["direction_process"],
+        loss_config=config["loss"],
         arena_size=loader.dataset.arena_size,
         kinematic_tree=loader.dataset.kinematic_tree,
         bound=config["data"]["normalize"] == "bounded",
+        discrete_classes = loader.dataset.discrete_classes,
         device="cuda",
         verbose=verbose,
     )

@@ -1,0 +1,10 @@
+PATHS: 
+  - vanilla_64/1
+  - mi_64_new/1
+  - cvae_64/1
+  - total_correlation/cvae_tc_1
+  - total_correlation/cvae_tc_10
+  - total_correlation/van_tc_1
+  - total_correlation/van_tc_10
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/total_correlation/

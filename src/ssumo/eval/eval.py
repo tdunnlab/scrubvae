@@ -58,7 +58,7 @@ def traverse_latent(
         print("Latent Norm: {}".format(torch.linalg.norm(sample_latent[0])))
         sample_latent += graded_z_shift
 
-    data_o = vae.decode(sample_latent)
+    data_o = vae.decode(z = sample_latent, data={})
     offsets = dataset[index]["offsets"].cuda()
     pose = (
         fwd_kin_cont6d_torch(

@@ -55,7 +55,8 @@ def latents(
     else:
         print("Found existing latent projections - Loading ...")
         latents = np.load(latent_path)
-        assert latents.shape[0] == len(loader.dataset)
+        if loader is not None:
+            assert latents.shape[0] == len(loader.dataset)
         latents = torch.tensor(latents)
 
     nonzero_std_z = torch.where(latents.std(dim=0) > 0.1)[0]

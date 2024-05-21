@@ -15,7 +15,7 @@ if len(sys.argv) > 2:
 
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
-dataset, loader, model = ssumo.get.data_and_model(
+loader, model = ssumo.get.data_and_model(
     config,
     dataset_label="Train",
     data_keys=["x6d", "root", "offsets", "target_pose"]

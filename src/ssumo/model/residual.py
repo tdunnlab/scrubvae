@@ -278,11 +278,12 @@ class ResidualDecoder(nn.Module):
         x = torch.tanh(self.conv_out(x))
         return x
 
+
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
         return self
-    
+
     def sampling(self, mu, L):
         """Reparameterization trick
 
@@ -295,15 +296,35 @@ class VAE(nn.Module):
         """
         eps = torch.randn_like(mu)
         return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
-    
+
     def forward(self, data):
         data_o = self.encode(data)
         z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+        data_o["z"] = z
 
         # Running disentangle
-        data_o["disentangle"] = {
-            k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
-        }
+        data_o["disentangle"] = {}
+        if "linear" in self.disentangle.keys():
+            data_o["disentangle"]["linear"] = {
+                k: model(data_o["mu"])
+                for k, model in self.disentangle["linear"].items()
+            }
+
+        for method, module_dict in self.disentangle.items():
+            if method == "linear":
+                continue
+            else:
+                data_o["disentangle"][method] = {}
+                for k, model in module_dict.items():
+                    if "linear" in self.disentangle.keys():
+                        latent = data_o["disentangle"]["linear"][k]["z_null"]
+                    else:
+                        latent = data_o["mu"]
+                    data_o["disentangle"][method][k] = model(latent)
+
+            # data_o["disentangle"][method] = {k: model(latent) for k, model in module_dict.items()}
+        #     k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
+        # }
 
         data_o.update(self.decode(z, data))
 
@@ -326,6 +347,8 @@ class ResVAE(VAE):
         kinematic_tree=None,
         arena_size=None,
         disentangle_keys=None,
+        conditional_keys=None,
+        discrete_classes=None,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -336,6 +359,8 @@ class ResVAE(VAE):
         self.kinematic_tree = kinematic_tree
         self.register_buffer("arena_size", arena_size)
         self.disentangle_keys = disentangle_keys
+        self.conditional_keys = conditional_keys
+        self.discrete_classes = discrete_classes
         self.encoder = ResidualEncoder(
             in_channels,
             ch=ch,
@@ -357,9 +382,11 @@ class ResVAE(VAE):
             init_dilation=init_dilation,
         )
         if disentangle is not None:
-            self.disentangle = nn.ModuleDict(disentangle)
-        else:
             self.disentangle = nn.ModuleDict()
+            for k, v in disentangle.items():
+                self.disentangle[k] = nn.ModuleDict(v)
+        else:
+            self.disentangle = nn.ModuleDict(nn.ModuleDict())
 
     def normalize_root(self, root):
         norm_root = root - self.arena_size[0]
@@ -388,10 +415,20 @@ class ResVAE(VAE):
         return data_o
 
     def decode(self, z, data):
-        
         data_o = {}
         if self.conditional_dim > 0:
-            z = torch.cat([z] + [data[k] for k in self.disentangle_keys], dim=-1)
+            conditional_vars = [
+                (
+                    F.one_hot(data[k].ravel().long(), len(self.discrete_classes[k]))
+                    if k in self.discrete_classes.keys()
+                    else data[k]
+                )
+                for k in self.conditional_keys
+            ]
+            z = torch.cat(
+                [z] + conditional_vars,
+                dim=-1,
+            )
 
         x_hat = self.decoder(z).moveaxis(-1, 1)
 

@@ -242,11 +242,13 @@ def get_speed_outliers(pose, window_inds, threshold=2.25):
 
 class MouseDataset(Dataset):
     def __init__(
-        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train"
+        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train", discrete_classes = None
     ):
         self.data = data
         self.window_inds = window_inds
         self.n_keypts = n_keypts
+        self.discrete_classes = discrete_classes
+
         if arena_size is not None:
             self.arena_size = torch.tensor(arena_size)
         else:

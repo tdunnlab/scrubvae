@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from dappy import read
 import pickle
-from sklearn.model_selection import cross_val_score
+from ssumo.eval.metrics import custom_cv_5folds
 from sklearn.linear_model import LogisticRegression
 
 palette = ssumo.plot.constants.PALETTE_2
@@ -34,7 +34,7 @@ loader = ssumo.get.mouse_data(
         "x6d",
         "root",
         "avg_speed_3d",
-        "fluorescence"
+        "fluorescence",
     ],
     shuffle=False,
     normalize=["avg_speed_3d"],
@@ -45,10 +45,11 @@ speed = loader.dataset[:]["avg_speed_3d"].cpu().detach().numpy()
 metrics_full = {}
 for an_key in analysis_keys:
     path = "{}/{}/".format(RESULTS_PATH, an_key)
+    metrics = pickle.load(open(path + "pd_Train.p", "rb"))
     config = read.config(path + "/model_config.yaml")
     config["model"]["load_model"] = config["out_path"]
 
-    pickle_path = "{}/pd__{}.p".format(config["out_path"], "Train")
+    pickle_path = "{}/pd_{}.p".format(config["out_path"], "Train")
     if Path(pickle_path).is_file():
         metrics = pickle.load(open(pickle_path, "rb"))
         epochs_to_test = [
@@ -71,16 +72,18 @@ for an_key in analysis_keys:
             disentangle_config=config["disentangle"],
             n_keypts=loader.dataset.n_keypts,
             direction_process=config["data"]["direction_process"],
+            loss_config = config["loss"],
             arena_size=loader.dataset.arena_size,
             kinematic_tree=loader.dataset.kinematic_tree,
             bound=config["data"]["normalize"] is not None,
+            discrete_classes=loader.dataset.discrete_classes,
             verbose=-1,
         )
 
         z = ssumo.get.latents(config, model, epoch, loader, "cuda", "Train")
         clf = LogisticRegression(solver="sag", max_iter=200)
         metrics["Latents"] += [cross_val_score(clf, z, pd_label).mean()]
-        metrics["Both"] += [cross_val_score(clf, np.concatenate([z, speed], axis=-1), pd_label).mean()]
+        # metrics["Both"] += [cross_val_score(clf, np.concatenate([z, speed], axis=-1), pd_label).mean()]
 
     pickle.dump(
         metrics,
@@ -89,36 +92,39 @@ for an_key in analysis_keys:
     metrics_full[an_key] = metrics
 
 
-speed_preds = cross_val_score(clf, speed, pd_label).mean()
+# speed_preds = cross_val_score(clf, speed, pd_label).mean()
 if task_id == "":
     ## Plot R^2
-    f = plt.figure(figsize=(10, 15))
+    f = plt.figure(figsize=(15, 10))
     plt.title("5-Fold Logistic PD Classification")
     max_epochs = 0
     for path_i, p in enumerate(analysis_keys):
-        for i, metric in enumerate(metrics[p].keys()):
+        for i, metric in enumerate(metrics_full[p].keys()):
+            if metric == "epochs":
+                continue
+
             plt.plot(
-                metrics[p]["epochs"],
-                metrics[p][metric],
+                metrics_full[p]["epochs"],
+                metrics_full[p][metric],
                 label="{} {}".format(p, metric),
                 color=palette[path_i*2 + i],
                 alpha=0.5,
             )
-            max_epochs = max(max_epochs, metrics[p]["epochs"].max())
+            max_epochs = max(max_epochs, metrics_full[p]["epochs"].max())
 
-    plt.plot(
-        np.arange(max_epochs),
-        np.ones(max_epochs)*speed_preds,
-        label="Speed Only",
-        color=palette[-1],
-        alpha=0.5,
-    )
+    # plt.plot(
+    #     np.arange(max_epochs),
+    #     np.ones(max_epochs)*speed_preds,
+    #     label="Speed Only",
+    #     color=palette[-1],
+    #     alpha=0.5,
+    # )
 
     plt.ylabel("Accuracy")
     plt.legend()
     plt.xlabel("Epoch")
-    plt.ylim(bottom=max(min(metrics[p][metric]), 0))
-    plt.ylim(bottom=0, top=1)
+    # plt.ylim(bottom=max(min(metrics_full[p][metric]), 0))
+    plt.ylim(bottom=0.5, top=1)
 
     f.tight_layout()
     plt.savefig("{}/speed_pd_epoch.png".format(out_path))

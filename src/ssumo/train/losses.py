@@ -2,7 +2,6 @@ import torch.nn.functional as F
 import torch
 from ssumo.data.rotation_conversion import rotation_6d_to_matrix
 from ssumo.data.dataset import fwd_kin_cont6d_torch
-from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter
 import numpy as np
 
 LN2PI = np.log(2 * np.pi)
@@ -70,9 +69,9 @@ def total_correlation(z, mu, L):
         total correlation for batch, scalar value
 
     """
-    logvar = torch.log(torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1))).diagonal(
+    logvar = torch.log(torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1)).diagonal(
         dim1=-1, dim2=-2
-    )
+    ))
     # Compute log(q(z(x_j)|x_i)) for every sample/dimension in the batch, which is a tensor of
     # shape (n_frames, n_dims). In the following comments,
     # (n_frames, n_frames, n_dims) are indexed by [j, i, l].
@@ -80,7 +79,7 @@ def total_correlation(z, mu, L):
     # mu[None, :]: (1, n_frames, n_dims)
     # logvar[None, :]: (1, n_frames, n_dims)
     log_qz_prob = _gaussian_log_density_unsummed(
-        z[:, None], mu[None, :], logvar[None, :]
+        z[:, None].detach(), mu[None, :], logvar[None, :]
     )
 
     # Compute log prod_l p(z(x_j)_l) = sum_l(log(sum_i(q(z(x_j)_l|x_i))) + constant) for each
@@ -98,7 +97,6 @@ def total_correlation(z, mu, L):
         dim=1,  # logsumexp over batch
         keepdim=False,
     )
-
     return torch.mean(log_qz - log_qz_product)
 
 
@@ -190,7 +188,7 @@ def direct_lsq_loss(z, y, bias=False):
     return torch.nn.MSELoss(reduction="sum")(yhat, y)
 
 
-def get_batch_loss(model, data, data_o, loss_scale):
+def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
     batch_size = data["x6d"].shape[0]
     batch_loss = {}
 
@@ -219,58 +217,74 @@ def get_batch_loss(model, data, data_o, loss_scale):
             torch.nn.MSELoss(reduction="sum")(data_o["root"], data["root"]) / batch_size
         )
 
-    num_keys = len(data_o["disentangle"].keys())
-    for key in model.disentangle_keys:
-        if key + "_lsq" in loss_scale.keys():
-            batch_loss[key + "_lsq"] = direct_lsq_loss(
-                data_o["mu"], data[key], bias=loss_scale[key + "_lsq"] < 0
-            )
+    num_methods = len(data_o["disentangle"].keys())
+    methods_dict = disentangle_config["method"]
+    for method, disentangle_keys in methods_dict.items():
+        num_keys = len(disentangle_keys)
+        for key in disentangle_keys:
+            if "linear" in methods_dict.keys():
+                latent = data_o["disentangle"]["linear"][key]["z_null"]
+            else:
+                latent = data_o["mu"]
 
-        if key in loss_scale.keys():
-            if isinstance(model.disentangle[key], MovingAvgLeastSquares):
-                batch_loss[key] = (
-                    model.disentangle[key].evaluate_loss(
-                        data_o["disentangle"][key][0],
-                        data_o["disentangle"][key][1],
+            if method == "moving_avg_lsq":
+                batch_loss[key + "_mals"] = (
+                    model.disentangle[method][key].evaluate_loss(
+                        data_o["disentangle"][method][key][0],
+                        data_o["disentangle"][method][key][1],
                         data[key],
                     )
                     / batch_size
                 )
-            elif isinstance(model.disentangle[key], QuadraticDiscriminantFilter):
-                batch_loss[key] = (
-                    model.disentangle[key].evaluate_loss(data_o["mu"], data[key])
+
+            if method == "qda":
+                batch_loss[key + "_qda"] = (
+                    model.disentangle[method][key].evaluate_loss(latent, data[key])
                     / batch_size
                 )
-            else:
-                batch_loss[key] = (
+
+            if method == "direct_lsq":
+                batch_loss[key + "_lsq"] = direct_lsq_loss(
+                    latent, data[key], bias=loss_scale[key + "_lsq"] < 0
+                )
+
+            if method == "linear":
+                batch_loss[key + "_lin"] = (
                     torch.nn.MSELoss(reduction="sum")(
-                        data_o["disentangle"][key]["v"], data[key]
+                        data_o["disentangle"][method][key]["v"], data[key]
                     )
                     / num_keys
                     / batch_size
                 )
 
-        if key + "_gr" in loss_scale.keys():
-            if isinstance(data_o["disentangle"][key]["gr"], list):
+            if method == "grad_reversal":
                 batch_loss[key + "_gr"] = 0
-                for gr_e in data_o["disentangle"][key]["gr"]:
-                    batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="sum")(
-                        gr_e, data[key]
+                for gr_e in data_o["disentangle"][method][key]:
+                    if key == "ids":
+                        batch_loss[key + "_gr"] += torch.nn.CrossEntropyLoss(
+                            reduction="sum"
+                        )(gr_e, data[key].ravel().long())
+                    else:
+                        batch_loss[key + "_gr"] += torch.nn.MSELoss(reduction="sum")(
+                            gr_e, data[key]
+                        )
+
+                    batch_loss[key + "_gr"] = (
+                        batch_loss[key + "_gr"]
+                        / len(data_o["disentangle"][method][key])
+                        / num_keys
+                        / batch_size
                     )
-                batch_loss[key + "_gr"] = (
-                    batch_loss[key + "_gr"]
-                    / len(data_o["disentangle"][key]["gr"])
-                    / num_keys
-                    / batch_size
+
+            if method == "moving_avg":
+                batch_loss[key + "_ma"] = model.disentangle[method][key].evaluate_loss(
+                    latent, data[key]
                 )
-            elif torch.is_tensor(data_o["disentangle"][key]["gr"]):
-                batch_loss[key + "_gr"] = (
-                    torch.nn.MSELoss(reduction="sum")(
-                        data_o["disentangle"][key], data[key]
-                    )
-                    / num_keys
-                    / batch_size
-                )
+
+    if "total_correlation" in loss_scale.keys():
+        batch_loss["total_correlation"] = total_correlation(
+            data_o["z"], data_o["mu"], data_o["L"]
+        )
 
     # if "speed_regularize" in loss_scale.keys():
     #     batch_loss["speed_regularize"] = torch.sum(

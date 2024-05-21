@@ -9,4 +9,4 @@
 #SBATCH --output=./save_pose_6s5.out
 
 source activate vae
-python -u save_pose_reps.py
+python -u pd_fig.py #save_pose_reps.py

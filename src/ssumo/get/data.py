@@ -8,11 +8,12 @@ from torch.utils.data import DataLoader
 from pathlib import Path
 
 TRAIN_IDS = {
-    "immunostain": np.arange(74),
+    # "immunostain": np.arange(74),
+    # "immunostain": np.array([1,6,35,36,38,43,72,73]),
+    "immunostain": np.array([18,19,21,36,55,56,58,73]),
     "ensemble_healthy": np.arange(3),
     "neurips_mouse": np.arange(9),
 }
-
 
 def get_babel(
     data_config: dict,
@@ -123,32 +124,34 @@ def mouse_pd_data(
     data_keys: List[str] = ["x6d", "root", "offsets"],
 ):
     REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
-    if (data_config["remove_speed_outliers"] is not None) or ("ids" in data_keys) or ("raw_pose" in data_keys):
+    if (
+        (data_config["remove_speed_outliers"] is not None)
+        or ("ids" in data_keys)
+        or ("raw_pose" in data_keys)
+    ):
         pose, ids = read.pose_h5(data_config["data_path"], dtype=np.float64)
-        
+        pose = pose[..., REORDER, :]
+
     parent_path = str(Path(data_config["data_path"]).parents[0])
     subfolders = ["/6ohda/", "/healthy/"]
 
     window_inds = get_window_indices(ids, data_config["stride"], window)
     if data_config["remove_speed_outliers"] is not None:
         outlier_frames = get_speed_outliers(
-            pose[..., REORDER, :], window_inds, data_config["remove_speed_outliers"]
+            pose, window_inds, data_config["remove_speed_outliers"]
         )
         kept_frames = np.arange(len(window_inds), dtype=np.int)
         kept_frames = np.delete(kept_frames, outlier_frames, 0)
         window_inds = window_inds[kept_frames]
         print("Window Inds: {}".format(window_inds.shape))
 
-    saved_tensors = ["avg_speed_3d","offsets", "root", "target_pose", "x6d"]
+    saved_tensors = ["avg_speed_3d", "offsets", "root", "target_pose", "x6d"]
     data = {k: [] for k in data_keys if k in saved_tensors}
     for key in data.keys():
         print("Loading in {} data".format(key))
         for subfolder in subfolders:
             if key == "avg_speed_3d":
-                npy_path = "{}{}speed_3d".format(
-                    parent_path,
-                    subfolder
-                )
+                npy_path = "{}{}speed_3d".format(parent_path, subfolder)
                 data[key] += [np.load(npy_path + ".npy")]
             elif key != "offsets":
                 npy_path = "{}{}{}_{}_s{}".format(
@@ -177,10 +180,6 @@ def mouse_pd_data(
     if "raw_pose" in data_keys:
         data["raw_pose"] = torch.tensor(pose, dtype=torch.float32)
 
-    if "ids" in data_keys:
-        ids[ids >= 37] -= 37
-        data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
-
     if "fluorescence" in data_keys:
         import pandas as pd
 
@@ -188,6 +187,10 @@ def mouse_pd_data(
         meta_by_frame = meta.iloc[ids]
         fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
         data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
+
+    if "ids" in data_keys:
+        ids[ids >= 37] -= 37
+        data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
 
     for k, v in data.items():
         print("{}: {}".format(k, v.shape))
@@ -220,7 +223,16 @@ def mouse_data(
     skeleton_config = read.config(data_config["skeleton_path"])
 
     if "immunostain" in data_config["data_path"]:
-        data, window_inds = mouse_pd_data(data_config, window, data_keys)
+        if (data_config["stride"] == 5) or (data_config["stride"] == 10):
+            data, window_inds = mouse_pd_data(data_config, window, data_keys)
+        else:
+            data, window_inds = calculate_mouse_kinematics(
+                data_config,
+                skeleton_config,
+                window,
+                train,
+                data_keys,
+            )
     else:
         data, window_inds = calculate_mouse_kinematics(
             data_config,
@@ -251,6 +263,20 @@ def mouse_data(
                 data[key] -= data[key].mean(axis=0)
                 data[key] /= data[key].std(axis=0)
 
+    discrete_classes = {}
+    if "ids" in data.keys():
+        if "immunostain" in data_config["data_path"]:
+            if not ((data_config["stride"] == 5) or (data_config["stride"] == 10)):
+                data["ids"][data["ids"]>=37]-= 37
+                unique_ids = torch.unique(data["ids"])
+                discrete_classes["ids"] = torch.arange(len(unique_ids)).long()
+                for id in unique_ids:
+                    data["ids"][data["ids"]==id] = discrete_classes["ids"][id==unique_ids]
+            else:
+                discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
+        else:
+            discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
+
     dataset = MouseDataset(
         data,
         window_inds,
@@ -258,6 +284,7 @@ def mouse_data(
         skeleton_config["KINEMATIC_TREE"],
         len(skeleton_config["LABELS"]),
         label="Train" if train else "Test",
+        discrete_classes=discrete_classes,
     )
 
     loader = DataLoader(
@@ -290,18 +317,12 @@ def calculate_mouse_kinematics(
     ids = ids[set_ids]
 
     window_inds = get_window_indices(ids, data_config["stride"], window)
-    if data_config["remove_speed_outliers"] is not None:
-        outlier_frames = get_speed_outliers(
-            pose, window_inds, data_config["remove_speed_outliers"]
-        )
-        window_inds = np.delete(window_inds, outlier_frames, 0)
 
     ## Smoothing
     if data_config["filter_pose"]:
         pose = preprocess.median_filter(pose, ids, 5)
 
     data = {"raw_pose": pose} if "raw_pose" in data_keys else {}
-
     speed_key = [key for key in data_keys if "speed" in key]
     assert len(speed_key) < 2
     if len(speed_key) > 0:
@@ -323,19 +344,8 @@ def calculate_mouse_kinematics(
             speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
 
     if data_config["remove_speed_outliers"] is not None:
-        avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
-        avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
-        outlier_frames = np.where(
-            avg_spd[window_inds[:, 1:], ...].mean(
-                axis=tuple(range(1, len(avg_spd.shape) + 1))
-            )
-            > data_config["remove_speed_outliers"]
-        )[0]
-        outlier_frames = np.unique(outlier_frames)
-        print(
-            "Outlier frames above {}: {}".format(
-                data_config["remove_speed_outliers"], len(outlier_frames)
-            )
+        outlier_frames = get_speed_outliers(
+            pose, window_inds, data_config["remove_speed_outliers"]
         )
         window_inds = np.delete(window_inds, outlier_frames, 0)
 
@@ -350,10 +360,10 @@ def calculate_mouse_kinematics(
         )
 
     if "heading" in data_keys:
-        data["heading"] = get_angle2D(yaw[window_inds][:, window // 2][..., None])
+        data["heading"] = get_angle2D(yaw[window_inds][:, window // 2])
 
     if data_config["direction_process"] in ["midfwd", "x360"]:
-        yaw = yaw[window_inds][:, window // 2][..., None]
+        yaw = yaw[window_inds][:, window // 2]  # [..., None]
 
     if ("root" or "x6d") in data_keys:
         root = pose[..., 0, :]
@@ -413,6 +423,15 @@ def calculate_mouse_kinematics(
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
     if "ids" in data_keys:
         data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
+
+    if "fluorescence" in data_keys:
+        parent_path = str(Path(data_config["data_path"]).parents[0])
+        import pandas as pd
+
+        meta = pd.read_csv(parent_path + "/metadata.csv")
+        meta_by_frame = meta.iloc[ids]
+        fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
+        data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
 
     if "target_pose" in data_keys:
         reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])

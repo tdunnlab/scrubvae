@@ -53,6 +53,7 @@ def gmm(
         covariance_type=covariance_type,
         max_iter=150,
         init_params = "k-means++",
+        reg_covar=1e-5,
         verbose=1,
     ).fit(latents)
 

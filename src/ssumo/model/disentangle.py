@@ -4,6 +4,7 @@ import torch
 from torch.nn.functional import mse_loss
 import numpy as np
 
+
 class MovingAverageFilter(nn.Module):
     """
     Stores a moving average over streaming minibatches of data
@@ -11,6 +12,7 @@ class MovingAverageFilter(nn.Module):
     """
 
     def __init__(self, nx, classes, lamdiff=1e-2, delta=1e-3):
+        super().__init__()
 
         self.classes = classes
         # Running averages of means
@@ -18,15 +20,15 @@ class MovingAverageFilter(nn.Module):
         self.register_buffer("m2", torch.zeros(len(self.classes), nx))
 
         # Forgetting factors
-        self.register_buffer("lam1", torch.ones(len(self.classes))*0.5)
+        self.register_buffer("lam1", torch.ones(len(self.classes)) * 0.5)
         self.register_buffer("lam2", self.lam1 + lamdiff)
 
         # Update parameters for the forgetting factors
         self.delta = delta
         self.lamdiff = lamdiff
-    
-    def forward(self, mu):
-        return 0
+
+    def forward(self, *args, **kwargs):
+        return 
 
     def evaluate_loss(self, x, y):
         """
@@ -40,9 +42,11 @@ class MovingAverageFilter(nn.Module):
         mean_est : torch.tensor
             (num_features,) estimate of the mean
         """
+        m1 = torch.zeros_like(self.m1)
+        m2 = torch.zeros_like(self.m2)
         for i, label in enumerate(self.classes):
             # Empirical mean on minibatch of data.
-            xbar = torch.mean(x[y==label], axis=0)
+            xbar = torch.mean(x[(y == label).ravel(), :], axis=0)
 
             # See whether m1 or m2 is a closer match
             d1 = torch.linalg.norm(xbar - self.m1[i])
@@ -50,26 +54,37 @@ class MovingAverageFilter(nn.Module):
 
             # Update forgetting factors
             if d1 < d2:
-                self.lam1[i] = np.clip(self.lam1[i] - self.delta, 0.0, 1.0)
+                self.lam1[i] = torch.clamp(self.lam1[i] - self.delta, 0.0, 1.0)
                 self.lam2[i] = self.lam1[i] + self.lamdiff
             else:
-                self.lam2[i] = np.clip(self.lam2[i] + self.delta, 0.0, 1.0)
+                self.lam2[i] = torch.clamp(self.lam2[i] + self.delta, 0.0, 1.0)
                 self.lam1[i] = self.lam2[i] - self.lamdiff
+
+            # Update m1 and m2
+            m1[i] = (1 - self.lam1[i]) * xbar + self.lam1[i] * self.m1[i]
+            m2[i] = (1 - self.lam2[i]) * xbar + self.lam2[i] * self.m2[i]
+
+        mean_estimate = 0.5 * (m1 + m2)
+        d = torch.triu(
+            mean_estimate.T[..., None] - mean_estimate.T[..., None, :], diagonal=1
+        )
+
+        # Return estimate of mean
+        return torch.linalg.norm(d)
+
+    def update(self, x, y):
+        for i, label in enumerate(self.classes):
+            # Empirical mean on minibatch of data.
+            xbar = torch.mean(x[(y == label).ravel(), :], axis=0)
 
             # Update m1 and m2
             self.m1[i] = (1 - self.lam1[i]) * xbar + self.lam1[i] * self.m1[i]
             self.m2[i] = (1 - self.lam2[i]) * xbar + self.lam2[i] * self.m2[i]
 
-        mean_estimate = 0.5 * (self.m1 + self.m2)
-        d = torch.diagonal(mean_estimate[..., None] - mean_estimate[..., None, :], dim1=-1, dim2=-2, offset = 1)
-
-        # Return estimate of mean
-        return torch.linalg.norm(d)
-    
-    def update(self,**kwargs):
         self.m1 = self.m1.detach()
         self.m2 = self.m2.detach()
         return self
+
 
 class QuadraticDiscriminantFilter(nn.Module):
     """
@@ -83,43 +98,31 @@ class QuadraticDiscriminantFilter(nn.Module):
 
         # Running averages of means
         self.classes = classes
+        n_classes = len(classes)
 
         param_names = [
-            "m0a",
-            "m1a",
-            "m0b",
-            "m1b",
-            "S0a",
-            "S1a",
-            "S0b",
-            "S1b",
+            "0a",
+            "1a",
+            "0b",
+            "1b",
         ]
-        for label in self.classes:
-            for name in param_names:
-                if "m" in name:
-                    self.register_buffer(
-                        "{}_{}".format(name, label),
-                        torch.zeros(nx, requires_grad=False)[None, :],
-                    )
-                elif "S" in name:
-                    self.register_buffer(
-                        "{}_{}".format(name, label), torch.eye(nx, requires_grad=False)
-                    )
-
+        for name in param_names:
             self.register_buffer(
-                "lama_{}".format(label), torch.tensor([0.2], requires_grad=False)
+                "m{}".format(name),
+                torch.zeros(n_classes, nx, requires_grad=False),
             )
             self.register_buffer(
-                "lamb_{}".format(label),
-                getattr(self, "lama_{}".format(label)) + lamdiff,
+                "S{}".format(name), torch.eye(nx, requires_grad=False)[None,:].repeat(n_classes, 1, 1)
             )
 
+        self.register_buffer("lama", torch.ones(n_classes, requires_grad=False) * 0.2)
+        self.register_buffer("lamb", self.lama + lamdiff)
         # Update parameters for the forgetting factors
         self.delta = delta
         self.lamdiff = lamdiff
 
-    def forward(self, mu):
-        return 0
+    def forward(self, *args, **kwargs):
+        return 
 
     def cgll(self, x, m, S):
         """
@@ -129,34 +132,31 @@ class QuadraticDiscriminantFilter(nn.Module):
         return -0.5 * (torch.logdet(S) + resids)
 
     def update(self, x, y):
-
-        for label in self.classes:
-            i0 = y != label
-            i1 = y == label
-            empirical = {}
+        for i, label in enumerate(self.classes):
+            i0 = (y != label).ravel()
+            i1 = (y == label).ravel()
             # Empirical mean for -1/+1 class labels
-            empirical["m0"] = torch.mean(x[i0], axis=0, keepdim=True).detach()
-            empirical["m1"] = torch.mean(x[i1], axis=0, keepdim=True).detach()
+            x0m = torch.mean(x[i0], axis=0, keepdim=True)
+            x1m = torch.mean(x[i1], axis=0, keepdim=True)
 
             # Empirical covariance for -1/+1 class labels
-            empirical["S0"] = torch.cov(x[i0].T, correction=0).detach()
-            empirical["S1"] = torch.cov(x[i1].T, correction=0).detach()
+            x0S = torch.cov(x[i0].T, correction=0)
+            x1S = torch.cov(x[i1].T, correction=0)
 
             # Update classifier A/B, with forgetting factor `lama/b'
-            for cl in ["a", "b"]:
-                for par in empirical.keys():
-                    # (1 - lama/b) * (current moving avg)
-                    forgetting = (
-                        1 - getattr(self, "lam{}_{}".format(cl, label))
-                    ) * getattr(self, "{}{}_{}".format(par, cl, label))
+            # Update classifier A, with forgetting factor `lama`
+            self.m0a[i] = (1 - self.lama[i]) * self.m0a[i] + self.lama[i] * x0m
+            self.m1a[i] = (1 - self.lama[i]) * self.m1a[i] + self.lama[i] * x1m
 
-                    updating = (
-                        getattr(self, "lam{}_{}".format(cl, label)) * empirical[par]
-                    )
+            self.S0a[i] = (1 - self.lama[i]) * self.S0a[i] + self.lama[i] * x0S
+            self.S1a[i] = (1 - self.lama[i]) * self.S1a[i] + self.lama[i] * x1S
 
-                    setattr(
-                        self, "{}{}_{}".format(par, cl, label), forgetting + updating
-                    )
+            # Update classifier B, with forgetting factor `lamb`
+            self.m0b[i] = (1 - self.lamb[i]) * self.m0b[i] + self.lamb[i] * x0m
+            self.m1b[i] = (1 - self.lamb[i]) * self.m1b[i] + self.lamb[i] * x1m
+
+            self.S0b[i] = (1 - self.lamb[i]) * self.S0b[i] + self.lamb[i] * x0S
+            self.S1b[i] = (1 - self.lamb[i]) * self.S1b[i] + self.lamb[i] * x1S
 
         return self
 
@@ -177,68 +177,52 @@ class QuadraticDiscriminantFilter(nn.Module):
         """
 
         ll_loss = 0
-        for label in self.classes:
+        for i, label in enumerate(self.classes):
             # Indices for -1/+1 class labels
-            i0 = y != label
-            i1 = y == label
+            i0 = (y != label).ravel()
+            i1 = (y == label).ravel()
 
             # Compute log likelihood score for classifier A
             lla0 = self.cgll(
                 x,
-                getattr(self, "m0a_{}".format(label)),
-                getattr(self, "S0a_{}".format(label)),
+                self.m0a[i : i + 1],
+                self.S0a[i],
             )
             lla1 = self.cgll(
                 x,
-                getattr(self, "m1a_{}".format(label)),
-                getattr(self, "S1a_{}".format(label)),
+                self.m1a[i : i + 1],
+                self.S1a[i],
             )
             lla = torch.sum(i0 * lla0 + i1 * lla1)
 
             # Compute log likelihood score for classifier B
             llb0 = self.cgll(
                 x,
-                getattr(self, "m0b_{}".format(label)),
-                getattr(self, "S0b_{}".format(label)),
+                self.m0b[i : i + 1],
+                self.S0b[i],
             )
             llb1 = self.cgll(
                 x,
-                getattr(self, "m1b_{}".format(label)),
-                getattr(self, "S1b_{}".format(label)),
+                self.m1b[i : i + 1],
+                self.S1b[i],
             )
             llb = torch.sum(i0 * llb0 + i1 * llb1)
 
             # If classifier A is better than B, we decrease the forgetting factors
             # by self.delta
             if update and (lla > llb):
-                setattr(
-                    self,
-                    "lama_{}".format(label),
-                    torch.clamp(
-                        getattr(self, "lama_{}".format(label)) - self.delta, 0.0, 1.0
-                    ),
-                )
-                setattr(
-                    self,
-                    "lamb_{}".format(label),
-                    getattr(self, "lama_{}".format(label)) + self.lamdiff,
-                )
+                self.lama[i] = torch.clamp(
+                        self.lama[i] - self.delta, 0.0, 1.0
+                    )
+                self.lamb[i] = self.lama[i] + self.lamdiff
 
             # If classifier B is better than A, we decrease the forgetting factors
             # by self.delta
             elif update:
-                setattr(
-                    self,
-                    "lamb_{}".format(label),
-                    torch.clamp(
-                        getattr(self, "lamb_{}".format(label)) + self.delta, 0.0, 1.0
-                    ),
-                )
-                setattr(
-                    self,
-                    "lama_{}".format(label),
-                    getattr(self, "lamb_{}".format(label)) - self.lamdiff,
-                )
+                self.lamb[i] = torch.clamp(
+                        self.lamb[i] + self.delta, 0.0, 1.0
+                    )
+                self.lama[i] = self.lamb[i] - self.lamdiff
 
             # Return average log-likelihood ratios of the two linear decoders
             batch_y = (i1 * 2 - 1).float()
@@ -248,6 +232,185 @@ class QuadraticDiscriminantFilter(nn.Module):
             ll_loss += (llra + llrb) * 0.5
 
         return ll_loss / len(self.classes)
+
+
+# class QuadraticDiscriminantFilter(nn.Module):
+#     """
+#     Trains a two quadratic binary classifiers with streaming minibatches of data.
+
+#     The forgetting rates of the two classifiers are automatically tuned.
+#     """
+
+#     def __init__(self, nx, classes, lamdiff=1e-2, delta=1e-3):
+#         super().__init__()
+
+#         # Running averages of means
+#         self.classes = classes
+#         num_classes = len(classes)
+
+#         param_names = [
+#             "m0a",
+#             "m1a",
+#             "m0b",
+#             "m1b",
+#             "S0a",
+#             "S1a",
+#             "S0b",
+#             "S1b",
+#         ]
+#         for label in self.classes:
+#             for name in param_names:
+#                 if "m" in name:
+#                     self.register_buffer(
+#                         "{}_{}".format(name, label),
+#                         torch.zeros(nx, requires_grad=False)[None, :],
+#                     )
+#                 elif "S" in name:
+#                     self.register_buffer(
+#                         "{}_{}".format(name, label), torch.eye(nx, requires_grad=False)
+#                     )
+
+#             self.register_buffer(
+#                 "lama_{}".format(label), torch.tensor([0.2], requires_grad=False)
+#             )
+#             self.register_buffer(
+#                 "lamb_{}".format(label),
+#                 getattr(self, "lama_{}".format(label)) + lamdiff,
+#             )
+
+#         # Update parameters for the forgetting factors
+#         self.delta = delta
+#         self.lamdiff = lamdiff
+
+#     def forward(self, mu):
+#         return 0
+
+#     def cgll(self, x, m, S):
+#         """
+#         Compute Gaussian Log Likelihood
+#         """
+#         resids = torch.sum((x - m) * torch.linalg.solve(S, (x - m).T).T, axis=1)
+#         return -0.5 * (torch.logdet(S) + resids)
+
+#     def update(self, x, y):
+#         for label in self.classes:
+#             i0 = y != label
+#             i1 = y == label
+#             empirical = {}
+#             # Empirical mean for -1/+1 class labels
+#             empirical["m0"] = torch.mean(x[i0], axis=0, keepdim=True).detach()
+#             empirical["m1"] = torch.mean(x[i1], axis=0, keepdim=True).detach()
+
+#             # Empirical covariance for -1/+1 class labels
+#             empirical["S0"] = torch.cov(x[i0].T, correction=0).detach()
+#             empirical["S1"] = torch.cov(x[i1].T, correction=0).detach()
+
+#             # Update classifier A/B, with forgetting factor `lama/b'
+#             for cl in ["a", "b"]:
+#                 for par in empirical.keys():
+#                     # (1 - lama/b) * (current moving avg)
+#                     forgetting = (
+#                         1 - getattr(self, "lam{}_{}".format(cl, label))
+#                     ) * getattr(self, "{}{}_{}".format(par, cl, label))
+
+#                     updating = (
+#                         getattr(self, "lam{}_{}".format(cl, label)) * empirical[par]
+#                     )
+
+#                     setattr(
+#                         self, "{}{}_{}".format(par, cl, label), forgetting + updating
+#                     )
+
+#         return self
+
+#     def evaluate_loss(self, x, y, update=True):
+#         """
+#         Parameters
+#         ----------
+#         x : torch.tensor
+#             (batch_size x nx) matrix of independent variables.
+
+#         y : torch.tensor
+#             (batch_size) vector of +1/-1 class labels,
+
+#         Returns
+#         -------
+#         log_likelihood : torch.tensor
+#             Average log likelihood of the two quadratic decoders.
+#         """
+
+#         ll_loss = 0
+#         for label in self.classes:
+#             # Indices for -1/+1 class labels
+#             i0 = y != label
+#             i1 = y == label
+
+#             # Compute log likelihood score for classifier A
+#             lla0 = self.cgll(
+#                 x,
+#                 getattr(self, "m0a_{}".format(label)),
+#                 getattr(self, "S0a_{}".format(label)),
+#             )
+#             lla1 = self.cgll(
+#                 x,
+#                 getattr(self, "m1a_{}".format(label)),
+#                 getattr(self, "S1a_{}".format(label)),
+#             )
+#             lla = torch.sum(i0 * lla0 + i1 * lla1)
+
+#             # Compute log likelihood score for classifier B
+#             llb0 = self.cgll(
+#                 x,
+#                 getattr(self, "m0b_{}".format(label)),
+#                 getattr(self, "S0b_{}".format(label)),
+#             )
+#             llb1 = self.cgll(
+#                 x,
+#                 getattr(self, "m1b_{}".format(label)),
+#                 getattr(self, "S1b_{}".format(label)),
+#             )
+#             llb = torch.sum(i0 * llb0 + i1 * llb1)
+
+#             # If classifier A is better than B, we decrease the forgetting factors
+#             # by self.delta
+#             if update and (lla > llb):
+#                 setattr(
+#                     self,
+#                     "lama_{}".format(label),
+#                     torch.clamp(
+#                         getattr(self, "lama_{}".format(label)) - self.delta, 0.0, 1.0
+#                     ),
+#                 )
+#                 setattr(
+#                     self,
+#                     "lamb_{}".format(label),
+#                     getattr(self, "lama_{}".format(label)) + self.lamdiff,
+#                 )
+
+#             # If classifier B is better than A, we decrease the forgetting factors
+#             # by self.delta
+#             elif update:
+#                 setattr(
+#                     self,
+#                     "lamb_{}".format(label),
+#                     torch.clamp(
+#                         getattr(self, "lamb_{}".format(label)) + self.delta, 0.0, 1.0
+#                     ),
+#                 )
+#                 setattr(
+#                     self,
+#                     "lama_{}".format(label),
+#                     getattr(self, "lamb_{}".format(label)) - self.lamdiff,
+#                 )
+
+#             # Return average log-likelihood ratios of the two linear decoders
+#             batch_y = (i1 * 2 - 1).float()
+#             llra = batch_y @ (lla1 - lla0)
+#             llrb = batch_y @ (llb1 - llb0)
+
+#             ll_loss += (llra + llrb) * 0.5
+
+#         return ll_loss / len(self.classes)
 
 
 class MovingAvgLeastSquares(nn.Module):
@@ -303,11 +466,12 @@ class MovingAvgLeastSquares(nn.Module):
         -----
         num_quadratic_features = num_features * (num_features + 1) / 2
         """
+        n_features = x.shape[-1]
         x_list = [x]
         idx = torch.arange(x.shape[1], dtype=torch.long, device=x.device)
         for i in range(1, self.polynomial_order):
             C_idx = torch.combinations(idx, i + 1, with_replacement=True)
-            x_list += [x[:, C_idx].prod(dim=-1)]
+            x_list += [x[:, C_idx].prod(dim=-1)/len(C_idx)*n_features]
 
             # batch_size, n_features = x.shape
             # x_einsum = torch.einsum("ij,ik->ijk", x_list[i], x)
@@ -439,10 +603,10 @@ class ReversalEnsemble(nn.Module):
     def __init__(self, in_dim, out_dim, bound=False):
         super(ReversalEnsemble, self).__init__()
 
-        self.lin = nn.Sequential(
-            nn.Linear(in_dim, out_dim),
-            nn.Tanh() if bound else None,
-        )
+        # self.lin = nn.Sequential(
+        #     nn.Linear(in_dim, out_dim),
+        #     # nn.Tanh() if bound else None,
+        # )
 
         self.mlp1 = nn.Sequential(
             nn.Linear(in_dim, in_dim),
@@ -450,14 +614,14 @@ class ReversalEnsemble(nn.Module):
             nn.Linear(in_dim, in_dim),
             nn.ReLU(),
             nn.Linear(in_dim, out_dim),
-            nn.Tanh() if bound else None,
+            # nn.Tanh() if bound else None,
         )
 
         self.mlp2 = nn.Sequential(
             nn.Linear(in_dim, in_dim),
             nn.ReLU(),
             nn.Linear(in_dim, out_dim),
-            nn.Tanh() if bound else None,
+            # nn.Tanh() if bound else None,
         )
 
         self.mlp3 = nn.Sequential(
@@ -466,15 +630,25 @@ class ReversalEnsemble(nn.Module):
             nn.Linear(in_dim, in_dim // 2),
             nn.ReLU(),
             nn.Linear(in_dim // 2, out_dim),
-            nn.Tanh() if bound else None,
+            # nn.Tanh() if bound else None,
+        )
+
+        self.mlp4 = nn.Sequential(
+            nn.Linear(in_dim, in_dim * 2),
+            nn.ReLU(),
+            nn.Linear(in_dim * 2, in_dim * 2),
+            nn.ReLU(),
+            nn.Linear(in_dim * 2, out_dim),
+            # nn.Tanh() if bound else None,
         )
 
     def forward(self, z):
         # a = self.lin(z)
-        b = self.mlp1(z)
-        c = self.mlp2(z)
-        d = self.mlp3(z)
-        return [b, c, d]  # a,
+        a = self.mlp1(z)
+        b = self.mlp2(z)
+        c = self.mlp3(z)
+        d = self.mlp4(z)
+        return [a, b, c, d]  # a,
 
 
 class GRScrubber(nn.Module):
@@ -485,7 +659,24 @@ class GRScrubber(nn.Module):
         )
 
     def forward(self, z):
-        return {"gr": self.reversal(z)}
+        return self.reversal(z)
+
+    def reset_parameters(self):
+        for head in self.reversal[1].mlp1:
+            if isinstance(head, nn.Linear):
+                head.reset_parameters()
+
+        for head in self.reversal[1].mlp2:
+            if isinstance(head, nn.Linear):
+                head.reset_parameters()
+
+        for head in self.reversal[1].mlp3:
+            if isinstance(head, nn.Linear):
+                head.reset_parameters()
+
+        for head in self.reversal[1].mlp4:
+            if isinstance(head, nn.Linear):
+                head.reset_parameters()
 
 class LinearProjection(nn.Module):
     def __init__(
@@ -505,7 +696,6 @@ class LinearProjection(nn.Module):
         z_null = z - torch.linalg.solve(nrm, x.T).T @ w
         data_o = {"v": x, "z_null": z_null}
         return data_o
-
 
 
 class LinearDisentangle(nn.Module):

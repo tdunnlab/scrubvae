@@ -1,0 +1,11 @@
+PATHS: 
+  - vanilla/8
+  - cvae/cvae_8
+  - mi_8/diag_100
+  - mi_8/diag_500
+  - mi_8/sphere_100
+  - mi_8/sphere_500
+  - mi_8/sphere_1000
+  - mi_8/sphere_1000_05
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/mi_8/

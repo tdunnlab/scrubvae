@@ -36,7 +36,7 @@ latents = (
 )
 
 heading = dataset[:]["heading"].cpu().detach().numpy()
-yaw = np.arctan2(heading[:, 1], heading[:, 0])
+yaw = np.arctan2(heading[:, 0], heading[:, 1])
 
 embedder = Embed(
     embed_method="fitsne",

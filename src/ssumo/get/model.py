@@ -8,9 +8,11 @@ def model(
     disentangle_config,
     n_keypts,
     direction_process,
+    loss_config=None,
     arena_size=None,
     kinematic_tree=None,
     bound=False,
+    discrete_classes=None,
     device="cuda",
     verbose=1,
 ):
@@ -22,108 +24,82 @@ def model(
         "heading": 2,
         "heading_change": 1,
         "fluorescence": 1,
-        "ids": 1,
     }
+
+    if discrete_classes is not None:
+        print("Discrete Classes: {}".format(discrete_classes))
+        feat_dim_dict.update({k: len(v) for k, v in discrete_classes.items()})
 
     in_channels = n_keypts * 6
     if direction_process in ["x360", "midfwd", None]:
         in_channels += 3
 
+    methods = disentangle_config["method"]
     disentangle = {}
-    if disentangle_config["disentangle"] == "linear":
-
+    # Linear Projection model for each disentanglement feature
+    if "linear" in methods.keys():  # len(methods["linear"]) > 0:
         from ssumo.model.disentangle import LinearProjection
 
-        if disentangle_config["method"] == "linear":
-            reversal = None
-        elif disentangle_config["method"] == "gr_conditional":
-            reversal = "conditional"
-        else:
-            reversal = disentangle_config["method"][3:]
-
-        disentangle = {}
-        for feat in disentangle_config["features"]:
-            disentangle[feat] = LinearDisentangle(
+        disentangle["linear"] = {}
+        for feat in methods["linear"]:
+            disentangle["linear"][feat] = LinearProjection(
                 model_config["z_dim"],
                 feat_dim_dict[feat],
                 bias=False,
-                reversal=reversal,
             )
 
-        alpha=disentangle_config["alpha"],
-        do_detach=disentangle_config["detach_gr"],
-        n_models=disentangle_config["n_models"],
-
-    elif disentangle_config["disentangle"] == "conditional":
-        conditional_dim = sum(
-                [feat_dim_dict[k] for k in disentangle_config["features"]]
-            )
+    # Conditional VAE adding dimensions to decoder input
+    if "conditional" in methods.keys():  # len(methods["conditional"]) > 0:
+        conditional_dim = sum([feat_dim_dict[k] for k in methods["conditional"]])
+        conditional_keys = methods["conditional"]
     else:
+        conditional_keys = None
         conditional_dim = 0
-        linear_dim = None
 
-    conditional_dim = 0
-    disentangle = None
-    if disentangle_config["method"]:
-        if "conditional" in disentangle_config["method"]:
+    # Gradient reversal scrubbing for each disentanglement feature
+    if "grad_reversal" in methods.keys():  # len(methods["grad_reversal"]) > 0:
+        from ssumo.model.disentangle import GRScrubber
 
-    if disentangle_config["method"] == None:
-        pass
-    elif disentangle_config["method"] == "gr_conditional":
-        from ssumo.model.disentangle import Scrubber
-
-        disentangle = {}
-        for feat in disentangle_config["features"]:
-            disentangle[feat] = Scrubber(
+        disentangle["grad_reversal"] = {}
+        for feat in methods["grad_reversal"]:
+            disentangle["grad_reversal"][feat] = GRScrubber(
                 model_config["z_dim"],
                 feat_dim_dict[feat],
-                disentangle_config["alpha"],
+                alpha=disentangle_config["alpha"],
                 bound=bound,
             )
-    elif ("gr_" in disentangle_config["method"]) or (
-        "linear" in disentangle_config["method"]
-    ):
-        from ssumo.model.disentangle import LinearDisentangle
 
-        if disentangle_config["method"] == "linear":
-            reversal = None
-        elif disentangle_config["method"] == "gr_conditional":
-            reversal = "conditional"
-        else:
-            reversal = disentangle_config["method"][3:]
-
-        disentangle = {}
-        for feat in disentangle_config["features"]:
-            disentangle[feat] = LinearDisentangle(
-                model_config["z_dim"],
-                feat_dim_dict[feat],
-                bias=False,
-                reversal=reversal,
-                alpha=disentangle_config["alpha"],
-                do_detach=disentangle_config["detach_gr"],
-                n_models=disentangle_config["n_models"],
-            )
-
-    elif disentangle_config["moving_avg_lsq"] not in [None, False]:
+    # Moving Average Least Squares Filter with n-order polynomical features
+    if "moving_avg_lsq" in methods.keys():  # len(methods["moving_avg_lsq"]) > 0:
         from ssumo.model.disentangle import MovingAvgLeastSquares
 
-        disentangle = {}
-        for feat in disentangle_config["features"]:
-            disentangle[feat] = MovingAvgLeastSquares(
+        disentangle["moving_avg_lsq"] = {}
+        for feat in methods["moving_avg_lsq"]:
+            disentangle["moving_avg_lsq"][feat] = MovingAvgLeastSquares(
                 model_config["z_dim"],
                 feat_dim_dict[feat],
-                bias=disentangle_config["moving_avg_lsq"] == "negative",
+                bias=loss_config[feat + "_mals"] < 0,
                 polynomial_order=disentangle_config["polynomial"],
             )
 
-    if disentangle_config["quadratic_ovr"] not in [None, False]:
+    # Quadratic Discriminant Filter for class scrubbing
+    if "qda" in methods.keys():  # len(methods["qda"]) > 0:
         from ssumo.model.disentangle import QuadraticDiscriminantFilter
 
-        disentangle = {}
-        for feat in disentangle_config["features"]:
-            disentangle[feat] = QuadraticDiscriminantFilter(
-                model_config["z_dim"],
-                disentangle_config["classes"]
+        disentangle["qda"] = {}
+        for feat in methods["qda"]:
+            disentangle["qda"][feat] = QuadraticDiscriminantFilter(
+                model_config["z_dim"], discrete_classes[feat]
+            )
+
+    # Moving Average Filter for class scrubbing
+    if "moving_avg" in methods.keys():  # len(methods["moving_avg"]) > 0:
+        from ssumo.model.disentangle import MovingAverageFilter
+
+        disentangle["moving_avg"] = {}
+        for feat in methods["moving_avg"]:
+            disentangle["moving_avg"][feat] = MovingAverageFilter(
+                model_config["z_dim"], discrete_classes[feat]
             )
 
     ### Initialize/load model
@@ -141,9 +117,11 @@ def model(
             init_dilation=model_config["init_dilation"],
             disentangle=disentangle,
             disentangle_keys=disentangle_config["features"],
+            conditional_keys=conditional_keys,
             arena_size=arena_size,
             kinematic_tree=kinematic_tree,
             ch=model_config["channel"],
+            discrete_classes=discrete_classes
         )
 
     if verbose > 0:
