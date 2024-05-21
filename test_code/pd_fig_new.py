@@ -25,9 +25,6 @@ from ssumo.eval.metrics import (
 )
 import torch
 
-
-# plt.rcParams["text.usetex"] = True
-# plt.rcParams["font.family"] = "serif"
 plt.rcParams["font.size"] = "10"
 plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["font.sans-serif"] = "Arial"
@@ -119,13 +116,13 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
         fluorescence = fluorescence[ids != not_id]
         speed = speed[ids != not_id]
 
-    qda, lc, lin, mlp, mmd, mmd_id = {}, {}, {}, {}, {}, {}
+    qda, lc, lin, mlp, mmd, mmd_id_pd, mmd_id_healthy = {}, {}, {}, {}, {}, {}, {}
     print(var_key)
     for m_key in m_dict:
         path = "{}{}/".format(RESULTS_PATH, m_dict[m_key][0])
         z = np.load(path + "latents/Train_{}.npy".format(m_dict[m_key][1]))
         z = z[ids != not_id]
-        z = StandardScaler().fit_transform(z)
+        # z = StandardScaler().fit_transform(z)
 
         if var_key == "pd_speed":
             lc[m_key] = log_class_rand_cv(z, pd_label, 51, 5)
@@ -133,14 +130,16 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
             lin[m_key] = linear_rand_cv(z, speed, 51, 5)
             mlp[m_key] = mlp_rand_cv(z, speed, 51, 5)
 
+            lc[m_key + " + Speed"] = log_class_rand_cv(np.concatenate([z,speed],axis=-1), pd_label, 51, 5)
+            qda[m_key + " + Speed"] = qda_rand_cv(np.concatenate([z,speed],axis=-1), pd_label, 51, 5)
+
         if var_key == "pd_ids":
             window = 51
             qda[m_key], lc[m_key] = [], []
             kf = KFold(n_splits=len(discrete_classes), shuffle=False)
             # for i, (train_i, test_i) in enumerate(kf.split(discrete_classes)):
-            test_i = [17,22,21]
+            test_i = [21,22]
             for i, train_i in enumerate(discrete_classes[~np.isin(discrete_classes,test_i)]):
-                print(train_i)
                 z_train = z[np.isin(ids[ids != not_id], [test_i])][# [discrete_classes])][#[test_i])][
                     ::window
                 ]
@@ -176,26 +175,66 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
                 # acc = (y_test == y_pred).sum()/len(y_test)
                 # lc[m_key] += [acc]
 
+            # mmd[m_key] = []
+            # mmd_id_pd[m_key] = []
+            # mmd_id_healthy[m_key] = []
+            # for i in range(len(discrete_classes)):
+            #     pd_i = ((fluorescence < 0.9) & (ids[ids!=not_id] == discrete_classes[i])).ravel()
+            #     healthy_i = ((fluorescence >= 0.9) & (
+            #         ids[ids!=not_id] == discrete_classes[i]
+            #     )).ravel()
+
+            #     pd_z_i = z[pd_i, ...]
+            #     healthy_z_i = z[healthy_i, ...]
+            #     mmd[m_key] += [mmd_estimate(pd_z_i[::window], healthy_z_i[::window])]
+
+            #     for j in range(i+1, len(discrete_classes)):
+            #         pd_j = ((fluorescence < 0.9) & (ids[ids!=not_id] == discrete_classes[j])).ravel()
+            #         healthy_j = ((fluorescence >= 0.9) & (
+            #             ids[ids!=not_id] == discrete_classes[j]
+            #         )).ravel()
+            #         pd_z_j = z[pd_j, ...]
+            #         healthy_z_j = z[healthy_j, ...]
+
+            #         mmd_id_pd[m_key] += [mmd_estimate(pd_z_i[::window], pd_z_j[::window])]
+            #         mmd_id_healthy[m_key] += [mmd_estimate(healthy_z_i[::window], healthy_z_j[::window])]
+
             mmd[m_key] = []
-            for i in discrete_classes:
-                pd_i = ((fluorescence < 0.9) & (ids[ids!=not_id] == i)).ravel()
+            mmd_id_pd[m_key] = []
+            mmd_id_healthy[m_key] = []
+            counter = 0
+            for i in range(len(discrete_classes)):
+                pd_i = ((fluorescence < 0.9) & (ids[ids!=not_id] == discrete_classes[i])).ravel()
                 healthy_i = ((fluorescence >= 0.9) & (
-                    ids[ids!=not_id] == i
+                    ids[ids!=not_id] == discrete_classes[i]
                 )).ravel()
 
-                pd_speed_i = speed[pd_i, ...]
-                healthy_speed_i = speed[healthy_i, ...]
                 pd_z_i = z[pd_i, ...]
                 healthy_z_i = z[healthy_i, ...]
                 mmd[m_key] += [mmd_estimate(pd_z_i[::window], healthy_z_i[::window])]
 
-            mmd_id[m_key] = []
-            for i in tqdm.tqdm(range(len(discrete_classes)-1)):
-                for j in range(i+1, len(discrete_classes)):
-                    z1 = z[ids[ids!=not_id] == discrete_classes[i]][::window]
-                    z2 = z[ids[ids!=not_id] == discrete_classes[j]][::window]
+                mmd_id_pd_temp = []
+                mmd_id_healthy_temp = []
+                for j in range(len(discrete_classes)):
+                    if j==i:
+                        pass
+                    else:
+                        pd_j = ((fluorescence < 0.9) & (ids[ids!=not_id] == discrete_classes[j])).ravel()
+                        healthy_j = ((fluorescence >= 0.9) & (
+                            ids[ids!=not_id] == discrete_classes[j]
+                        )).ravel()
+                        pd_z_j = z[pd_j, ...]
+                        healthy_z_j = z[healthy_j, ...]
 
-                    mmd_id[m_key] += [mmd_estimate(z1, z2)]
+                        mmd_id_pd_temp += [mmd_estimate(pd_z_i[::window], pd_z_j[::window])]
+                        mmd_id_healthy_temp += [mmd_estimate(healthy_z_i[::window], healthy_z_j[::window])]
+
+                counter+=1
+                mmd_id_pd[m_key] += [mmd[m_key][-1]/np.mean(mmd_id_pd_temp)]
+                mmd_id_healthy[m_key] += [mmd[m_key][-1]/np.mean(mmd_id_healthy_temp)]             
+
+
+            
 
     if var_key == "pd_speed":
         lc["Speed Only"] = log_class_rand_cv(speed, pd_label, 51, 5)
@@ -216,8 +255,8 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
         color = "#9871bb",
         label="Logistic",
     )
-    print(lc)
-    print(qda)
+    # print(lc)
+    # print(qda)
 
     # for i in range(len(discrete_classes)):
     #     bar_ax.plot(x, [v for k, v in lc.items()], lw=0.5)
@@ -270,7 +309,7 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
 
         bar_ax.bar(
             x + 0.33,
-            height=[np.mean(mlp[k]) for k in mlp.keys()],
+            height=[np.mean(mlp[k])for k in mlp.keys()],
             width=w,  # bar width
             color = "#028bc3",
             # tick_label=list(qda.keys()),
@@ -288,7 +327,7 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
         bar_ax.legend()
 
     if var_key == "pd_ids":
-        bar_ax = f.add_subplot(gs[var_ind+1, :4])
+        bar_ax = f.add_subplot(gs[var_ind, 4:])
         x = np.arange(len(mmd.keys())) + 0.33
         ### Speed Decoding
         bar_ax.bar(
@@ -309,8 +348,13 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
         bar_ax.set_title("Maximum Mean Discrepancy Between Healthy and PD", fontsize=15)
         # bar_ax.legend()
 
+        print("Mean MMD PD v Healthy")
+        print({k:np.mean(mmd[k]) for k in mmd.keys()})
+        print("STD MMD PD v Healthy")
+        print({k:np.std(mmd[k]) for k in mmd.keys()})
+
         for i, k in enumerate(mmd.keys()):
-            print(mmd)
+            # print(mmd)
             # import pdb; pdb.set_trace()
             ax = f.add_subplot(gs[var_ind+2,i*2:i*2+2])
             idx = np.unique(fluorescence, return_index=True)[1]
@@ -321,29 +365,53 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
 
             # ax2 = f.add_subplot(gs[var_ind+1,4:])
         bar_ax = f.add_subplot(gs[var_ind+1,4:])
-        x = np.arange(len(mmd_id.keys()))
+        x = np.arange(len(mmd_id_pd.keys()))
         ### Speed Decoding
         bar_ax.bar(
             x,
-            height=[np.mean(mmd_id[k]) for k in mmd_id.keys()],
+            height=[np.mean(mmd_id_pd[k])  for k in mmd_id_pd.keys()],
             width=w,  # bar width
             # tick_label=list(lc.keys()),
             label="MMD",
         )
 
-        for i, key in enumerate(mmd_id.keys()):
-            print(mmd_id)
+        for i, key in enumerate(mmd_id_pd.keys()):
+            # print(mmd_id_pd)
             # distribute scatter randomly across whole width of bar
             bar_ax.scatter(
-                x[i] + np.random.uniform(-0.1,0.1,len(mmd_id[key])), mmd_id[key], marker="o", c="k", s=0.5, alpha=1/3
+                x[i] + np.random.uniform(-0.1,0.1,len(mmd_id_pd[key])), mmd_id_pd[key], marker="o", c="k", s=0.5, alpha=1/3
             )
 
         bar_ax.set_xticks(x)
-        bar_ax.set_xticklabels(list(mmd_id.keys()))
+        bar_ax.set_xticklabels(list(mmd_id_pd.keys()))
         bar_ax.set_ylabel("MMD")
-        bar_ax.set_title("Maximum Mean Discrepancy Between Individuals", fontsize=15)
+        bar_ax.set_title("Maximum Mean Discrepancy Between Individual PD Sessions", fontsize=15)
+
+
+        bar_ax = f.add_subplot(gs[var_ind+1,:4])
+        x = np.arange(len(mmd_id_healthy.keys()))
+        ### Speed Decoding
+        bar_ax.bar(
+            x,
+            height=[np.mean(mmd_id_healthy[k]) for k in mmd_id_healthy.keys()],
+            width=w,  # bar width
+            # tick_label=list(lc.keys()),
+            label="MMD",
+        )
+
+        for i, key in enumerate(mmd_id_healthy.keys()):
+            # print(mmd_id_healthy)
+            # distribute scatter randomly across whole width of bar
+            bar_ax.scatter(
+                x[i] + np.random.uniform(-0.1,0.1,len(mmd_id_healthy[key])), mmd_id_healthy[key], marker="o", c="k", s=0.5, alpha=1/3
+            )
+
+        bar_ax.set_xticks(x)
+        bar_ax.set_xticklabels(list(mmd_id_healthy.keys()))
+        bar_ax.set_ylabel("MMD")
+        bar_ax.set_title("Maximum Mean Discrepancy Between Individual Healthy Sessions", fontsize=15)
         # bar_ax.legend()
 
 
 f.tight_layout()
-plt.savefig("./results/pd_final.png")
+plt.savefig("./results/pd_new.png")
