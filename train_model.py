@@ -21,6 +21,7 @@ dataset, loader, model = ssumo.get.data_and_model(
     data_keys=["x6d", "root", "offsets", "target_pose"]
     + config["disentangle"]["features"],
     shuffle=True,
+    dataset_name="babel",
 )
 
 model = ssumo.train.train(config, model, loader)

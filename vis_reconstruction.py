@@ -73,6 +73,7 @@ for dataset_label in ["Train", "Test"]:
         + config["disentangle"]["features"],
         shuffle=True,
         verbose=0,
+        dataset_name="babel",
     )
 
     visualize_reconstruction(model, loader, dataset_label, connectivity)

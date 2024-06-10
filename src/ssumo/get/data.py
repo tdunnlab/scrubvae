@@ -13,8 +13,9 @@ def babel_data(
     train: bool = True,
     data_keys: List[str] = ["x6d", "root", "offsets"],
     shuffle: bool = False,
+    normalize: List[str] = [],
     recompute: bool = True,
-    save: bool = False,
+    save: bool = True,
 ):
     """Read in BABEL dataset
     Punnakkal, Abhinanda R, et al
@@ -35,14 +36,14 @@ def babel_data(
 
     skeleton_config = read.config(data_config["skeleton_path"])
 
-    pose, ids = read.pose_h5(data_config["data_path"])
+    pose, ids = read.pose_h5(data_config["data_path"], dtype=np.float64)
 
     vidlen = np.unique(ids[1], return_counts=True)[1]
     vidlenfilter = np.argwhere(vidlen >= window + data_config["stride"])[:, 0]
     vidlenfilter = np.in1d(ids[1], vidlenfilter)
 
     ids = ids[:, vidlenfilter]
-    pose = pose[vidlenfilter]
+    pose = pose[vidlenfilter] * 100
 
     pose = pose[ids[0] == int(train)]
     ids = ids[1][ids[0] == int(train)]
@@ -155,6 +156,27 @@ def babel_data(
     # Move everything to tensors
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
+    for key in normalize:
+        if (key != "heading") and (key in data_keys):
+            if data_config["normalize"] == "bounded":
+                print(
+                    "Rescaling decoding variable, {}, to be between -1 and 1".format(
+                        key
+                    )
+                )
+                key_min = data[key].min(dim=0)[0] - data[key].min(dim=0)[0] * 0.1
+                data[key] -= key_min
+                key_max = data[key].max(dim=0)[0] + data[key].max(dim=0)[0] * 0.1
+                data[key] = 2 * data[key] / key_max - 1
+                assert data[key].max() < 1
+                assert data[key].min() > -1
+            elif data_config["normalize"] == "z_score":
+                print(
+                    "Mean centering and unit standard deviation-scaling {}".format(key)
+                )
+                data[key] -= data[key].mean(axis=0)
+                data[key] /= data[key].std(axis=0)
+
     if "target_pose" in data_keys:
         if recompute:
             data["target_pose"] = fwd_kin_cont6d_torch(
@@ -265,7 +287,7 @@ def mouse_data(
     if len(speed_key) > 0:
         data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1)
 
-    windowed_yaw = get_frame_yaw(pose, 0, 1)[window_inds]
+    windowed_yaw = get_frame_yaw(pose, [0, 1])[window_inds]
 
     if "heading_change" in data_keys:
         data["heading_change"] = np.diff(windowed_yaw, n=1, axis=-1).sum(
@@ -368,6 +390,24 @@ def mouse_data(
             eps=1e-8,
         ).reshape(data["x6d"].shape[:-1] + (3,))
 
+    # import pickle
+
+    # with open(
+    #     "/mnt/home/hkoneru/working/ceph/data/ensemble_healthy/mouse.pkl", "wb"
+    # ) as f:
+    #     pickle.dump(
+    #         data,
+    #         f,
+    #         protocol=4,
+    #     )
+
+    # import pickle
+
+    # with open(
+    #     "/mnt/home/hkoneru/working/ceph/data/ensemble_healthy/mouse_heading.pkl", "rb"
+    # ) as f:
+    #     data = pickle.load(f)
+
     dataset = MouseDataset(
         data,
         window_inds,
@@ -376,7 +416,7 @@ def mouse_data(
         pose.shape[-2],
         label="Train" if train else "Test",
     )
-
+    # dataset, pose, window inds
     loader = DataLoader(
         dataset=dataset,
         batch_size=data_config["batch_size"],

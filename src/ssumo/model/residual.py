@@ -278,11 +278,12 @@ class ResidualDecoder(nn.Module):
         x = torch.tanh(self.conv_out(x))
         return x
 
+
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
         return self
-    
+
     def sampling(self, mu, L):
         """Reparameterization trick
 
@@ -295,7 +296,7 @@ class VAE(nn.Module):
         """
         eps = torch.randn_like(mu)
         return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
-    
+
     def forward(self, data):
         data_o = self.encode(data)
         z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
@@ -374,7 +375,6 @@ class ResVAE(VAE):
     def encode(self, data):
         if self.arena_size is not None:
             norm_root = self.normalize_root(data["root"])
-
             x_in = torch.cat(
                 (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), norm_root), axis=-1
             )
@@ -388,7 +388,7 @@ class ResVAE(VAE):
         return data_o
 
     def decode(self, z, data):
-        
+
         data_o = {}
         if self.conditional_dim > 0:
             z = torch.cat([z] + [data[k] for k in self.disentangle_keys], dim=-1)

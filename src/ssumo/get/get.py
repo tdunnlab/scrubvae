@@ -12,6 +12,7 @@ def data_and_model(
     data_keys=["x6d", "root", "offsets"],
     shuffle=False,
     verbose=1,
+    dataset_name="mouse",
 ):
     if epoch is None:
         epoch = config["model"]["start_epoch"]
@@ -20,14 +21,24 @@ def data_and_model(
         load_model = config["model"]["load_model"]
 
     ### Load Dataset
-    dataset, loader = ssumo.get.mouse_data(
-        data_config=config["data"],
-        window=config["model"]["window"],
-        train=dataset_label == "Train",
-        data_keys=data_keys,
-        shuffle=shuffle,
-        normalize=config["disentangle"]["features"],
-    )
+    if dataset_name == "mouse":
+        dataset, loader = ssumo.get.mouse_data(
+            data_config=config["data"],
+            window=config["model"]["window"],
+            train=dataset_label == "Train",
+            data_keys=data_keys,
+            shuffle=shuffle,
+            normalize=config["disentangle"]["features"],
+        )
+    elif dataset_name == "babel":
+        dataset, loader = ssumo.get.babel_data(
+            data_config=config["data"],
+            window=config["model"]["window"],
+            train=dataset_label == "Train",
+            data_keys=data_keys,
+            shuffle=shuffle,
+            normalize=config["disentangle"]["features"],
+        )
 
     model = ssumo.get.model(
         model_config=config["model"],
@@ -43,6 +54,7 @@ def data_and_model(
         verbose=verbose,
     )
     return dataset, loader, model
+    # return loader, model
 
 
 def all_saved_epochs(path):

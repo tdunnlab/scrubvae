@@ -1,5 +1,6 @@
 import torch
 
+
 def model(
     model_config,
     load_model,
@@ -70,14 +71,14 @@ def model(
                 do_detach=disentangle_config["detach_gr"],
                 n_models=disentangle_config["n_models"],
             )
-            
-    elif disentangle_config["moving_avg_lsq"] is True:
-        from ssumo.model.disentangle import MovingAvgLeastSquares
-        disentangle = {}
-        for feat in disentangle_config["features"]:
-            disentangle[feat] = MovingAvgLeastSquares(
-                model_config["z_dim"], feat_dim_dict[feat]
-            )
+
+    # elif disentangle_config["moving_avg_lsq"] is True:
+    #     from ssumo.model.disentangle import MovingAvgLeastSquares
+    #     disentangle = {}
+    #     for feat in disentangle_config["features"]:
+    #         disentangle[feat] = MovingAvgLeastSquares(
+    #             model_config["z_dim"], feat_dim_dict[feat]
+    #         )
 
     ### Initialize/load model
     if model_config["type"] == "rcnn":
@@ -103,9 +104,7 @@ def model(
         print(vae)
 
     if load_model is not None:
-        load_path = "{}/weights/epoch_{}.pth".format(
-            load_model, epoch
-        )
+        load_path = "{}/weights/epoch_{}.pth".format(load_model, epoch)
         print("Loading Weights from:\n{}".format(load_path))
         state_dict = torch.load(load_path)
         missing_keys, unexpected_keys = vae.load_state_dict(state_dict, strict=False)

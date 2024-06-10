@@ -4,7 +4,10 @@ import tqdm
 import torch
 import numpy as np
 
-def latents(config, model=None, dataset=None, device="cuda", dataset_label="Train"):
+
+def latents(
+    config, model=None, epoch=None, dataset=None, device="cuda", dataset_label="Train"
+):
     """NOT FOR TRAINING
 
     Parameters
@@ -28,18 +31,28 @@ def latents(config, model=None, dataset=None, device="cuda", dataset_label="Trai
     if model is not None:
         model.eval()
     latent_path = "{}/latents/{}_{}.npy".format(
-        config["out_path"], dataset_label, config["model"]["start_epoch"]
+        config["out_path"], dataset_label, epoch  # config["model"]["start_epoch"]
     )
-    
+    latent_path = (
+        # "/mnt/ceph/users/hkoneru/results/vae/josh_mi/latents/accordion.npy"
+        "/mnt/ceph/users/hkoneru/results/vae/josh_heading/latents/accordion.npy"
+    )
+
     if not Path(latent_path).exists():
+
         loader = DataLoader(
-            dataset=dataset, batch_size=config["data"]["batch_size"], shuffle=False, num_workers=5
+            dataset=dataset,
+            batch_size=config["data"]["batch_size"],
+            shuffle=False,
+            num_workers=5,
         )
         print("Latent projections not found - Embedding dataset ...")
         latents = []
         with torch.no_grad():
             for _, data in enumerate(tqdm.tqdm(loader)):
-                data = {k:v.to(device) for k,v in data.items() if k in ["x6d", "root"]}
+                data = {
+                    k: v.to(device) for k, v in data.items() if k in ["x6d", "root"]
+                }
                 latents += [model.encode(data)["mu"].detach().cpu()]
 
         latents = torch.cat(latents, axis=0)
@@ -49,7 +62,9 @@ def latents(config, model=None, dataset=None, device="cuda", dataset_label="Trai
         )
     else:
         print("Found existing latent projections - Loading ...")
+        # latents = np.load(latent_path)
         latents = np.load(latent_path)
+        # print(latents.shape[0], len(dataset))
         assert latents.shape[0] == len(dataset)
         latents = torch.tensor(latents)
 
