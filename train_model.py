@@ -4,8 +4,10 @@ import sys
 from base_path import RESULTS_PATH
 from pathlib import Path
 import pickle
+
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
+# python  train_model.py "view_inv"
 
 if len(sys.argv) > 2:
     z_path = Path(RESULTS_PATH + analysis_key)

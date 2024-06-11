@@ -41,13 +41,15 @@ def traverse_latent(
 
         radius = torch.linalg.norm(z[index : index + 1] @ weight.T)
 
-        circ = circ*radius
+        circ = circ * radius
 
-        z_null_proj = weight.T @ torch.linalg.solve(weight @ weight.T, weight @ z[index: index+1].T)
+        z_null_proj = weight.T @ torch.linalg.solve(
+            weight @ weight.T, weight @ z[index : index + 1].T
+        )
         circle_z = circ @ weight.cuda()
-        circle_z = circle_z/torch.linalg.norm(circle_z,dim=-1)[:,None] * radius
+        circle_z = circle_z / torch.linalg.norm(circle_z, dim=-1)[:, None] * radius
 
-        sample_latent = z[index: index+1].cuda() - z_null_proj.T.cuda() + circle_z
+        sample_latent = z[index : index + 1].cuda() - z_null_proj.T.cuda() + circle_z
 
     else:
         graded_z_shift = (
@@ -58,7 +60,7 @@ def traverse_latent(
         print("Latent Norm: {}".format(torch.linalg.norm(sample_latent[0])))
         sample_latent += graded_z_shift
 
-    data_o = vae.decode(z = sample_latent, data={})
+    data_o = vae.decode(z=sample_latent, data={})
     offsets = dataset[index]["offsets"].cuda()
     pose = (
         fwd_kin_cont6d_torch(

@@ -7,6 +7,7 @@ import torch
 from numpy.lib.stride_tricks import sliding_window_view
 from tqdm import trange
 
+
 def inv_kin(
     pose: np.ndarray,
     kinematic_tree: Union[List, np.ndarray],
@@ -91,7 +92,7 @@ def fwd_kin_cont6d_torch(
     else:
         offsets = offset
 
-    pose = torch.zeros(continuous_6d.shape[:-1] + (3,),device=continuous_6d.device)
+    pose = torch.zeros(continuous_6d.shape[:-1] + (3,), device=continuous_6d.device)
     pose[..., 0, :] = root_pos
     for chain in kinematic_tree:
         if do_root_R:
@@ -114,6 +115,7 @@ def fwd_kin_cont6d_torch(
             )
     return pose
 
+
 def normalize_root(root, arena_size):
     norm_root = root - arena_size[0]
     norm_root = 2 * norm_root / (arena_size[1] - arena_size[0]) - 1
@@ -124,6 +126,7 @@ def inv_normalize_root(norm_root, arena_size):
     root = 0.5 * (norm_root + 1) * (arena_size[1] - arena_size[0])
     root += arena_size[0]
     return root
+
 
 def get_speed_parts(pose, parts):
     print("Getting speed by body parts")
@@ -223,6 +226,7 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
 
     return offsets
 
+
 def get_speed_outliers(pose, window_inds, threshold=2.25):
     avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
     avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
@@ -233,16 +237,20 @@ def get_speed_outliers(pose, window_inds, threshold=2.25):
         > threshold
     )[0]
     outlier_frames = np.unique(outlier_frames)
-    print(
-        "Outlier frames above {}: {}".format(
-            threshold, len(outlier_frames)
-        )
-    )
+    print("Outlier frames above {}: {}".format(threshold, len(outlier_frames)))
     return outlier_frames
+
 
 class MouseDataset(Dataset):
     def __init__(
-        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train", discrete_classes = None
+        self,
+        data,
+        window_inds,
+        arena_size=None,
+        kinematic_tree=None,
+        n_keypts=None,
+        label="Train",
+        discrete_classes=None,
     ):
         self.data = data
         self.window_inds = window_inds
