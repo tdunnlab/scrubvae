@@ -12,6 +12,7 @@ def data_and_model(
     data_keys=["x6d", "root", "offsets"],
     shuffle=False,
     verbose=1,
+    is_2D=False,
 ):
     if epoch is None:
         epoch = config["model"]["start_epoch"]
@@ -20,13 +21,14 @@ def data_and_model(
         load_model = config["model"]["load_model"]
 
     ### Load Dataset
-    loader = ssumo.get.mouse_data_2D(
+    loader = ssumo.get.mouse_data(
         data_config=config["data"],
         window=config["model"]["window"],
         train=dataset_label == "Train",
         data_keys=data_keys,
         shuffle=shuffle,
         normalize=config["disentangle"]["features"],
+        is_2D=is_2D,
     )
 
     model = ssumo.get.model(

@@ -312,84 +312,6 @@ def mouse_data(
     return loader
 
 
-def mouse_data_2D(
-    data_config: dict,
-    window: int = 51,
-    train: bool = True,
-    data_keys: List[str] = ["x6d", "root", "offsets"],
-    shuffle: bool = False,
-    normalize: List[str] = [],
-):
-    """_summary_
-
-    Args:
-        data_config (dict): _description_
-        window (int, optional): _description_. Defaults to 51.
-        train_ids (List, optional): _description_. Defaults to [0, 1, 2].
-        train (bool, optional): _description_. Defaults to True.
-        data_keys (List[str], optional): _description_. Defaults to ["x6d", "root", "offsets"].
-        shuffle (bool, optional): _description_. Defaults to False.
-
-    Returns:
-        _type_: _description_
-    """
-
-    skeleton_config = read.config(data_config["skeleton_path"])
-
-    data, window_inds = calculate_2D_mouse_kinematics(
-        data_config,
-        skeleton_config,
-        window,
-        train,
-        data_keys,
-    )
-
-    for key in normalize:
-        if (key not in ["heading", "ids", "fluorescence"]) and (key in data_keys):
-            if data_config["normalize"] == "bounded":
-                print(
-                    "Rescaling decoding variable, {}, to be between -1 and 1".format(
-                        key
-                    )
-                )
-                key_min = data[key].min(dim=0)[0] * 0.9
-                data[key] -= key_min
-                key_max = data[key].max(dim=0)[0] * 1.1
-                data[key] = 2 * data[key] / key_max - 1
-                assert data[key].max() < 1
-                assert data[key].min() > -1
-            elif data_config["normalize"] == "z_score":
-                print(
-                    "Mean centering and unit standard deviation-scaling {}".format(key)
-                )
-                data[key] -= data[key].mean(axis=0)
-                data[key] /= data[key].std(axis=0)
-
-    discrete_classes = {}
-    if "ids" in data.keys():
-        discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
-
-    dataset = MouseDataset(
-        data,
-        window_inds,
-        data_config["arena_size"],
-        skeleton_config["KINEMATIC_TREE"],
-        len(skeleton_config["LABELS"]),
-        label="Train" if train else "Test",
-        discrete_classes=discrete_classes,
-    )
-
-    loader = DataLoader(
-        dataset=dataset,
-        batch_size=data_config["batch_size"],
-        shuffle=shuffle,
-        num_workers=5,
-        pin_memory=True,
-    )
-
-    return loader
-
-
 def calculate_2D_mouse_kinematics(
     data_config: dict,
     skeleton_config: dict,
@@ -414,25 +336,6 @@ def calculate_2D_mouse_kinematics(
     if data_config["filter_pose"]:
         pose = preprocess.median_filter(pose, ids, 5)
     data = {}
-    speed_key = [key for key in data_keys if "speed" in key]
-    assert len(speed_key) < 2
-    if len(speed_key) > 0:
-        if ("part_speed" in speed_key) or ("avg_speed_3d" in speed_key):
-            speed = get_speed_parts(
-                pose=pose,
-                parts=[
-                    [0, 1, 2, 3, 4, 5],  # spine and head
-                    [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
-                    [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
-                ],
-            )
-            if "avg_speed_3d" in speed_key:
-                speed = np.concatenate(
-                    [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
-                )
-        else:
-            speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
-            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
 
     if data_config["remove_speed_outliers"] is not None:
         outlier_frames = get_speed_outliers(
@@ -440,39 +343,29 @@ def calculate_2D_mouse_kinematics(
         )
         window_inds = np.delete(window_inds, outlier_frames, 0)
 
-    if len(speed_key) > 0:
-        data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1)
-
     yaw = get_frame_yaw(pose, 0, 1)[..., None]
 
     if data_config["direction_process"] in ["midfwd", "x360"]:
         yaw = yaw[window_inds][:, window // 2]  # [..., None]
 
-    # if ("root" or "x6d") in data_keys:
-    #     root = pose[..., 0, :]
-
-    #     if data_config["direction_process"] in ["midfwd", "x360"]:
-    #         # Centering root
-    #         root = pose[..., 0, :][window_inds]
-    #         root_center = np.zeros(root.shape)
-    #         root_center[..., [0, 1]] = root[:, window // 2, [0, 1]][:, None, :]
-
-    #         root -= root_center
-    #     elif data_config["direction_process"] == "fwd":
-    #         root[..., [0, 1]] = 0
-
-    # import pdb
-
-    # pdb.set_trace()  # must first full fwd process the input without inv kin etc, then project and THEN inv kin and fwd kin to get target
-
     axis = [1, 1, 1]
     yaw = get_frame_yaw(pose, 0, 1)[..., None]
     fwd_qtn = np.zeros((len(pose), 4))
     fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
-    pose = pose - np.repeat(pose[:, 0, None, :], np.shape(pose)[1], axis=1)
+    pose -= pose[:, 0:1, :]
+    # pose = pose - np.repeat(pose[:, 0, None, :], np.shape(pose)[1], axis=1)
     pose = qtn.qrot_np(np.repeat(fwd_qtn[:, None, :], np.shape(pose)[1], axis=1), pose)
 
-    pose = project_to_null(pose, [axis])[0]
+    # pose = project_to_null(pose, [axis])[0]
+    uperp = project_to_null(pose, [axis])[1]
+    coeff = -uperp[2][1] / uperp[2][0]
+    proj_x = uperp.T[0] * coeff + uperp.T[1]
+    proj_y = np.cross(axis, proj_x)
+    if proj_y[2] < 0:
+        proj_x *= -1
+        proj_y *= -1
+    pose = pose @ np.array([proj_x, proj_y]).T
+
     if "raw_pose" in data_keys:
         data["raw_pose"] = pose
     pose = np.concatenate([pose, np.zeros_like(pose[..., 0, None])], axis=2)
@@ -485,28 +378,13 @@ def calculate_2D_mouse_kinematics(
             np.array(skeleton_config["OFFSET"]),
             forward_indices=[1, 0],
         )
+        # import pdb
+
+        # pdb.set_trace()  ### convert to cos theta instead of theta/2 in local_ang
+        ## also use local_ang to get target pose instead of local qtn
+        # loader.dataset.data["local_ang"] = new_random_local_ang
         local_ang = local_qtn[..., [-1, 0]]
 
-        # if "fwd" in data_config["direction_process"]:
-        #     if "mid" in data_config["direction_process"]:
-        #         ## Center frame of a window is translated to center and rotated to x+
-        #         fwd_qtn = np.zeros((len(window_inds), 4))
-        #         fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
-        #         local_qtn = local_qtn[window_inds]
-        #         fwd_qtn = np.repeat(fwd_qtn[:, None, :], window, axis=1)
-        #     else:
-        #         fwd_qtn = np.zeros((len(local_qtn), 4))
-        #         fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
-
-        #     local_qtn[..., 0, :] = qtn.qmul_np(fwd_qtn, local_qtn[..., 0, :])
-
-        #     if "root" in data_keys:
-        #         root = qtn.qrot_np(fwd_qtn, root)
-
-        #     assert len(root) == len(window_inds)
-        #     assert len(local_qtn) == len(window_inds)
-
-        # data["x6d"] = qtn.quaternion_to_cont6d_np(local_qtn)
         data["x6d"] = local_ang
 
     if "offsets" in data_keys:
@@ -529,10 +407,6 @@ def calculate_2D_mouse_kinematics(
 
     if "target_pose" in data_keys:
         reshaped_x6d = qtn.quaternion_to_cont6d_np(local_qtn)
-        # reshaped_x6d = torch.from_numpy(reshaped_x6d).to("cuda")
-        # import pdb
-
-        # pdb.set_trace()
         if data_config["direction_process"] == "midfwd":
             offsets = data["offsets"][window_inds].reshape(
                 reshaped_x6d.shape[:2] + (-1,)

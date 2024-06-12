@@ -7,6 +7,7 @@ from dappy import vis
 import ssumo
 from base_path import RESULTS_PATH
 import sys
+import numpy as np
 
 
 def visualize_2D_reconstruction(model, loader, label, connectivity):
@@ -28,10 +29,21 @@ def visualize_2D_reconstruction(model, loader, label, connectivity):
         #     data_o["root"].reshape(-1, 3),
         #     do_root_R=True,
         # )
+        # import pdb
 
+        # pdb.set_trace()
+        data["raw_pose"] = data["raw_pose"].reshape(-1, n_keypts, 2)
+        rotv = data["raw_pose"][:, 1] - data["raw_pose"][:, 0]
+        rotv = torch.nn.functional.normalize(rotv)
+        rotv = rotv.cpu().numpy()
+        rotm = torch.tensor([[-rotv[:, 0], rotv[:, 1]], [-rotv[:, 1], -rotv[:, 0]]])
+        # rotm = torch.tensor([[rotv[:, 0], rotv[:, 1]], [-rotv[:, 1], rotv[:, 0]]])
+        rotm = rotm.swapaxes(0, 2).swapaxes(1, 2)
+        data["raw_pose"] = data["raw_pose"] @ rotm.to("cuda")
         pose_array = torch.cat(
             [
-                data["raw_pose"].reshape(-1, n_keypts, 2),
+                data["raw_pose"],
+                # data["raw_pose"].reshape(-1, n_keypts, 2),
                 data["target_pose"].reshape(-1, n_keypts, 2),
                 # pose_hat,
             ],
@@ -46,7 +58,8 @@ def visualize_2D_reconstruction(model, loader, label, connectivity):
                 # 2 * config["data"]["batch_size"] * config["model"]["window"],
             ],
             centered=False,
-            subtitles=["Raw", "Target"],  # "Reconstructed"],
+            # subtitles=["Raw", "Target"],  # "Reconstructed"],
+            subtitles=["Spine Locked", "Upright Camera"],
             title=label + " Data",
             fps=45,
             figsize=(36, 12),
@@ -73,15 +86,15 @@ for dataset_label in dataset_list:
     #     shuffle=True,
     #     verbose=0,
     # )
-    loader = ssumo.get.mouse_data_2D(
+    loader = ssumo.get.mouse_data(
         data_config=config["data"],
         window=config["model"]["window"],
         train=dataset_label == "Train",
         data_keys=["x6d", "root", "offsets", "target_pose", "raw_pose"],
         shuffle=True,
         normalize=config["disentangle"]["features"],
+        is_2D=True,
     )
     model = 1
-    # loader = 1
 
     visualize_2D_reconstruction(model, loader, dataset_label, connectivity)
