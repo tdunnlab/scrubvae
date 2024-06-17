@@ -45,6 +45,7 @@ def data_and_model(
         discrete_classes=loader.dataset.discrete_classes,
         device="cuda",
         verbose=verbose,
+        is_2D=is_2D,
     )
     return loader, model
 

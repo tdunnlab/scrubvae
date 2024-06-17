@@ -7,7 +7,7 @@ from dappy import visualization as vis
 
 
 def project_to_null(z, weight):
-    print("Finding null space projection of decoder ...")
+    # print("Finding null space projection of decoder ...")
     u_orth = spl.null_space(weight)
     z_null = z @ u_orth
 

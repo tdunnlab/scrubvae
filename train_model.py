@@ -20,9 +20,9 @@ config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 loader, model = ssumo.get.data_and_model(
     config,
     dataset_label="Train",
-    data_keys=["x6d", "root", "offsets", "target_pose"]
-    + config["disentangle"]["features"],
+    data_keys=["x6d", "offsets", "target_pose"] + config["disentangle"]["features"],
     shuffle=True,
+    is_2D=config["data"].get("is_2D"),
 )
 
 model = ssumo.train.train(config, model, loader)

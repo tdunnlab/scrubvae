@@ -15,6 +15,7 @@ def model(
     discrete_classes=None,
     device="cuda",
     verbose=1,
+    is_2D=False,
 ):
     feat_dim_dict = {
         "avg_speed": 1,
@@ -33,6 +34,10 @@ def model(
     in_channels = n_keypts * 6
     if direction_process in ["x360", "midfwd", None]:
         in_channels += 3
+    if is_2D:
+        in_channels = n_keypts * 2
+        if direction_process in ["x360", "midfwd", None]:
+            in_channels += 2
 
     methods = disentangle_config["method"]
     disentangle = {}
@@ -121,7 +126,8 @@ def model(
             arena_size=arena_size,
             kinematic_tree=kinematic_tree,
             ch=model_config["channel"],
-            discrete_classes=discrete_classes
+            discrete_classes=discrete_classes,
+            is_2D=is_2D,
         )
 
     if verbose > 0:

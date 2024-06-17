@@ -1,13 +1,16 @@
 import torch
+from dappy import read
 from ssumo.train.losses import get_batch_loss, balance_disentangle
 from ssumo.train.mutual_inf import MutInfoEstimator
 from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter
 from ssumo.plot.eval import loss as plt_loss
+from ssumo.get.data import projected_2D_kinematics
 import torch.optim as optim
 import tqdm
 import pickle
 import functools
 import time
+import random
 
 
 class CyclicalBetaAnnealing(torch.nn.Module):
@@ -169,6 +172,128 @@ def train_epoch(
 
 
 @epoch_wrapper
+def train_epoch_2D_view(
+    model,
+    optimizer,
+    scheduler,
+    loader,
+    device,
+    loss_config,
+    disentangle_config,
+    epoch,
+    data_config,
+    skeleton_config,
+    mode="train",
+):
+    epoch_loss = {k: 0 for k in ["total"] + list(loss_config.keys())}
+    for batch_idx, data in enumerate(loader):
+        if mode == "train":
+            for param in model.parameters():
+                param.grad = None
+        axis = random.random()
+        axis = [0, -((1 - axis**2) ** 0.5), -axis]
+        data = projected_2D_kinematics(
+            data,
+            axis,
+            data_config,
+            skeleton_config,
+        )
+        data = {k: v.to(device) for k, v in data.items()}
+        # (data['x6d'] == torch.nan).nonzero(as_tuple=True)
+        # torch.isnan(data['x6d']).any()
+        data_o = predict_batch(model, data, model.disentangle_keys)
+
+        batch_loss = get_batch_loss(
+            model,
+            data,
+            data_o,
+            loss_config,
+            disentangle_config,
+            is_2D=True,
+        )
+
+        if mode == "train":
+            batch_loss["total"].backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e7)
+            optimizer.step()
+            if scheduler is not None:
+                scheduler.step(epoch + batch_idx / len(loader))
+
+            if bool(model.disentangle):
+                for method in model.disentangle.keys():
+                    if method in ["moving_avg_lsq", "moving_avg", "qda"]:
+                        for k in model.disentangle[method].keys():
+                            model.disentangle[method][k].update(
+                                data_o["mu"].detach().clone(), data[k].detach().clone()
+                            )
+
+        epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
+
+    return epoch_loss
+
+
+@epoch_wrapper
+def train_epoch_mcmi_2D_view(
+    model,
+    optimizer,
+    scheduler,
+    loader,
+    device,
+    loss_config,
+    disentangle_config,
+    epoch,
+    bandwidth=1,
+    var_mode="sphere",
+    mode="train",
+):
+    epoch_loss = {k: 0 for k in ["total"] + list(loss_config.keys())}
+    for batch_idx, data in enumerate(loader):
+        if mode == "train":
+            for param in model.parameters():
+                param.grad = None
+
+        data = {k: v.to(device) for k, v in data.items()}
+        data_o = predict_batch(model, data, model.disentangle_keys)
+
+        variables = torch.cat([data[k] for k in model.disentangle_keys], dim=-1)
+        batch_loss = get_batch_loss(
+            model, data, data_o, loss_config, disentangle_config
+        )
+        if batch_idx > 0:
+            batch_loss["mcmi"] = mi_estimator(data_o["mu"], variables)
+            batch_loss["total"] += loss_config["mcmi"] * batch_loss["mcmi"]
+        else:
+            batch_loss["mcmi"] = batch_loss["total"]
+
+        if mode == "train":
+            batch_loss["total"].backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e5)
+
+            optimizer.step()
+            if scheduler is not None:
+                scheduler.step(epoch + batch_idx / len(loader))
+
+        updated_data_o = model.encode(data)
+        if var_mode == "diagonal":
+            L_sample = updated_data_o["L"].detach().clone()
+            var_sample = L_sample.diagonal(dim1=-2, dim2=-1) ** 2 + bandwidth
+        else:
+            var_sample = bandwidth
+
+        mi_estimator = MutInfoEstimator(
+            updated_data_o["mu"].detach().clone(),
+            variables.clone(),
+            var_sample,
+            bandwidth=bandwidth,
+            var_mode=var_mode,
+            device=device,
+        )
+        epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
+
+    return epoch_loss
+
+
+@epoch_wrapper
 def train_epoch_mcmi(
     model,
     optimizer,
@@ -283,8 +408,22 @@ def train(config, model, loader):
                 var_mode=config["disentangle"]["var_mode"],
                 bandwidth=config["disentangle"]["bandwidth"],
             )
+            if config["data"].get("is_2D") == True:
+                train_func = functools.partial(
+                    train_epoch_mcmi_2D_view,
+                    var_mode=config["disentangle"]["var_mode"],
+                    bandwidth=config["disentangle"]["bandwidth"],
+                    data_config=config["data"],
+                )
         else:
             train_func = functools.partial(train_epoch)
+            skeleton_config = read.config(config["data"]["skeleton_path"])
+            if config["data"].get("is_2D") == True:
+                train_func = functools.partial(
+                    train_epoch_2D_view,
+                    data_config=config["data"],
+                    skeleton_config=skeleton_config,
+                )
 
         starttime = time.time()
         epoch_loss = train_func(
@@ -298,7 +437,7 @@ def train(config, model, loader):
             epoch=epoch,
             mode="train",
         )
-        
+
         if "grad_reversal" in model.disentangle.keys():
             for key in model.disentangle["grad_reversal"].keys():
                 model.disentangle["grad_reversal"][key].reset_parameters()

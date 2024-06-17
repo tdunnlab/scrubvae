@@ -69,9 +69,9 @@ def total_correlation(z, mu, L):
         total correlation for batch, scalar value
 
     """
-    logvar = torch.log(torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1)).diagonal(
-        dim1=-1, dim2=-2
-    ))
+    logvar = torch.log(
+        torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1)).diagonal(dim1=-1, dim2=-2)
+    )
     # Compute log(q(z(x_j)|x_i)) for every sample/dimension in the batch, which is a tensor of
     # shape (n_frames, n_dims). In the following comments,
     # (n_frames, n_frames, n_dims) are indexed by [j, i, l].
@@ -149,7 +149,9 @@ def vae_BXEntropy_loss(x, x_hat, mu, log_var):
     return B_XEntropy + KL_div
 
 
-def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
+def mpjpe_loss(
+    pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None, is_2D=False
+):
     # if root == None:
     #     root = torch.zeros((x.shape[0], 3), device=x.device)
     if root_hat == None:
@@ -159,15 +161,30 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
     #     x, kinematic_tree, offsets, root_pos=root, do_root_R=True, eps=1e-8
     # )
     # pose = x
+    root_reshaped = root_hat.reshape((-1, 3))
+    if is_2D:
+        local_ang = x_hat.reshape((-1,) + x_hat.shape[-2:])
+        reshaped_x6d = torch.concatenate(
+            [local_ang[..., :], torch.zeros_like(local_ang[..., [0]])], axis=-1
+        )
+        reshaped_x6d = torch.concatenate(
+            [reshaped_x6d[..., [1, 0, 2]], reshaped_x6d[..., :]], axis=-1
+        )
+        reshaped_x6d[..., 3] *= -1
+        root_reshaped = root_hat.reshape((-1, 2))
+        root_reshaped = torch.concatenate(
+            [root_reshaped, torch.zeros_like(root_reshaped[..., 0, None])], axis=-1
+        )
     pose_hat = fwd_kin_cont6d_torch(
-        x_hat.reshape((-1,) + x_hat.shape[-2:]),
+        reshaped_x6d,
         kinematic_tree,
         offsets.reshape((-1,) + offsets.shape[-2:]),
-        root_pos=root_hat.reshape((-1, 3)),
+        root_pos=root_reshaped,
         do_root_R=True,
         eps=1e-8,
-    ).reshape(pose.shape)
-
+    ).reshape(pose.shape[:-1] + (-1,))
+    if is_2D:
+        pose_hat = pose_hat[..., :2]
     loss = torch.sum((pose - pose_hat) ** 2)
     loss = loss / (pose.shape[0] * pose.shape[-1] * pose.shape[-2])
     return loss
@@ -188,7 +205,7 @@ def direct_lsq_loss(z, y, bias=False):
     return torch.nn.MSELoss(reduction="sum")(yhat, y)
 
 
-def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
+def get_batch_loss(model, data, data_o, loss_scale, disentangle_config, is_2D=False):
     batch_size = data["x6d"].shape[0]
     batch_loss = {}
 
@@ -210,6 +227,7 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
             data_o["x6d"],
             model.kinematic_tree,
             data["offsets"],
+            is_2D=is_2D,
         )
 
     if "root" in loss_scale.keys():

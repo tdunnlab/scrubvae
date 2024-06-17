@@ -349,6 +349,7 @@ class ResVAE(VAE):
         disentangle_keys=None,
         conditional_keys=None,
         discrete_classes=None,
+        is_2D=False,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -361,6 +362,7 @@ class ResVAE(VAE):
         self.disentangle_keys = disentangle_keys
         self.conditional_keys = conditional_keys
         self.discrete_classes = discrete_classes
+        self.is_2D = is_2D
         self.encoder = ResidualEncoder(
             in_channels,
             ch=ch,
@@ -403,14 +405,14 @@ class ResVAE(VAE):
             norm_root = self.normalize_root(data["root"])
 
             x_in = torch.cat(
-                (data["x6d"].view(data["x6d"].shape[:2] + (-1,)), norm_root), axis=-1
+                (data["x6d"].reshape(data["x6d"].shape[:2] + (-1,)), norm_root), axis=-1
             )
         else:
             x_in = data["x6d"]
 
         data_o = {}
         data_o["mu"], data_o["L"] = self.encoder(
-            x_in.moveaxis(1, -1).view(-1, self.in_channels, self.window)
+            x_in.moveaxis(1, -1).reshape(-1, self.in_channels, self.window)
         )
         return data_o
 
@@ -441,5 +443,7 @@ class ResVAE(VAE):
             )
 
         data_o["x6d"] = x6d.reshape(z.shape[0], self.window, -1, 6)
+        if self.is_2D:
+            data_o["x6d"] = x6d.reshape(z.shape[0], self.window, -1, 2)
 
         return data_o

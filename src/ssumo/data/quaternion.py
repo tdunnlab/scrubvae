@@ -28,7 +28,7 @@ def qinv_np(q):
 
 def qnormalize(q):
     assert q.shape[-1] == 4, "q must be a tensor of shape (*, 4)"
-    return q / torch.norm(q, dim=-1, keepdim=True)
+    return torch.nan_to_num(q / torch.norm(q, dim=-1, keepdim=True))
 
 
 def qmul(q, r):

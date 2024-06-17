@@ -348,14 +348,29 @@ def calculate_2D_mouse_kinematics(
     if data_config["direction_process"] in ["midfwd", "x360"]:
         yaw = yaw[window_inds][:, window // 2]  # [..., None]
 
-    axis = [1, 1, 1]
     yaw = get_frame_yaw(pose, 0, 1)[..., None]
     fwd_qtn = np.zeros((len(pose), 4))
     fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
     pose -= pose[:, 0:1, :]
     # pose = pose - np.repeat(pose[:, 0, None, :], np.shape(pose)[1], axis=1)
     pose = qtn.qrot_np(np.repeat(fwd_qtn[:, None, :], np.shape(pose)[1], axis=1), pose)
+    data["3D_pose"] = pose
+    for k in data_keys:
+        if k == "3D_pose":
+            continue
+        data[k] = np.zeros(len(pose))
 
+    return data, window_inds
+
+
+def projected_2D_kinematics(
+    data: dict,
+    axis: List[int],
+    data_config: dict,  # if we add different 2d preprocess options
+    skeleton_config: dict,
+):
+    data_keys = list(data.keys())
+    pose = data["3D_pose"]
     # pose = project_to_null(pose, [axis])[0]
     uperp = project_to_null(pose, [axis])[1]
     coeff = -uperp[2][1] / uperp[2][0]
@@ -377,12 +392,13 @@ def calculate_2D_mouse_kinematics(
 
     if "raw_pose" in data_keys:
         data["raw_pose"] = pose
-    pose = np.concatenate([pose, np.zeros_like(pose[..., 0, None])], axis=2)
+    pose = np.concatenate([pose, np.zeros_like(pose[..., 0, None])], axis=-1)
 
     if "x6d" in data_keys:
-        print("Applying inverse kinematics ...")
+        # print("Applying inverse kinematics ...")
+        flattened_pose = np.reshape(pose, (-1,) + pose.shape[2:])
         local_qtn = inv_kin(
-            pose,
+            flattened_pose,
             skeleton_config["KINEMATIC_TREE"],
             np.array(skeleton_config["OFFSET"]),
             forward_indices=[1, 0],
@@ -400,25 +416,30 @@ def calculate_2D_mouse_kinematics(
         )
         local_ang = np.clip(local_ang, a_min=-1, a_max=1)
 
-        data["x6d"] = local_ang
+        data["x6d"] = np.reshape(
+            local_ang, (data_config["batch_size"], -1) + local_ang.shape[1:]
+        )
 
     if "offsets" in data_keys:
-        data["offsets"] = get_segment_len(
-            pose,
+        segment_lens = get_segment_len(
+            flattened_pose,
             skeleton_config["KINEMATIC_TREE"],
             np.array(skeleton_config["OFFSET"]),
         )
+        data["offsets"] = np.reshape(
+            segment_lens, (data_config["batch_size"], -1) + segment_lens.shape[1:]
+        )
 
     if "root" in data_keys:
-        root = pose[..., 0, :]
+        root = pose[..., 0, :2]
         data["root"] = root
         frame_dim_inds = tuple(range(len(root.shape) - 1))
         print("Root Maxes: {}".format(root.max(axis=frame_dim_inds)))
         print("Root Mins: {}".format(root.min(axis=frame_dim_inds)))
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
-    if "ids" in data_keys:
-        data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
+    # if "ids" in data_keys:
+    #     data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
 
     if "target_pose" in data_keys:
         reshaped_x6d = np.concatenate(
@@ -428,27 +449,24 @@ def calculate_2D_mouse_kinematics(
             [reshaped_x6d[..., [1, 0, 2]], reshaped_x6d[..., :]], axis=-1
         )
         reshaped_x6d[..., 3] *= -1
-        if data_config["direction_process"] == "midfwd":
-            offsets = data["offsets"][window_inds].reshape(
-                reshaped_x6d.shape[:2] + (-1,)
-            )
-        else:
-            offsets = data["offsets"]
-
-        data["target_pose"] = fwd_kin_cont6d(
-            reshaped_x6d,
-            skeleton_config["KINEMATIC_TREE"],
-            offsets,
-            root_pos=torch.zeros(reshaped_x6d.shape[0], 3),
-            do_root_R=True,
-            # eps=1e-8,
-        ).reshape(data["x6d"].shape[:-1] + (3,))[..., :2]
-        # import pdb
-
-        # pdb.set_trace()
+        # if data_config["direction_process"] == "midfwd":
+        #     offsets = data["offsets"][window_inds].reshape(
+        #         reshaped_x6d.shape[:2] + (-1,)
+        #     )
+        # else:
+        offsets = data["offsets"]
+        data["target_pose"] = torch.from_numpy(pose[..., :2])
+        # data["target_pose"] = fwd_kin_cont6d(
+        #     reshaped_x6d,
+        #     skeleton_config["KINEMATIC_TREE"],
+        #     offsets,
+        #     root_pos=torch.zeros(reshaped_x6d.shape[0], 3),
+        #     do_root_R=True,
+        #     # eps=1e-8,
+        # ).reshape(data["x6d"].shape[:-1] + (3,))[..., :2]
         # data["target_pose"] = pose
 
-    return data, window_inds
+    return data
 
 
 def calculate_mouse_kinematics(
