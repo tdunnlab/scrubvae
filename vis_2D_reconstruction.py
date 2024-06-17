@@ -29,21 +29,10 @@ def visualize_2D_reconstruction(model, loader, label, connectivity):
         #     data_o["root"].reshape(-1, 3),
         #     do_root_R=True,
         # )
-        # import pdb
-
-        # pdb.set_trace()
-        data["raw_pose"] = data["raw_pose"].reshape(-1, n_keypts, 2)
-        rotv = data["raw_pose"][:, 1] - data["raw_pose"][:, 0]
-        rotv = torch.nn.functional.normalize(rotv)
-        rotv = rotv.cpu().numpy()
-        rotm = torch.tensor([[-rotv[:, 0], rotv[:, 1]], [-rotv[:, 1], -rotv[:, 0]]])
-        # rotm = torch.tensor([[rotv[:, 0], rotv[:, 1]], [-rotv[:, 1], rotv[:, 0]]])
-        rotm = rotm.swapaxes(0, 2).swapaxes(1, 2)
-        data["raw_pose"] = data["raw_pose"] @ rotm.to("cuda")
         pose_array = torch.cat(
             [
-                data["raw_pose"],
-                # data["raw_pose"].reshape(-1, n_keypts, 2),
+                # data["raw_pose"],
+                data["raw_pose"].reshape(-1, n_keypts, 2),
                 data["target_pose"].reshape(-1, n_keypts, 2),
                 # pose_hat,
             ],

@@ -364,7 +364,16 @@ def calculate_2D_mouse_kinematics(
     if proj_y[2] < 0:
         proj_x *= -1
         proj_y *= -1
+    proj_x /= np.linalg.norm(proj_x)
+    proj_y /= np.linalg.norm(proj_y)
     pose = pose @ np.array([proj_x, proj_y]).T
+
+    # # rotate to +x on 2d axis
+    # rotv = pose[:, 1] - pose[:, 0]
+    # rotv = rotv / np.linalg.norm(rotv)
+    # rotm = np.array([[-rotv[:, 0], rotv[:, 1]], [-rotv[:, 1], -rotv[:, 0]]])
+    # rotm = rotm.swapaxes(0, 2).swapaxes(1, 2)
+    # pose2 = pose @ rotm
 
     if "raw_pose" in data_keys:
         data["raw_pose"] = pose
@@ -378,12 +387,18 @@ def calculate_2D_mouse_kinematics(
             np.array(skeleton_config["OFFSET"]),
             forward_indices=[1, 0],
         )
-        # import pdb
-
-        # pdb.set_trace()  ### convert to cos theta instead of theta/2 in local_ang
+        ### convert to cos theta instead of theta/2 in local_ang
         ## also use local_ang to get target pose instead of local qtn
         # loader.dataset.data["local_ang"] = new_random_local_ang
+
         local_ang = local_qtn[..., [-1, 0]]
+        local_ang[..., [0]] = (
+            local_qtn[..., [-1]] * local_qtn[..., [0]] * 2
+        )  # double angle
+        local_ang[..., [1]] = (
+            np.ones_like(local_qtn[..., [-1]]) - 2 * local_qtn[..., [-1]] ** 2
+        )
+        local_ang = np.clip(local_ang, a_min=-1, a_max=1)
 
         data["x6d"] = local_ang
 
@@ -406,7 +421,13 @@ def calculate_2D_mouse_kinematics(
         data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
 
     if "target_pose" in data_keys:
-        reshaped_x6d = qtn.quaternion_to_cont6d_np(local_qtn)
+        reshaped_x6d = np.concatenate(
+            [local_ang[..., :], np.zeros_like(local_ang[..., [0]])], axis=-1
+        )
+        reshaped_x6d = np.concatenate(
+            [reshaped_x6d[..., [1, 0, 2]], reshaped_x6d[..., :]], axis=-1
+        )
+        reshaped_x6d[..., 3] *= -1
         if data_config["direction_process"] == "midfwd":
             offsets = data["offsets"][window_inds].reshape(
                 reshaped_x6d.shape[:2] + (-1,)
@@ -422,6 +443,10 @@ def calculate_2D_mouse_kinematics(
             do_root_R=True,
             # eps=1e-8,
         ).reshape(data["x6d"].shape[:-1] + (3,))[..., :2]
+        # import pdb
+
+        # pdb.set_trace()
+        # data["target_pose"] = pose
 
     return data, window_inds
 
