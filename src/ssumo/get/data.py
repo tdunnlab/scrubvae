@@ -380,7 +380,7 @@ def projected_2D_kinematics(
     )
     coeff = -uperp[2][1] / uperp[2][0]
     proj_x = uperp.T[0] * coeff + uperp.T[1]
-    proj_y = torch.cross(torch.tensor(axis).to(device), proj_x)
+    proj_y = torch.cross(torch.tensor(axis).type(torch.FloatTensor).to(device), proj_x)
     if proj_y[2] < 0:
         proj_x *= -1
         proj_y *= -1
@@ -441,8 +441,8 @@ def projected_2D_kinematics(
         root = pose[..., 0, :2]
         data["root"] = root
         frame_dim_inds = tuple(range(len(root.shape) - 1))
-        print("Root Maxes: {}".format(root.max(axis=frame_dim_inds)))
-        print("Root Mins: {}".format(root.min(axis=frame_dim_inds)))
+        # print("Root Maxes: {}".format(root.max(axis=frame_dim_inds)))
+        # print("Root Mins: {}".format(root.min(axis=frame_dim_inds)))
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
     # if "ids" in data_keys:

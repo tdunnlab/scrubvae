@@ -1,4 +1,5 @@
 from ssumo.data.dataset import fwd_kin_cont6d_torch
+from ssumo.get.data import projected_2D_kinematics
 
 from torch.utils.data import DataLoader
 from dappy import read
@@ -7,6 +8,77 @@ from dappy import vis
 import ssumo
 from base_path import RESULTS_PATH
 import sys
+import random
+import numpy as np
+
+
+def visualize_2D_reconstruction(model, loader, label, connectivity, config):
+    n_keypts = loader.dataset.n_keypts
+    kinematic_tree = loader.dataset.kinematic_tree
+    # model.eval()
+    with torch.no_grad():
+        # Let's see how reconstruction looks on train data
+        data = next(iter(loader))
+        data = {k: v.to("cuda") for k, v in data.items()}
+        axis = random.random() * np.pi / 2
+        axis = [0, -np.cos(axis), -np.sin(axis)]
+        skeleton_config = read.config(config["data"]["skeleton_path"])
+        data = projected_2D_kinematics(
+            data,
+            axis,
+            config,
+            skeleton_config,
+            device="cuda",
+        )
+        data = {k: v.to("cuda") for k, v in data.items()}
+        data_o = ssumo.train.predict_batch(
+            model, data, disentangle_keys=config["disentangle"]["features"]
+        )
+        x_hat = data_o["x6d"]
+        local_ang = x_hat.reshape((-1,) + x_hat.shape[-2:])
+        reshaped_x6d = torch.concatenate(
+            [local_ang[..., :], torch.zeros_like(local_ang[..., [0]])], axis=-1
+        )
+        reshaped_x6d = torch.concatenate(
+            [reshaped_x6d[..., [1, 0, 2]], reshaped_x6d[..., :]], axis=-1
+        )
+        reshaped_x6d[..., 3] *= -1
+
+        pose_hat = fwd_kin_cont6d_torch(
+            reshaped_x6d,
+            kinematic_tree,
+            data["offsets"].view(-1, n_keypts, 3),
+            torch.zeros(reshaped_x6d.shape[:-2] + (3,)),
+            do_root_R=True,
+        ).reshape(-1, n_keypts, 3)
+        pose_hat = pose_hat[..., :2]
+
+        pose_array = torch.cat(
+            [
+                data["raw_pose"].reshape(-1, n_keypts, 2),
+                data["target_pose"].reshape(-1, n_keypts, 2),
+                pose_hat,
+            ],
+            axis=0,
+        )
+        vis.pose.grid2D(
+            pose_array.cpu().detach().numpy(),
+            connectivity,
+            frames=[
+                0,
+                config["data"]["batch_size"] * config["model"]["window"],
+                2 * config["data"]["batch_size"] * config["model"]["window"],
+            ],
+            centered=False,
+            subtitles=["Raw", "Target", "Reconstructed"],
+            title=label + " Data",
+            fps=45,
+            figsize=(36, 12),
+            N_FRAMES=config["data"]["batch_size"] * config["model"]["window"],
+            VID_NAME=label + ".mp4",
+            SAVE_ROOT=config["out_path"],
+        )
+
 
 def visualize_reconstruction(model, loader, label, connectivity):
     n_keypts = loader.dataset.n_keypts
@@ -61,7 +133,7 @@ config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["data"]["stride"] = 10
 config["data"]["batch_size"] = 5
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
-dataset_list = ["Train"] #"Test"
+dataset_list = ["Train"]  # "Test"
 for dataset_label in dataset_list:
     loader, model = ssumo.get.data_and_model(
         config,
@@ -74,4 +146,5 @@ for dataset_label in dataset_list:
         verbose=0,
     )
 
-    visualize_reconstruction(model, loader, dataset_label, connectivity)
+    # visualize_reconstruction(model, loader, dataset_label, connectivity)
+    visualize_2D_reconstruction(model, loader, dataset_label, connectivity, config)

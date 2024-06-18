@@ -25,6 +25,7 @@ def model(
         "heading": 2,
         "heading_change": 1,
         "fluorescence": 1,
+        "view_axis": 3,
     }
 
     if discrete_classes is not None:

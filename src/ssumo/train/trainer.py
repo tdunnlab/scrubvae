@@ -11,6 +11,7 @@ import pickle
 import functools
 import time
 import random
+from math import pi, sin, cos
 
 
 class CyclicalBetaAnnealing(torch.nn.Module):
@@ -190,9 +191,11 @@ def train_epoch_2D_view(
         if mode == "train":
             for param in model.parameters():
                 param.grad = None
-        axis = random.random()
-        axis = [0, -((1 - axis**2) ** 0.5), -axis]
-        data["view_axis"] = torch.tensor(axis)
+        axis = random.random() * pi / 2
+        axis = [0, -cos(axis), -sin(axis)]
+        data["view_axis"] = torch.tensor(axis)[None, :].repeat(
+            (len(data["3D_pose"]), 1)
+        )
         data = {k: v.to(device) for k, v in data.items()}
         data = projected_2D_kinematics(
             data,
