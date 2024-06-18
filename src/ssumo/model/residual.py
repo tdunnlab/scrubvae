@@ -349,7 +349,7 @@ class ResVAE(VAE):
         disentangle_keys=None,
         conditional_keys=None,
         discrete_classes=None,
-        is_2D=False,
+        config=None,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -362,7 +362,9 @@ class ResVAE(VAE):
         self.disentangle_keys = disentangle_keys
         self.conditional_keys = conditional_keys
         self.discrete_classes = discrete_classes
-        self.is_2D = is_2D
+        self.is_2D = False
+        if config != None:
+            self.is_2D = config["data"].get("is_2D")
         self.encoder = ResidualEncoder(
             in_channels,
             ch=ch,

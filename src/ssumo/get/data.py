@@ -6,7 +6,7 @@ import torch
 from ssumo.data.dataset import *
 from torch.utils.data import DataLoader
 from pathlib import Path
-from ssumo.eval.eval import project_to_null
+import scipy.linalg as spl
 
 TRAIN_IDS = {
     # "immunostain": np.arange(74),
@@ -201,13 +201,12 @@ def mouse_pd_data(
 
 
 def mouse_data(
-    data_config: dict,
+    config: dict,
     window: int = 51,
     train: bool = True,
     data_keys: List[str] = ["x6d", "root", "offsets"],
     shuffle: bool = False,
     normalize: List[str] = [],
-    is_2D: bool = False,
 ):
     """_summary_
 
@@ -222,7 +221,8 @@ def mouse_data(
     Returns:
         _type_: _description_
     """
-
+    data_config = config["data"]
+    is_2D = config["data"].get("is_2D")
     skeleton_config = read.config(data_config["skeleton_path"])
 
     if "immunostain" in data_config["data_path"]:
@@ -358,30 +358,35 @@ def calculate_2D_mouse_kinematics(
     for k in data_keys:
         if k == "3D_pose":
             continue
-        data[k] = np.zeros(len(pose))
+        data[k] = torch.zeros(len(pose))
 
     return data, window_inds
 
 
 def projected_2D_kinematics(
     data: dict,
-    axis: List[int],
-    data_config: dict,  # if we add different 2d preprocess options
+    axis: torch.tensor,
+    config: dict,  # if we add different 2d preprocess options
     skeleton_config: dict,
+    device: str = "cuda",
 ):
     data_keys = list(data.keys())
     pose = data["3D_pose"]
     # pose = project_to_null(pose, [axis])[0]
-    uperp = project_to_null(pose, [axis])[1]
+    uperp = (
+        torch.from_numpy(spl.null_space(np.array(axis)[None, ...]))
+        .type(torch.FloatTensor)
+        .to(device)
+    )
     coeff = -uperp[2][1] / uperp[2][0]
     proj_x = uperp.T[0] * coeff + uperp.T[1]
-    proj_y = np.cross(axis, proj_x)
+    proj_y = torch.cross(torch.tensor(axis).to(device), proj_x)
     if proj_y[2] < 0:
         proj_x *= -1
         proj_y *= -1
-    proj_x /= np.linalg.norm(proj_x)
-    proj_y /= np.linalg.norm(proj_y)
-    pose = pose @ np.array([proj_x, proj_y]).T
+    proj_x /= torch.norm(proj_x)
+    proj_y /= torch.norm(proj_y)
+    pose = pose @ torch.cat([proj_x[None, ...], proj_y[None, ...]], axis=0).T
 
     # # rotate to +x on 2d axis
     # rotv = pose[:, 1] - pose[:, 0]
@@ -392,16 +397,17 @@ def projected_2D_kinematics(
 
     if "raw_pose" in data_keys:
         data["raw_pose"] = pose
-    pose = np.concatenate([pose, np.zeros_like(pose[..., 0, None])], axis=-1)
+    pose = torch.concatenate([pose, torch.zeros_like(pose[..., 0, None])], axis=-1)
 
     if "x6d" in data_keys:
         # print("Applying inverse kinematics ...")
-        flattened_pose = np.reshape(pose, (-1,) + pose.shape[2:])
-        local_qtn = inv_kin(
+        flattened_pose = torch.reshape(pose, (-1,) + pose.shape[2:])
+        local_qtn = inv_kin_torch(
             flattened_pose,
             skeleton_config["KINEMATIC_TREE"],
-            np.array(skeleton_config["OFFSET"]),
+            torch.tensor(skeleton_config["OFFSET"]).type(torch.FloatTensor).to(device),
             forward_indices=[1, 0],
+            device=device,
         )
         ### convert to cos theta instead of theta/2 in local_ang
         ## also use local_ang to get target pose instead of local qtn
@@ -412,22 +418,23 @@ def projected_2D_kinematics(
             local_qtn[..., [-1]] * local_qtn[..., [0]] * 2
         )  # double angle
         local_ang[..., [1]] = (
-            np.ones_like(local_qtn[..., [-1]]) - 2 * local_qtn[..., [-1]] ** 2
+            torch.ones_like(local_qtn[..., [-1]]) - 2 * local_qtn[..., [-1]] ** 2
         )
-        local_ang = np.clip(local_ang, a_min=-1, a_max=1)
+        local_ang = torch.clip(local_ang, torch.tensor(-1), torch.tensor(1))
 
-        data["x6d"] = np.reshape(
-            local_ang, (data_config["batch_size"], -1) + local_ang.shape[1:]
+        data["x6d"] = torch.reshape(
+            local_ang, (-1, config["model"]["window"]) + local_ang.shape[1:]
         )
 
     if "offsets" in data_keys:
-        segment_lens = get_segment_len(
+        segment_lens = get_segment_len_torch(
             flattened_pose,
             skeleton_config["KINEMATIC_TREE"],
-            np.array(skeleton_config["OFFSET"]),
+            torch.tensor(skeleton_config["OFFSET"]),
+            device=device,
         )
-        data["offsets"] = np.reshape(
-            segment_lens, (data_config["batch_size"], -1) + segment_lens.shape[1:]
+        data["offsets"] = torch.reshape(
+            segment_lens, (-1, config["model"]["window"]) + segment_lens.shape[1:]
         )
 
     if "root" in data_keys:
@@ -442,20 +449,16 @@ def projected_2D_kinematics(
     #     data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
 
     if "target_pose" in data_keys:
-        reshaped_x6d = np.concatenate(
-            [local_ang[..., :], np.zeros_like(local_ang[..., [0]])], axis=-1
+        reshaped_x6d = torch.concatenate(
+            [local_ang[..., :], torch.zeros_like(local_ang[..., [0]])], axis=-1
         )
-        reshaped_x6d = np.concatenate(
+        reshaped_x6d = torch.concatenate(
             [reshaped_x6d[..., [1, 0, 2]], reshaped_x6d[..., :]], axis=-1
         )
         reshaped_x6d[..., 3] *= -1
-        # if data_config["direction_process"] == "midfwd":
-        #     offsets = data["offsets"][window_inds].reshape(
-        #         reshaped_x6d.shape[:2] + (-1,)
-        #     )
-        # else:
+
         offsets = data["offsets"]
-        data["target_pose"] = torch.from_numpy(pose[..., :2])
+        data["target_pose"] = pose[..., :2]
         # data["target_pose"] = fwd_kin_cont6d(
         #     reshaped_x6d,
         #     skeleton_config["KINEMATIC_TREE"],

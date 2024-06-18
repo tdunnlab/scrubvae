@@ -22,7 +22,6 @@ loader, model = ssumo.get.data_and_model(
     dataset_label="Train",
     data_keys=["x6d", "offsets", "target_pose"] + config["disentangle"]["features"],
     shuffle=True,
-    is_2D=config["data"].get("is_2D"),
 )
 
 model = ssumo.train.train(config, model, loader)

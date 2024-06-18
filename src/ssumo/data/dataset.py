@@ -8,6 +8,54 @@ from numpy.lib.stride_tricks import sliding_window_view
 from tqdm import trange
 
 
+def inv_kin_torch(
+    pose,
+    kinematic_tree,
+    offset,
+    forward_indices=[0, 1],
+    device="cuda",
+):
+    """
+    Adapted from T2M-GPT (https://mael-zys.github.io/T2M-GPT/)
+    [1] Zhang, Jianrong, et al. "Generating Human Motion From Textual
+    Descriptions With Discrete Representations." Proceedings of the
+    IEEE/CVF Conference on Computer Vision and Pattern Recognition. 2023.
+    """
+
+    # Find forward root direction
+    forward = pose[:, forward_indices[1], :] - pose[:, forward_indices[0], :]
+    forward = (
+        forward.type(torch.FloatTensor).to(device)
+        / torch.norm(forward, dim=-1)[..., None]
+    )
+
+    # Root Rotation
+    target = (
+        torch.tensor([[1, 0, 0]])
+        .repeat([len(forward), 1])
+        .type(torch.FloatTensor)
+        .to(device)
+    )
+    root_quat = qtn.qbetween(forward, target)
+
+    local_quat = torch.zeros(pose.shape[:-1] + (4,))
+    root_quat[0] = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+    local_quat[:, 0] = root_quat
+    for chain in kinematic_tree:
+        R = root_quat
+        for i in range(len(chain) - 1):
+            u = offset[chain[i + 1]][None, ...]
+            u = u.repeat([len(pose)] + [1 for j in u.shape[1:]])
+            v = pose[:, chain[i + 1]] - pose[:, chain[i]]
+            v = v / torch.norm(v, dim=-1)[..., None]
+            rot_u_v = qtn.qbetween(u, v)
+            R_loc = qtn.qmul(qtn.qinv(R), rot_u_v)
+            local_quat[:, chain[i + 1], :] = R_loc
+            R = qtn.qmul(R, R_loc)
+
+    return local_quat
+
+
 def inv_kin(
     pose: np.ndarray,
     kinematic_tree: Union[List, np.ndarray],
@@ -221,6 +269,25 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
     for i in range(1, offset.shape[0]):
         offsets[:, i] = (
             np.linalg.norm(pose[:, i, :] - pose[:, parents[i], :], axis=1)[..., None]
+            * offsets[:, i]
+        )
+
+    return offsets
+
+
+def get_segment_len_torch(pose, kinematic_tree, offset, device):
+    parents = [0] * len(offset)
+    parents[0] = -1
+    for chain in kinematic_tree:
+        for j in range(1, len(chain)):
+            parents[chain[j]] = chain[j - 1]
+
+    offsets = torch.moveaxis(torch.tile(offset[..., None], (pose.shape[0],)), -1, 0).to(
+        device
+    )
+    for i in range(1, offset.shape[0]):
+        offsets[:, i] = (
+            torch.norm(pose[:, i, :] - pose[:, parents[i], :], dim=1)[..., None]
             * offsets[:, i]
         )
 

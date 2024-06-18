@@ -149,11 +149,10 @@ def vae_BXEntropy_loss(x, x_hat, mu, log_var):
     return B_XEntropy + KL_div
 
 
-def mpjpe_loss(
-    pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None, is_2D=False
-):
+def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
     # if root == None:
     #     root = torch.zeros((x.shape[0], 3), device=x.device)
+    is_2D = x_hat.shape[-1] == 2
     if root_hat == None:
         root_hat = torch.zeros_like(pose[..., 0, :])
 
@@ -205,7 +204,7 @@ def direct_lsq_loss(z, y, bias=False):
     return torch.nn.MSELoss(reduction="sum")(yhat, y)
 
 
-def get_batch_loss(model, data, data_o, loss_scale, disentangle_config, is_2D=False):
+def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
     batch_size = data["x6d"].shape[0]
     batch_loss = {}
 
@@ -227,7 +226,6 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config, is_2D=Fa
             data_o["x6d"],
             model.kinematic_tree,
             data["offsets"],
-            is_2D=is_2D,
         )
 
     if "root" in loss_scale.keys():

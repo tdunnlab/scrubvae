@@ -181,7 +181,7 @@ def train_epoch_2D_view(
     loss_config,
     disentangle_config,
     epoch,
-    data_config,
+    config,
     skeleton_config,
     mode="train",
 ):
@@ -192,15 +192,16 @@ def train_epoch_2D_view(
                 param.grad = None
         axis = random.random()
         axis = [0, -((1 - axis**2) ** 0.5), -axis]
+        data["view_axis"] = torch.tensor(axis)
+        data = {k: v.to(device) for k, v in data.items()}
         data = projected_2D_kinematics(
             data,
             axis,
-            data_config,
+            config,
             skeleton_config,
+            device=device,
         )
         data = {k: v.to(device) for k, v in data.items()}
-        # (data['x6d'] == torch.nan).nonzero(as_tuple=True)
-        # torch.isnan(data['x6d']).any()
         data_o = predict_batch(model, data, model.disentangle_keys)
 
         batch_loss = get_batch_loss(
@@ -209,7 +210,6 @@ def train_epoch_2D_view(
             data_o,
             loss_config,
             disentangle_config,
-            is_2D=True,
         )
 
         if mode == "train":
@@ -421,7 +421,7 @@ def train(config, model, loader):
             if config["data"].get("is_2D") == True:
                 train_func = functools.partial(
                     train_epoch_2D_view,
-                    data_config=config["data"],
+                    config=config,
                     skeleton_config=skeleton_config,
                 )
 

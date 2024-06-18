@@ -2,21 +2,21 @@ import torch
 
 
 def model(
-    model_config,
+    config,
     load_model,
     epoch,
-    disentangle_config,
     n_keypts,
     direction_process,
-    loss_config=None,
     arena_size=None,
     kinematic_tree=None,
     bound=False,
     discrete_classes=None,
     device="cuda",
     verbose=1,
-    is_2D=False,
 ):
+    model_config = config["model"]
+    loss_config = config["loss"]
+    disentangle_config = config["disentangle"]
     feat_dim_dict = {
         "avg_speed": 1,
         "part_speed": 4,
@@ -34,7 +34,7 @@ def model(
     in_channels = n_keypts * 6
     if direction_process in ["x360", "midfwd", None]:
         in_channels += 3
-    if is_2D:
+    if config["data"].get("is_2D"):
         in_channels = n_keypts * 2
         if direction_process in ["x360", "midfwd", None]:
             in_channels += 2
@@ -127,7 +127,7 @@ def model(
             kinematic_tree=kinematic_tree,
             ch=model_config["channel"],
             discrete_classes=discrete_classes,
-            is_2D=is_2D,
+            config=config,
         )
 
     if verbose > 0:
