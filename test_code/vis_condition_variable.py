@@ -6,35 +6,48 @@ from dappy import read
 import torch
 from dappy import vis
 import ssumo
-from base_path import RESULTS_PATH
+
+# from base_path import RESULTS_PATH
+RESULTS_PATH = "/mnt/ceph/users/hkoneru/results/vae/"
 import sys
 import random
 import numpy as np
 
 
-def visualize_2D_reconstruction(model, loader, label, connectivity, config):
+def visualize_conditional_variable_2D(model, loader, label, connectivity, config):
     n_keypts = loader.dataset.n_keypts
     kinematic_tree = loader.dataset.kinematic_tree
-    # model.eval()
+    model.eval()
     with torch.no_grad():
         # Let's see how reconstruction looks on train data
         data = next(iter(loader))
         data = {k: v.to("cuda") for k, v in data.items()}
-        axis = random.random() * np.pi / 2
-        axis = [0, -np.cos(axis), -np.sin(axis)]
+        angles = np.linspace(0, np.pi / 2, config["model"]["window"])
+        # angles = np.full(config["model"]["window"], np.pi / 4)
+        axis = np.swapaxes(
+            np.array([np.zeros_like(angles), -np.cos(angles), -np.sin(angles)]), 0, 1
+        )
+        axis = np.tile(axis, (config["data"]["batch_size"], 1))
         skeleton_config = read.config(config["data"]["skeleton_path"])
         data = projected_2D_kinematics(
             data,
-            axis,
+            [0, -np.sqrt(2) / 2, -np.sqrt(2) / 2],
+            # [0, -1, 0], # these give terrible results
+            # [0, 0, -1],
             config,
             skeleton_config,
             device="cuda",
         )
-        data["view_axis"] = (
-            torch.tensor(axis)[None, :]
-            .repeat((len(data["3D_pose"]), 1))
-            .type(torch.FloatTensor)
-        )
+        # data["view_axis"] = (
+        #     torch.tensor(axis)[None, :]
+        #     .repeat((len(data["3D_pose"]), 1))
+        #     .type(torch.FloatTensor)
+        # )
+        data = {
+            k: v.repeat_interleave(config["model"]["window"], dim=0)
+            for k, v in data.items()
+        }
+        data["view_axis"] = torch.from_numpy(axis).type(torch.FloatTensor)
         data = {k: v.to("cuda") for k, v in data.items()}
         data_o = ssumo.train.predict_batch(
             model, data, disentangle_keys=config["disentangle"]["features"]
@@ -57,76 +70,44 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
             do_root_R=True,
         ).reshape(-1, n_keypts, 3)
         pose_hat = pose_hat[..., :2]
+        pose_hat = torch.reshape(  # pose_hat should be 5 videos x 51 axes x 51 frames
+            pose_hat,
+            (
+                config["data"]["batch_size"],
+                config["model"]["window"],
+                config["model"]["window"],
+            )
+            + pose_hat.shape[1:],
+        )
+        pose_hat = (
+            torch.diagonal(pose_hat, dim1=1, dim2=2)
+            .movedim(3, 1)
+            .reshape((-1,) + pose_hat.shape[3:])
+        )
 
         pose_array = torch.cat(
             [
-                data["raw_pose"].reshape(-1, n_keypts, 2),
-                data["target_pose"].reshape(-1, n_keypts, 2),
+                data["raw_pose"][0 :: config["model"]["window"]].reshape(
+                    -1, n_keypts, 2
+                ),
                 pose_hat,
             ],
             axis=0,
         )
         vis.pose.grid2D(
+            # pose_hat.cpu().detach().numpy(),
             pose_array.cpu().detach().numpy(),
             connectivity,
             frames=[
                 0,
                 config["data"]["batch_size"] * config["model"]["window"],
-                2 * config["data"]["batch_size"] * config["model"]["window"],
+                # 2 * config["data"]["batch_size"] * config["model"]["window"],
             ],
             centered=False,
-            subtitles=["Raw", "Target", "Reconstructed"],
+            subtitles=["2D input", "Reconstruction with changing conditional variable"],
             title=label + " Data",
             fps=45,
-            figsize=(36, 12),
-            N_FRAMES=config["data"]["batch_size"] * config["model"]["window"],
-            VID_NAME=label + ".mp4",
-            SAVE_ROOT=config["out_path"],
-        )
-
-
-def visualize_reconstruction(model, loader, label, connectivity):
-    n_keypts = loader.dataset.n_keypts
-    kinematic_tree = loader.dataset.kinematic_tree
-    model.eval()
-    with torch.no_grad():
-        # Let's see how reconstruction looks on train data
-        data = next(iter(loader))
-        data = {k: v.to("cuda") for k, v in data.items()}
-        data_o = ssumo.train.predict_batch(
-            model, data, disentangle_keys=config["disentangle"]["features"]
-        )
-
-        pose_hat = fwd_kin_cont6d_torch(
-            data_o["x6d"].reshape(-1, n_keypts, 6),
-            kinematic_tree,
-            data["offsets"].view(-1, n_keypts, 3),
-            data_o["root"].reshape(-1, 3),
-            do_root_R=True,
-        )
-
-        pose_array = torch.cat(
-            [
-                data["raw_pose"].reshape(-1, n_keypts, 3),
-                data["target_pose"].reshape(-1, n_keypts, 3),
-                pose_hat,
-            ],
-            axis=0,
-        )
-
-        vis.pose.grid3D(
-            pose_array.cpu().detach().numpy(),
-            connectivity,
-            frames=[
-                0,
-                config["data"]["batch_size"] * config["model"]["window"],
-                2 * config["data"]["batch_size"] * config["model"]["window"],
-            ],
-            centered=False,
-            subtitles=["Raw", "Target", "Reconstructed"],
-            title=label + " Data",
-            fps=45,
-            figsize=(36, 12),
+            figsize=(32, 16),
             N_FRAMES=config["data"]["batch_size"] * config["model"]["window"],
             VID_NAME=label + ".mp4",
             SAVE_ROOT=config["out_path"],
@@ -151,5 +132,6 @@ for dataset_label in dataset_list:
         verbose=0,
     )
 
-    # visualize_reconstruction(model, loader, dataset_label, connectivity)
-    visualize_2D_reconstruction(model, loader, dataset_label, connectivity, config)
+    visualize_conditional_variable_2D(
+        model, loader, dataset_label, connectivity, config
+    )

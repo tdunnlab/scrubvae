@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import ssumo
+
 # from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
@@ -9,8 +10,13 @@ from scipy.spatial import procrustes
 
 RESULTS_PATH = "/mnt/ceph/users/jwu10/results/vae/"
 palette = ssumo.plot.constants.PALETTE_2
-task_id = sys.argv[1] if len(sys.argv)>1 else ""
-analysis_keys = ["vanilla_64", "cvae_64", "mi_64_new", "mals_64"]#, "mi_64_new", "mi_64_fixed"]
+task_id = sys.argv[1] if len(sys.argv) > 1 else ""
+analysis_keys = [
+    "vanilla_64",
+    "cvae_64",
+    "mi_64_new",
+    "mals_64",
+]  # , "mi_64_new", "mi_64_fixed"]
 
 if task_id.isdigit():
     analysis_keys = [analysis_keys[int(task_id)]]
@@ -28,12 +34,12 @@ loader = ssumo.get.mouse_data(
     shuffle=False,
 )
 epochs = range(60, 80, 5)
-distance = {k:[] for k in analysis_keys}
+distance = {k: [] for k in analysis_keys}
 for epoch in epochs:
     for an_key in analysis_keys:
         z = []
         metric = []
-        for model_i in range(1,6):
+        for model_i in range(1, 6):
             path = "{}/{}/{}/".format(RESULTS_PATH, an_key, model_i)
             # metrics = pickle.load(open(path + "procrustes_Train.p", "rb"))
             config = read.config(path + "/model_config.yaml")
@@ -48,7 +54,7 @@ for epoch in epochs:
                 disentangle_config=config["disentangle"],
                 n_keypts=loader.dataset.n_keypts,
                 direction_process=config["data"]["direction_process"],
-                loss_config = config["loss"],
+                loss_config=config["loss"],
                 arena_size=loader.dataset.arena_size,
                 kinematic_tree=loader.dataset.kinematic_tree,
                 bound=config["data"]["normalize"] is not None,
@@ -58,20 +64,22 @@ for epoch in epochs:
             z_temp = ssumo.get.latents(config, model, epoch, loader, "cuda", "Train")
 
             if "vanilla" not in an_key:
-                z_temp = np.concatenate([z_temp, loader.dataset[:]["avg_speed_3d"]], axis=-1)
+                z_temp = np.concatenate(
+                    [z_temp, loader.dataset[:]["avg_speed_3d"]], axis=-1
+                )
 
             z += [z_temp]
 
         for first_ind in range(5):
-            for second_ind in range(first_ind+1,5):
+            for second_ind in range(first_ind + 1, 5):
                 metric += [procrustes(z[first_ind], z[second_ind])[2]]
 
         distance[an_key] += [np.mean(metric)]
     print(distance)
-        # pickle.dump(
-        #     metrics,
-        #     open(pickle_path, "wb"),
-        # )
+    # pickle.dump(
+    #     metrics,
+    #     open(pickle_path, "wb"),
+    # )
 
 if task_id == "":
     ## Plot R^2

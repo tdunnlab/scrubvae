@@ -152,7 +152,7 @@ def trace(
 def sample_clusters(pose, k_pred, connectivity, save_root):
     window = pose.shape[1]
     n_keypts = pose.shape[2]
-    pose = pose - pose[:, window//2 : window//2 + 1,0:1, :]
+    pose = pose - pose[:, window // 2 : window // 2 + 1, 0:1, :]
     ### Sample 9 videos from each cluster
     n_samples = 9
     indices = np.arange(len(k_pred))
@@ -175,7 +175,7 @@ def sample_clusters(pose, k_pred, connectivity, save_root):
 
         num_points = len(sampled_points)
 
-        raw_pose = pose[sampled_points, ...].reshape(-1, n_keypts, 3)
+        raw_pose = pose[sampled_points, ...].reshape(-1, n_keypts, pose.shape[-1])
 
         if num_points == n_samples:
             n_trans = 100
@@ -195,7 +195,7 @@ def sample_clusters(pose, k_pred, connectivity, save_root):
                 )
                 * n_trans
             )
-            plot_trans = np.append(plot_trans, np.zeros(n_samples)[:, None], axis=-1)
+            # plot_trans = np.append(plot_trans, np.zeros(n_samples)[:, None], axis=-1)
             raw_pose += np.repeat(plot_trans, window, axis=0)[:, None, :]
         # raw_pose = dataset[sampled_points]["raw_pose"].reshape(
         #     num_points * config["window"], dataset.n_keypts, 3
@@ -315,10 +315,11 @@ def feature_ridge(
     plt.savefig(path + "ridge.png".format(xlabel, ylabel))
     plt.close()
 
+
 def scatter_cmap(data, hue, label, path, cmap="cyclic"):
     if cmap == "cyclic":
         cmap = cc.cm["colorwheel"]
-    
+
     plt.scatter(
         data[:, 0],
         data[:, 1],
@@ -329,6 +330,5 @@ def scatter_cmap(data, hue, label, path, cmap="cyclic"):
         alpha=0.5,
     )
     plt.colorbar()
-    plt.savefig("{}scatter_{}.png".format(path,label), dpi=400)
+    plt.savefig("{}scatter_{}.png".format(path, label), dpi=400)
     plt.close()
-

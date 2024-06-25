@@ -33,9 +33,12 @@ loader, model = ssumo.get.data_and_model(
     verbose=0,
 )
 
-latents = ssumo.get.latents(
+latents, raw_2D_pose = ssumo.get.latents_2D(
     config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
 )
+# latents = ssumo.get.latents(
+#     config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
+# )
 
 if z_null is not None:
     print("Projecting latents to decoder null space")
@@ -61,7 +64,8 @@ if vis_clusters:
     )
 
     ssumo.plot.sample_clusters(
-        loader.dataset[:]["raw_pose"].detach().cpu().numpy(),
+        # loader.dataset[:]["raw_pose"].detach().cpu().numpy(),
+        raw_2D_pose.detach().cpu().numpy(),
         k_pred,
         connectivity,
         "{}/vis_clusters_{}/".format(vis_path, "" if z_null is None else z_null),
