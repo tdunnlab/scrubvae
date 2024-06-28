@@ -12,6 +12,7 @@ RESULTS_PATH = "/mnt/ceph/users/hkoneru/results/vae/"
 import sys
 import random
 import numpy as np
+import scipy.linalg as spl
 
 
 def visualize_conditional_variable_2D(model, loader, label, connectivity, config):
@@ -85,11 +86,42 @@ def visualize_conditional_variable_2D(model, loader, label, connectivity, config
             .reshape((-1,) + pose_hat.shape[3:])
         )
 
+        true_rotated = data["3D_pose"][0 :: config["model"]["window"]].reshape(
+            -1, n_keypts, 3
+        )
+        for ind, ax in enumerate(axis):
+            uperp = (
+                torch.from_numpy(spl.null_space(ax[None, :]))
+                .type(torch.FloatTensor)
+                .to("cuda")
+            )
+            if uperp[2][0] == 0:
+                proj_x = uperp.T[0]
+                proj_y = uperp.T[1]
+            else:
+                coeff = -uperp[2][1] / uperp[2][0]
+                proj_x = uperp.T[0] * coeff + uperp.T[1]
+                proj_y = torch.cross(
+                    torch.tensor(ax).type(torch.FloatTensor).to("cuda"), proj_x
+                )
+            proj_x /= torch.norm(proj_x)
+            proj_y /= torch.norm(proj_y)
+            if proj_y[2] < 0:
+                proj_y *= -1
+            if np.linalg.norm(torch.cross(proj_x, proj_y).cpu().numpy() - ax) > 0.1:
+                proj_x *= -1
+            true_rotated[ind, ..., :2] = (
+                true_rotated[ind, ...]
+                @ torch.cat([proj_x[None, ...], proj_y[None, ...]], axis=0).T
+            )
+        true_rotated = true_rotated[..., :2]
+
         pose_array = torch.cat(
             [
                 data["raw_pose"][0 :: config["model"]["window"]].reshape(
                     -1, n_keypts, 2
                 ),
+                true_rotated,
                 pose_hat,
             ],
             axis=0,
@@ -101,13 +133,17 @@ def visualize_conditional_variable_2D(model, loader, label, connectivity, config
             frames=[
                 0,
                 config["data"]["batch_size"] * config["model"]["window"],
-                # 2 * config["data"]["batch_size"] * config["model"]["window"],
+                2 * config["data"]["batch_size"] * config["model"]["window"],
             ],
             centered=False,
-            subtitles=["2D input", "Reconstruction with changing conditional variable"],
+            subtitles=[
+                "2D input",
+                "Rotating input pose",
+                "Rotating Reconstruction",
+            ],
             title=label + " Data",
-            fps=45,
-            figsize=(32, 16),
+            fps=30,
+            figsize=(16, 8),
             N_FRAMES=config["data"]["batch_size"] * config["model"]["window"],
             VID_NAME=label + ".mp4",
             SAVE_ROOT=config["out_path"],
