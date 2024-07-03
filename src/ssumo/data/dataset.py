@@ -351,3 +351,26 @@ class MouseDataset(Dataset):
             }
         )
         return query
+
+
+class MouseDataset2D(MouseDataset):
+    def __getitem__(self, idx):
+        query = {
+            k: self.data[k][self.window_inds[idx]]
+            for k in self.ind_with_window_inds
+            if k != "raw_pose"
+        }
+
+        if "raw_pose" in self.ind_with_window_inds:
+            query["raw_pose"] = self.data["raw_pose"][
+                self.window_inds[idx] % len(self.data["raw_pose"])
+            ]
+
+        query.update(
+            {
+                k: v[idx]
+                for k, v in self.data.items()
+                if k not in self.ind_with_window_inds
+            }
+        )
+        return query

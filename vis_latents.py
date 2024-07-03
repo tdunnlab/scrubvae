@@ -28,17 +28,19 @@ loader, model = ssumo.get.data_and_model(
     load_model=config["out_path"],
     epoch=sys.argv[2],
     dataset_label=dataset_label,
-    data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose"],
+    data_keys=["x6d", "offsets", "raw_pose", "projected_pose"],
     shuffle=False,
     verbose=0,
 )
 
-latents, raw_2D_pose = ssumo.get.latents_2D(
-    config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
-)
-# latents = ssumo.get.latents(
-#     config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
-# )
+if config["data"].get("is_2D"):
+    latents = ssumo.get.latents_2D(
+        config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
+    )
+else:
+    latents = ssumo.get.latents(
+        config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
+    )
 
 if z_null is not None:
     print("Projecting latents to decoder null space")
@@ -62,10 +64,23 @@ if vis_clusters:
             k_pred, bins=len(np.unique(k_pred)), range=(-0.5, np.max(k_pred) + 0.5)
         )[0]
     )
-
+    plotkey = ["raw_pose", "projected_pose"][
+        "projected_pose" in loader.dataset[0].keys()
+    ]
+    batch = 4096  # batch fetch data from the loader so that it isn't on GPU mem at once
+    datalen = len(loader.dataset)
+    plot_arr = np.concatenate(
+        [
+            loader.dataset[i * batch : min((i + 1) * batch, datalen)][plotkey]
+            .detach()
+            .cpu()
+            .numpy()
+            for i in range(int(np.ceil(datalen / batch)))
+        ]
+    )
     ssumo.plot.sample_clusters(
+        plot_arr,
         # loader.dataset[:]["raw_pose"].detach().cpu().numpy(),
-        raw_2D_pose.detach().cpu().numpy(),
         k_pred,
         connectivity,
         "{}/vis_clusters_{}/".format(vis_path, "" if z_null is None else z_null),

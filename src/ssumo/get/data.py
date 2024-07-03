@@ -7,6 +7,7 @@ from ssumo.data.dataset import *
 from torch.utils.data import DataLoader
 from pathlib import Path
 import scipy.linalg as spl
+import random
 
 TRAIN_IDS = {
     # "immunostain": np.arange(74),
@@ -239,7 +240,7 @@ def mouse_data(
     else:
         if is_2D:
             data, window_inds = calculate_2D_mouse_kinematics(
-                data_config,
+                config,
                 skeleton_config,
                 window,
                 train,
@@ -291,15 +292,26 @@ def mouse_data(
         else:
             discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
 
-    dataset = MouseDataset(
-        data,
-        window_inds,
-        data_config["arena_size"],
-        skeleton_config["KINEMATIC_TREE"],
-        len(skeleton_config["LABELS"]),
-        label="Train" if train else "Test",
-        discrete_classes=discrete_classes,
-    )
+    if is_2D:
+        dataset = MouseDataset2D(
+            data,
+            window_inds,
+            data_config["arena_size"],
+            skeleton_config["KINEMATIC_TREE"],
+            len(skeleton_config["LABELS"]),
+            label="Train" if train else "Test",
+            discrete_classes=discrete_classes,
+        )
+    else:
+        dataset = MouseDataset(
+            data,
+            window_inds,
+            data_config["arena_size"],
+            skeleton_config["KINEMATIC_TREE"],
+            len(skeleton_config["LABELS"]),
+            label="Train" if train else "Test",
+            discrete_classes=discrete_classes,
+        )
 
     loader = DataLoader(
         dataset=dataset,
@@ -313,12 +325,14 @@ def mouse_data(
 
 
 def calculate_2D_mouse_kinematics(
-    data_config: dict,
+    config: dict,
     skeleton_config: dict,
     window: int = 51,
     train: bool = True,
     data_keys: List[str] = ["x6d", "root", "offsets"],
 ):
+    data_config = config["data"]
+    project_axis = data_config.get("project_axis")
     REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
     pose, ids = read.pose_h5(data_config["data_path"], dtype=np.float64)
 
@@ -354,11 +368,49 @@ def calculate_2D_mouse_kinematics(
     pose -= pose[:, 0:1, :]
     # pose = pose - np.repeat(pose[:, 0, None, :], np.shape(pose)[1], axis=1)
     pose = qtn.qrot_np(np.repeat(fwd_qtn[:, None, :], np.shape(pose)[1], axis=1), pose)
-    data["3D_pose"] = pose
+    data["raw_pose"] = pose
     for k in data_keys:
-        if k == "3D_pose":
+        if k == "raw_pose":
             continue
-        data[k] = torch.zeros(len(pose))
+        data[k] = np.zeros(len(data["raw_pose"]))
+    len_proj = 1
+    if project_axis == None:
+        return data, window_inds
+
+    len_proj = len(project_axis)
+    window_inds = torch.cat(
+        [len(data["raw_pose"]) * i + window_inds for i in range(len_proj)],
+        dim=0,
+    )
+    data_arr = []
+    data["raw_pose"] = torch.from_numpy(data["raw_pose"]).to("cuda")
+    for axis in project_axis:
+        data_arr.append(
+            projected_2D_kinematics(
+                data,
+                axis,
+                config,
+                skeleton_config,
+                device="cuda",
+                windowed=False,
+            )
+        )
+        data_arr[-1]["view_axis"] = (
+            torch.tensor(axis)[None, :]
+            .repeat((len(data["raw_pose"]), 1))
+            .type(torch.FloatTensor)
+        )
+
+    data.update(
+        {
+            k: torch.cat([data_arr[i][k] for i in range(len(project_axis))], dim=0)
+            # .cpu()
+            # .numpy()
+            for k, v in data.items()
+            if k != "raw_pose"
+        }
+    )
+    # data["raw_pose"] = data["raw_pose"].cpu().numpy()
 
     return data, window_inds
 
@@ -366,26 +418,34 @@ def calculate_2D_mouse_kinematics(
 def projected_2D_kinematics(
     data: dict,
     axis: torch.tensor,
-    config: dict,  # if we add different 2d preprocess options
+    config: dict,
     skeleton_config: dict,
     device: str = "cuda",
+    windowed: bool = True,
 ):
     data_keys = list(data.keys())
-    pose = data["3D_pose"]
+    pose = data["raw_pose"]
     # pose = project_to_null(pose, [axis])[0]
     uperp = (
         torch.from_numpy(spl.null_space(np.array(axis)[None, ...]))
         .type(torch.FloatTensor)
         .to(device)
     )
-    coeff = -uperp[2][1] / uperp[2][0]
-    proj_x = uperp.T[0] * coeff + uperp.T[1]
-    proj_y = torch.cross(torch.tensor(axis).type(torch.FloatTensor).to(device), proj_x)
-    if proj_y[2] < 0:
-        proj_x *= -1
-        proj_y *= -1
+    if uperp[2][0] == 0:
+        proj_x = uperp.T[0]
+        proj_y = uperp.T[1]
+    else:
+        coeff = -uperp[2][1] / uperp[2][0]
+        proj_x = uperp.T[0] * coeff + uperp.T[1]
+        proj_y = torch.cross(
+            torch.tensor(axis).type(torch.FloatTensor).to(device), proj_x
+        )
     proj_x /= torch.norm(proj_x)
     proj_y /= torch.norm(proj_y)
+    if proj_y[2] < 0:
+        proj_y *= -1
+    if np.linalg.norm(torch.cross(proj_x, proj_y).cpu().numpy() - axis) > 0.1:
+        proj_x *= -1
     pose = pose @ torch.cat([proj_x[None, ...], proj_y[None, ...]], axis=0).T
 
     # # rotate to +x on 2d axis
@@ -395,13 +455,14 @@ def projected_2D_kinematics(
     # rotm = rotm.swapaxes(0, 2).swapaxes(1, 2)
     # pose2 = pose @ rotm
 
-    if "raw_pose" in data_keys:
-        data["raw_pose"] = pose
+    if "projected_pose" in data_keys:
+        data["projected_pose"] = pose
     pose = torch.concatenate([pose, torch.zeros_like(pose[..., 0, None])], axis=-1)
 
     if "x6d" in data_keys:
-        # print("Applying inverse kinematics ...")
-        flattened_pose = torch.reshape(pose, (-1,) + pose.shape[2:])
+        flattened_pose = pose
+        if windowed:
+            flattened_pose = torch.reshape(pose, (-1,) + pose.shape[2:])
         local_qtn = inv_kin_torch(
             flattened_pose,
             skeleton_config["KINEMATIC_TREE"],
@@ -409,9 +470,6 @@ def projected_2D_kinematics(
             forward_indices=[1, 0],
             device=device,
         )
-        ### convert to cos theta instead of theta/2 in local_ang
-        ## also use local_ang to get target pose instead of local qtn
-        # loader.dataset.data["local_ang"] = new_random_local_ang
 
         local_ang = local_qtn[..., [-1, 0]]
         local_ang[..., [0]] = (
@@ -421,10 +479,12 @@ def projected_2D_kinematics(
             torch.ones_like(local_qtn[..., [-1]]) - 2 * local_qtn[..., [-1]] ** 2
         )
         local_ang = torch.clip(local_ang, torch.tensor(-1), torch.tensor(1))
-
-        data["x6d"] = torch.reshape(
-            local_ang, (-1, config["model"]["window"]) + local_ang.shape[1:]
-        )
+        if windowed:
+            data["x6d"] = torch.reshape(
+                local_ang, (-1, config["model"]["window"]) + local_ang.shape[1:]
+            )
+        else:
+            data["x6d"] = local_ang
 
     if "offsets" in data_keys:
         segment_lens = get_segment_len_torch(
@@ -433,41 +493,28 @@ def projected_2D_kinematics(
             torch.tensor(skeleton_config["OFFSET"]),
             device=device,
         )
-        data["offsets"] = torch.reshape(
-            segment_lens, (-1, config["model"]["window"]) + segment_lens.shape[1:]
-        )
+        if windowed:
+            data["offsets"] = torch.reshape(
+                segment_lens, (-1, config["model"]["window"]) + segment_lens.shape[1:]
+            )
+        else:
+            data["offsets"] = segment_lens
 
     if "root" in data_keys:
         root = pose[..., 0, :2]
         data["root"] = root
-        frame_dim_inds = tuple(range(len(root.shape) - 1))
-        # print("Root Maxes: {}".format(root.max(axis=frame_dim_inds)))
-        # print("Root Mins: {}".format(root.min(axis=frame_dim_inds)))
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
-    # if "ids" in data_keys:
-    #     data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
 
     if "target_pose" in data_keys:
-        reshaped_x6d = torch.concatenate(
-            [local_ang[..., :], torch.zeros_like(local_ang[..., [0]])], axis=-1
-        )
-        reshaped_x6d = torch.concatenate(
-            [reshaped_x6d[..., [1, 0, 2]], reshaped_x6d[..., :]], axis=-1
-        )
-        reshaped_x6d[..., 3] *= -1
-
-        offsets = data["offsets"]
+        # reshaped_x6d = torch.concatenate(
+        #     [local_ang[..., :], torch.zeros_like(local_ang[..., [0]])], axis=-1
+        # )
+        # reshaped_x6d = torch.concatenate(
+        #     [reshaped_x6d[..., [1, 0, 2]], reshaped_x6d[..., :]], axis=-1
+        # )
+        # reshaped_x6d[..., 3] *= -1
         data["target_pose"] = pose[..., :2]
-        # data["target_pose"] = fwd_kin_cont6d(
-        #     reshaped_x6d,
-        #     skeleton_config["KINEMATIC_TREE"],
-        #     offsets,
-        #     root_pos=torch.zeros(reshaped_x6d.shape[0], 3),
-        #     do_root_R=True,
-        #     # eps=1e-8,
-        # ).reshape(data["x6d"].shape[:-1] + (3,))[..., :2]
-        # data["target_pose"] = pose
 
     return data
 

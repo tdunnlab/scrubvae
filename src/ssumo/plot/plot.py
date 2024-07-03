@@ -195,23 +195,38 @@ def sample_clusters(pose, k_pred, connectivity, save_root):
                 )
                 * n_trans
             )
-            # plot_trans = np.append(plot_trans, np.zeros(n_samples)[:, None], axis=-1)
+            if raw_pose.shape[-1] == 3:
+                plot_trans = np.append(
+                    plot_trans, np.zeros(n_samples)[:, None], axis=-1
+                )
             raw_pose += np.repeat(plot_trans, window, axis=0)[:, None, :]
         # raw_pose = dataset[sampled_points]["raw_pose"].reshape(
         #     num_points * config["window"], dataset.n_keypts, 3
         # )
-
-        vis.pose.arena3D(
-            raw_pose,
-            connectivity,
-            frames=np.arange(num_points) * window,
-            centered=False,
-            N_FRAMES=window,
-            fps=30,
-            dpi=200,
-            VID_NAME="cluster{}.mp4".format(cluster),
-            SAVE_ROOT=save_root,
-        )
+        if raw_pose.shape[-1] == 3:
+            vis.pose.arena3D(
+                raw_pose,
+                connectivity,
+                frames=np.arange(num_points) * window,
+                centered=False,
+                N_FRAMES=window,
+                fps=30,
+                dpi=200,
+                VID_NAME="cluster{}.mp4".format(cluster),
+                SAVE_ROOT=save_root,
+            )
+        else:
+            vis.pose.arena2D(
+                raw_pose,
+                connectivity,
+                frames=np.arange(num_points) * window,
+                centered=False,
+                N_FRAMES=window,
+                fps=30,
+                dpi=200,
+                VID_NAME="cluster{}.mp4".format(cluster),
+                SAVE_ROOT=save_root,
+            )
 
 
 def feature_ridge(
