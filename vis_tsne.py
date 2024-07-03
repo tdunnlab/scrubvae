@@ -10,51 +10,87 @@ from cmocean.cm import phase
 import colorcet as cc
 from ssumo.plot import scatter_cmap
 import sys
+from pathlib import Path
 
 analysis_key = sys.argv[1]
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 dataset_label = "Train"
 ### Load Datasets
-dataset, _, model = ssumo.get.data_and_model(
+loader, model = ssumo.get.data_and_model(
     config,
     load_model=config["out_path"],
     epoch=sys.argv[2],
     dataset_label=dataset_label,
-    data_keys=["x6d", "root", "heading"],
+    # data_keys=["x6d", "root", "heading"],
+    data_keys=["x6d", "root", "view_axis"],
     shuffle=False,
     verbose=0,
 )
 
-latents = (
-    ssumo.get.latents(
-        config, model, sys.argv[2], dataset, device="cuda", dataset_label=dataset_label
+if config["data"]["is_2D"]:
+    latents = (
+        ssumo.get.latents_2D(
+            config,
+            model,
+            sys.argv[2],
+            loader,
+            device="cuda",
+            dataset_label=dataset_label,
+        )
+        .cpu()
+        .detach()
+        .numpy()
     )
-    .cpu()
-    .detach()
-    .numpy()
+else:
+    latents = (
+        ssumo.get.latents(
+            config,
+            model,
+            sys.argv[2],
+            loader,
+            device="cuda",
+            dataset_label=dataset_label,
+        )
+        .cpu()
+        .detach()
+        .numpy()
+    )
+
+# heading = dataset[:]["heading"].cpu().detach().numpy()
+# feat = np.arctan2(heading[:, 0], heading[:, 1])
+
+axes = config["data"]["project_axis"]
+feat = np.concatenate(
+    [
+        np.full(
+            int(len(loader.dataset) / len(axes)), np.arctan2(axes[i][1], axes[i][2])
+        )
+        for i in range(len(axes))
+    ]
 )
 
-heading = dataset[:]["heading"].cpu().detach().numpy()
-yaw = np.arctan2(heading[:, 0], heading[:, 1])
+output_file = config["out_path"] + "tSNE_z_{}.npy".format(dataset_label)
+if Path(output_file).exists():
+    embed_vals = np.load(output_file)
+else:
+    embedder = Embed(
+        embed_method="fitsne",
+        perplexity=50,
+        lr="auto",
+    )
+    embed_vals = embedder.embed(latents, save_self=True)
+    np.save(output_file, embed_vals)
 
-embedder = Embed(
-    embed_method="fitsne",
-    perplexity=50,
-    lr="auto",
-)
-embed_vals = embedder.embed(latents, save_self=True)
-np.save(config["out_path"] + "tSNE_z_{}.npy".format(dataset_label), embed_vals)
-
-embed_vals = np.load(config["out_path"] + "tSNE_z_{}.npy".format(dataset_label))
 
 downsample = 10
 rand_ind = np.random.permutation(np.arange(len(embed_vals)))
 scatter_cmap(
     embed_vals[rand_ind, :][::downsample, :],
-    yaw[rand_ind][::downsample],
-    "z_yaw_{}".format(dataset_label),
+    feat[rand_ind][::downsample],
+    "z_feat_{}".format(dataset_label),
     path=config["out_path"],
+    cmap="viridis",
 )
 
 

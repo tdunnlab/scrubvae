@@ -289,7 +289,7 @@ def feature_ridge(
         grid.map(adjust_xlim, "x")
 
     # Set the subplots to overlap
-    grid.figure.subplots_adjust(hspace=-0.25)
+    grid.figure.subplots_adjust(hspace=-0.05)  # -0.25 if necessary
 
     # Remove axes details that don't play well with overlap
     grid.set_titles("")

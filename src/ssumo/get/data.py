@@ -404,13 +404,13 @@ def calculate_2D_mouse_kinematics(
     data.update(
         {
             k: torch.cat([data_arr[i][k] for i in range(len(project_axis))], dim=0)
-            # .cpu()
-            # .numpy()
+            .cpu()
+            .numpy()
             for k, v in data.items()
             if k != "raw_pose"
         }
     )
-    # data["raw_pose"] = data["raw_pose"].cpu().numpy()
+    data["raw_pose"] = data["raw_pose"].cpu().numpy()
 
     return data, window_inds
 

@@ -14,23 +14,37 @@ vis_path = RESULTS_PATH + analysis_key + "/vis_latents/"
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 dataset_label = "Train"
-dataset, loader = ssumo.get.mouse_data(
-    data_config=config["data"],
+loader = ssumo.get.mouse_data(
+    config=config,
     window=config["model"]["window"],
     train=dataset_label == "Train",
-    data_keys=["heading", "avg_speed"],
+    # data_keys=["heading", "avg_speed"],
+    data_keys=["view_axis"],
     shuffle=False,
 )
-k_pred = np.load(vis_path + "z_gmm.npy")
+dataset = loader.dataset
 
-for key in ["heading", "ids"]:
+k_pred = np.load(vis_path + "z_gmm.npy")
+keylist = ["view_axis"]  # change what the histograms are of
+# keylist = ["heading", "ids"]
+
+for key in keylist:
     # k_pred_null = np.load(vis_path + "z_{}_gmm.npy".format(key))
     if key == "heading":
         heading = dataset[:]["heading"].cpu().detach().numpy()
         feat = np.arctan2(heading[:, 0], heading[:, 1])
+    if key == "view_axis":
+        axes = config["data"]["project_axis"]
+        feat = np.concatenate(
+            [
+                np.full(
+                    int(len(dataset) / len(axes)), np.arctan2(axes[i][1], axes[i][2])
+                )
+                for i in range(len(axes))
+            ]
+        )
     else:
         feat = dataset[:][key].cpu().detach().numpy().squeeze()
-
     z_cvar, z_null_cvar = [], []
     for i in range(25):
         z_cvar += [circvar(feat[k_pred == i], high=np.pi, low=-np.pi)]
