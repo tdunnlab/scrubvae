@@ -75,7 +75,13 @@ def latents(
 
 
 def latents_2D(
-    config, model=None, epoch=None, loader=None, device="cuda", dataset_label="Train"
+    config,
+    model=None,
+    epoch=None,
+    loader=None,
+    device="cuda",
+    dataset_label="Train",
+    recompute=False,
 ):
     if model is not None:
         model.eval()
@@ -83,7 +89,7 @@ def latents_2D(
         config["out_path"], dataset_label, epoch
     )
 
-    if not Path(latent_path).exists():
+    if not Path(latent_path).exists() or recompute:
         print("Latent projections not found - Embedding dataset ...")
         latents = []
         with torch.no_grad():

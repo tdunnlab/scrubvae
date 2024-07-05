@@ -490,7 +490,7 @@ def projected_2D_kinematics(
         segment_lens = get_segment_len_torch(
             flattened_pose,
             skeleton_config["KINEMATIC_TREE"],
-            torch.tensor(skeleton_config["OFFSET"]),
+            torch.tensor(skeleton_config["OFFSET"]).type(torch.float32),
             device=device,
         )
         if windowed:
@@ -503,8 +503,6 @@ def projected_2D_kinematics(
     if "root" in data_keys:
         root = pose[..., 0, :2]
         data["root"] = root
-
-    data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
     if "target_pose" in data_keys:
         # reshaped_x6d = torch.concatenate(

@@ -38,7 +38,8 @@ for key in keylist:
         feat = np.concatenate(
             [
                 np.full(
-                    int(len(dataset) / len(axes)), np.arctan2(axes[i][1], axes[i][2])
+                    int(len(dataset) / len(axes)),
+                    np.abs(np.arctan2(axes[i][1], axes[i][2])),
                 )
                 for i in range(len(axes))
             ]
@@ -59,7 +60,7 @@ for key in keylist:
         xlabel=key,
         ylabel="Cluster",
         x_lim=(feat.min() - 0.1, feat.max() + 0.1),
-        n_bins=200,
+        n_bins=5,
         binrange=(feat.min(), feat.max()),
         path="{}{}_".format(vis_path, key),
     )

@@ -35,7 +35,13 @@ loader, model = ssumo.get.data_and_model(
 
 if config["data"].get("is_2D"):
     latents = ssumo.get.latents_2D(
-        config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
+        config,
+        model,
+        sys.argv[2],
+        loader,
+        device="cuda",
+        dataset_label=dataset_label,
+        recompute=False,
     )
 else:
     latents = ssumo.get.latents(
@@ -72,9 +78,9 @@ if vis_clusters:
     plot_arr = np.concatenate(
         [
             loader.dataset[i * batch : min((i + 1) * batch, datalen)][plotkey]
-            .detach()
-            .cpu()
-            .numpy()
+            # .detach()
+            # .cpu()
+            # .numpy()
             for i in range(int(np.ceil(datalen / batch)))
         ]
     )

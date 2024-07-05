@@ -204,6 +204,19 @@ def train_epoch_2D_view(
             skeleton_config,
             device=device,
         )
+        if config["data"].get("decode_alternate"):
+            axis = random.random() * pi / 2
+            axis = [0, -cos(axis), -sin(axis)]
+            data["view_axis"] = torch.tensor(axis)[None, :].repeat(
+                (len(data["raw_pose"]), 1)
+            )
+            data["target_pose"] = projected_2D_kinematics(
+                {k: data[k] for k in ["raw_pose", "target_pose"]},
+                axis,
+                config,
+                skeleton_config,
+                device=device,
+            )["target_pose"]
         data = {k: v.to(device) for k, v in data.items()}
         data_o = predict_batch(model, data, model.disentangle_keys)
 
@@ -245,6 +258,8 @@ def train_epoch_mcmi_2D_view(
     loss_config,
     disentangle_config,
     epoch,
+    config,
+    skeleton_config,
     bandwidth=1,
     var_mode="sphere",
     mode="train",
@@ -254,7 +269,32 @@ def train_epoch_mcmi_2D_view(
         if mode == "train":
             for param in model.parameters():
                 param.grad = None
-
+        axis = random.random() * pi / 2
+        axis = [0, -cos(axis), -sin(axis)]
+        data["view_axis"] = torch.tensor(axis)[None, :].repeat(
+            (len(data["raw_pose"]), 1)
+        )
+        data = {k: v.to(device) for k, v in data.items()}
+        data = projected_2D_kinematics(
+            data,
+            axis,
+            config,
+            skeleton_config,
+            device=device,
+        )
+        if config["data"].get("decode_alternate"):
+            axis = random.random() * pi / 2
+            axis = [0, -cos(axis), -sin(axis)]
+            data["view_axis"] = torch.tensor(axis)[None, :].repeat(
+                (len(data["raw_pose"]), 1)
+            )
+            data["target_pose"] = projected_2D_kinematics(
+                {k: data[k] for k in ["raw_pose", "target_pose"]},
+                axis,
+                config,
+                skeleton_config,
+                device=device,
+            )["target_pose"]
         data = {k: v.to(device) for k, v in data.items()}
         data_o = predict_batch(model, data, model.disentangle_keys)
 
@@ -412,11 +452,13 @@ def train(config, model, loader):
                 bandwidth=config["disentangle"]["bandwidth"],
             )
             if config["data"].get("is_2D") == True:
+                skeleton_config = read.config(config["data"]["skeleton_path"])
                 train_func = functools.partial(
                     train_epoch_mcmi_2D_view,
+                    config=config,
+                    skeleton_config=skeleton_config,
                     var_mode=config["disentangle"]["var_mode"],
                     bandwidth=config["disentangle"]["bandwidth"],
-                    data_config=config["data"],
                 )
         else:
             train_func = functools.partial(train_epoch)
@@ -461,6 +503,10 @@ def train(config, model, loader):
                 open("{}/losses/loss_dict_Train.p".format(config["out_path"]), "wb"),
             )
 
-            plt_loss(loss_dict, config["out_path"], config["disentangle"]["features"])
+            plt_loss(
+                {k: v for k, v in loss_dict.items() if k not in ["time", "epoch"]},
+                config["out_path"],
+                config["disentangle"]["features"],
+            )
 
     return model
