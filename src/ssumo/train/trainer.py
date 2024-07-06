@@ -191,6 +191,8 @@ def train_epoch_2D_view(
         if mode == "train":
             for param in model.parameters():
                 param.grad = None
+
+        ## Can you use torch.rand_like() instead of using the math module?
         axis = random.random() * pi / 2
         axis = [0, -cos(axis), -sin(axis)]
         data["view_axis"] = torch.tensor(axis)[None, :].repeat(
@@ -269,6 +271,8 @@ def train_epoch_mcmi_2D_view(
         if mode == "train":
             for param in model.parameters():
                 param.grad = None
+
+        # Same as above, use torch.rand_like() instead of math module
         axis = random.random() * pi / 2
         axis = [0, -cos(axis), -sin(axis)]
         data["view_axis"] = torch.tensor(axis)[None, :].repeat(
