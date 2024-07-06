@@ -414,18 +414,24 @@ def calculate_2D_mouse_kinematics(
 
     return data, window_inds
 
-
+##TODO: nitpicky - can you make this a verb?
 def projected_2D_kinematics(
     data: dict,
     axis: torch.tensor,
     config: dict,
     skeleton_config: dict,
-    device: str = "cuda",
+    device: str = "cuda", #TODO: delete this and just use whatever device the data is on
     windowed: bool = True,
 ):
     data_keys = list(data.keys())
     pose = data["raw_pose"]
     # pose = project_to_null(pose, [axis])[0]
+    # TODO: A little worried about this "to and from" numpy within a batch. Might slow things down.
+    # In your epoch loops you shouldn't really have any cpu operations.
+    # Try something like the following:
+    # nrm = torch.linalg.norm(axis, ord=2, dim=0) # batch_size x 1, could skip since axis should have norm=1 anyway
+    # z_null = pose - (pose @ axis.T) * axis
+    # Double check that this produces the correct projection (assumes pose is 2D (N x 3) where N = #actions*window*#keypts
     uperp = (
         torch.from_numpy(spl.null_space(np.array(axis)[None, ...]))
         .type(torch.FloatTensor)
@@ -444,6 +450,7 @@ def projected_2D_kinematics(
     proj_y /= torch.norm(proj_y)
     if proj_y[2] < 0:
         proj_y *= -1
+    # TODO: use torch.linalg.norm instead of numpy, then you won't have to move to cpu
     if np.linalg.norm(torch.cross(proj_x, proj_y).cpu().numpy() - axis) > 0.1:
         proj_x *= -1
     pose = pose @ torch.cat([proj_x[None, ...], proj_y[None, ...]], axis=0).T
@@ -462,6 +469,8 @@ def projected_2D_kinematics(
     if "x6d" in data_keys:
         flattened_pose = pose
         if windowed:
+            # TODO: If you change this to torch.reshape(pose, (-1,) + pose.shape[-2:]), it should always be correct windowed or not.
+            # If ^ is true, you can probably remove this "windowed" argument. 
             flattened_pose = torch.reshape(pose, (-1,) + pose.shape[2:])
         local_qtn = inv_kin_torch(
             flattened_pose,
