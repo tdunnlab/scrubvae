@@ -86,7 +86,7 @@ def visualize_conditional_variable_2D(model, loader, label, connectivity, config
             .reshape((-1,) + pose_hat.shape[3:])
         )
 
-        true_rotated = data["3D_pose"][0 :: config["model"]["window"]].reshape(
+        true_rotated = data["raw_pose"][0 :: config["model"]["window"]].reshape(
             -1, n_keypts, 3
         )
         for ind, ax in enumerate(axis):
@@ -118,7 +118,7 @@ def visualize_conditional_variable_2D(model, loader, label, connectivity, config
 
         pose_array = torch.cat(
             [
-                data["raw_pose"][0 :: config["model"]["window"]].reshape(
+                data["projected_pose"][0 :: config["model"]["window"]].reshape(
                     -1, n_keypts, 2
                 ),
                 true_rotated,
@@ -162,7 +162,13 @@ for dataset_label in dataset_list:
         load_model=config["out_path"],
         epoch=sys.argv[2],
         dataset_label="Train",
-        data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose"]
+        data_keys=[
+            "x6d",
+            "offsets",
+            "raw_pose",
+            "target_pose",
+            "projected_pose",
+        ]
         + config["disentangle"]["features"],
         shuffle=True,
         verbose=0,

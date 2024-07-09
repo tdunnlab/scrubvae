@@ -387,7 +387,7 @@ def calculate_2D_mouse_kinematics(
     for axis in project_axis:
         data_arr.append(
             projected_2D_kinematics(
-                data,
+                {k: v for k, v in data.items()},
                 axis,
                 config,
                 skeleton_config,
@@ -414,13 +414,14 @@ def calculate_2D_mouse_kinematics(
 
     return data, window_inds
 
+
 ##TODO: nitpicky - can you make this a verb?
 def projected_2D_kinematics(
     data: dict,
     axis: torch.tensor,
     config: dict,
     skeleton_config: dict,
-    device: str = "cuda", #TODO: delete this and just use whatever device the data is on
+    device: str = "cuda",  # TODO: delete this and just use whatever device the data is on
     windowed: bool = True,
 ):
     data_keys = list(data.keys())
@@ -470,7 +471,7 @@ def projected_2D_kinematics(
         flattened_pose = pose
         if windowed:
             # TODO: If you change this to torch.reshape(pose, (-1,) + pose.shape[-2:]), it should always be correct windowed or not.
-            # If ^ is true, you can probably remove this "windowed" argument. 
+            # If ^ is true, you can probably remove this "windowed" argument.
             flattened_pose = torch.reshape(pose, (-1,) + pose.shape[2:])
         local_qtn = inv_kin_torch(
             flattened_pose,
