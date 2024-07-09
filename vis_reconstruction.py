@@ -1,6 +1,5 @@
 from ssumo.data.dataset import fwd_kin_cont6d_torch
-from ssumo.get.data import projected_2D_kinematics
-
+from ssumo.get.data import get_projected_2D_kinematics
 from torch.utils.data import DataLoader
 from dappy import read
 import torch
@@ -8,8 +7,7 @@ from dappy import vis
 import ssumo
 from base_path import RESULTS_PATH
 import sys
-import random
-import numpy as np
+from math import pi
 
 
 def visualize_2D_reconstruction(model, loader, label, connectivity, config):
@@ -19,21 +17,18 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
     with torch.no_grad():
         # Let's see how reconstruction looks on train data
         data = next(iter(loader))
-        data = {k: v.to("cuda") for k, v in data.items()}
-        axis = random.random() * np.pi / 2
-        axis = [0, -np.cos(axis), -np.sin(axis)]
         skeleton_config = read.config(config["data"]["skeleton_path"])
-        data = projected_2D_kinematics(
+        axis = torch.rand(1) * pi / 2
+        axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
+            "cuda"
+        )
+        data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+        data = {k: v.to("cuda") for k, v in data.items()}
+        data = get_projected_2D_kinematics(
             data,
             axis,
             config,
             skeleton_config,
-            device="cuda",
-        )
-        data["view_axis"] = (
-            torch.tensor(axis)[None, :]
-            .repeat((len(data["3D_pose"]), 1))
-            .type(torch.FloatTensor)
         )
         data = {k: v.to("cuda") for k, v in data.items()}
         data_o = ssumo.train.predict_batch(
@@ -60,7 +55,7 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
 
         pose_array = torch.cat(
             [
-                data["raw_pose"].reshape(-1, n_keypts, 2),
+                data["projected_pose"].reshape(-1, n_keypts, 2),
                 data["target_pose"].reshape(-1, n_keypts, 2),
                 pose_hat,
             ],
@@ -145,7 +140,14 @@ for dataset_label in dataset_list:
         load_model=config["out_path"],
         epoch=sys.argv[2],
         dataset_label="Train",
-        data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose"]
+        data_keys=[
+            "x6d",
+            "root",
+            "offsets",
+            "raw_pose",
+            "target_pose",
+            "projected_pose",
+        ]
         + config["disentangle"]["features"],
         shuffle=True,
         verbose=0,

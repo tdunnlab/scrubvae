@@ -4,14 +4,13 @@ from ssumo.train.losses import get_batch_loss, balance_disentangle
 from ssumo.train.mutual_inf import MutInfoEstimator
 from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter
 from ssumo.plot.eval import loss as plt_loss
-from ssumo.get.data import projected_2D_kinematics
+from ssumo.get.data import get_projected_2D_kinematics
 import torch.optim as optim
 import tqdm
 import pickle
 import functools
 import time
-import random
-from math import pi, sin, cos
+from math import pi
 
 
 class CyclicalBetaAnnealing(torch.nn.Module):
@@ -192,32 +191,27 @@ def train_epoch_2D_view(
             for param in model.parameters():
                 param.grad = None
 
-        ## Can you use torch.rand_like() instead of using the math module?
-        axis = random.random() * pi / 2
-        axis = [0, -cos(axis), -sin(axis)]
-        data["view_axis"] = torch.tensor(axis)[None, :].repeat(
-            (len(data["raw_pose"]), 1)
+        axis = torch.rand(1) * pi / 2
+        axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
+            device
         )
+        data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
         data = {k: v.to(device) for k, v in data.items()}
-        data = projected_2D_kinematics(
+        data = get_projected_2D_kinematics(
             data,
             axis,
-            config,
             skeleton_config,
-            device=device,
         )
         if config["data"].get("decode_alternate"):
-            axis = random.random() * pi / 2
-            axis = [0, -cos(axis), -sin(axis)]
-            data["view_axis"] = torch.tensor(axis)[None, :].repeat(
-                (len(data["raw_pose"]), 1)
+            axis = torch.rand(1) * pi / 2
+            axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
+                device
             )
-            data["target_pose"] = projected_2D_kinematics(
+            data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+            data["target_pose"] = get_projected_2D_kinematics(
                 {k: data[k] for k in ["raw_pose", "target_pose"]},
                 axis,
-                config,
                 skeleton_config,
-                device=device,
             )["target_pose"]
         data = {k: v.to(device) for k, v in data.items()}
         data_o = predict_batch(model, data, model.disentangle_keys)
@@ -273,31 +267,27 @@ def train_epoch_mcmi_2D_view(
                 param.grad = None
 
         # Same as above, use torch.rand_like() instead of math module
-        axis = random.random() * pi / 2
-        axis = [0, -cos(axis), -sin(axis)]
-        data["view_axis"] = torch.tensor(axis)[None, :].repeat(
-            (len(data["raw_pose"]), 1)
+        axis = torch.rand(1) * pi / 2
+        axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
+            device
         )
+        data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
         data = {k: v.to(device) for k, v in data.items()}
-        data = projected_2D_kinematics(
+        data = get_projected_2D_kinematics(
             data,
             axis,
-            config,
             skeleton_config,
-            device=device,
         )
         if config["data"].get("decode_alternate"):
-            axis = random.random() * pi / 2
-            axis = [0, -cos(axis), -sin(axis)]
-            data["view_axis"] = torch.tensor(axis)[None, :].repeat(
-                (len(data["raw_pose"]), 1)
+            axis = torch.rand(1) * pi / 2
+            axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
+                device
             )
-            data["target_pose"] = projected_2D_kinematics(
+            data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+            data["target_pose"] = get_projected_2D_kinematics(
                 {k: data[k] for k in ["raw_pose", "target_pose"]},
                 axis,
-                config,
                 skeleton_config,
-                device=device,
             )["target_pose"]
         data = {k: v.to(device) for k, v in data.items()}
         data_o = predict_batch(model, data, model.disentangle_keys)

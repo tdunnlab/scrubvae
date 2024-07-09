@@ -413,7 +413,7 @@ def qbetween(v0, v1):
     assert v0.shape[-1] == 3, "v0 must be of the shape (*, 3)"
     assert v1.shape[-1] == 3, "v1 must be of the shape (*, 3)"
 
-    v = torch.cross(v0, v1)
+    v = torch.linalg.cross(v0, v1)
     w = torch.sqrt(
         (v0**2).sum(dim=-1, keepdim=True) * (v1**2).sum(dim=-1, keepdim=True)
     ) + (v0 * v1).sum(dim=-1, keepdim=True)

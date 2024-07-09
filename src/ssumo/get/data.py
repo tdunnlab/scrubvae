@@ -385,14 +385,12 @@ def calculate_2D_mouse_kinematics(
     data_arr = []
     data["raw_pose"] = torch.from_numpy(data["raw_pose"]).to("cuda")
     for axis in project_axis:
+        axis = torch.tensor(axis).to("cuda")
         data_arr.append(
-            projected_2D_kinematics(
+            get_projected_2D_kinematics(
                 {k: v for k, v in data.items()},
                 axis,
-                config,
                 skeleton_config,
-                device="cuda",
-                windowed=False,
             )
         )
         data_arr[-1]["view_axis"] = (
@@ -415,45 +413,25 @@ def calculate_2D_mouse_kinematics(
     return data, window_inds
 
 
-##TODO: nitpicky - can you make this a verb?
-def projected_2D_kinematics(
+def get_projected_2D_kinematics(
     data: dict,
     axis: torch.tensor,
-    config: dict,
     skeleton_config: dict,
-    device: str = "cuda",  # TODO: delete this and just use whatever device the data is on
-    windowed: bool = True,
 ):
     data_keys = list(data.keys())
     pose = data["raw_pose"]
-    # pose = project_to_null(pose, [axis])[0]
-    # TODO: A little worried about this "to and from" numpy within a batch. Might slow things down.
-    # In your epoch loops you shouldn't really have any cpu operations.
-    # Try something like the following:
-    # nrm = torch.linalg.norm(axis, ord=2, dim=0) # batch_size x 1, could skip since axis should have norm=1 anyway
-    # z_null = pose - (pose @ axis.T) * axis
-    # Double check that this produces the correct projection (assumes pose is 2D (N x 3) where N = #actions*window*#keypts
-    uperp = (
-        torch.from_numpy(spl.null_space(np.array(axis)[None, ...]))
-        .type(torch.FloatTensor)
-        .to(device)
-    )
-    if uperp[2][0] == 0:
-        proj_x = uperp.T[0]
-        proj_y = uperp.T[1]
-    else:
-        coeff = -uperp[2][1] / uperp[2][0]
-        proj_x = uperp.T[0] * coeff + uperp.T[1]
-        proj_y = torch.cross(
-            torch.tensor(axis).type(torch.FloatTensor).to(device), proj_x
-        )
+    device = pose.device
+
+    proj_x = torch.tensor([0, 1, 0]).type(torch.FloatTensor).to(device)
+    if axis[1] != 0:
+        proj_x = torch.tensor([1, -axis[0] / axis[1], 0]).to(device)
+    proj_y = torch.linalg.cross(proj_x, axis)
     proj_x /= torch.norm(proj_x)
     proj_y /= torch.norm(proj_y)
     if proj_y[2] < 0:
         proj_y *= -1
-    # TODO: use torch.linalg.norm instead of numpy, then you won't have to move to cpu
-    if np.linalg.norm(torch.cross(proj_x, proj_y).cpu().numpy() - axis) > 0.1:
         proj_x *= -1
+
     pose = pose @ torch.cat([proj_x[None, ...], proj_y[None, ...]], axis=0).T
 
     # # rotate to +x on 2d axis
@@ -468,11 +446,7 @@ def projected_2D_kinematics(
     pose = torch.concatenate([pose, torch.zeros_like(pose[..., 0, None])], axis=-1)
 
     if "x6d" in data_keys:
-        flattened_pose = pose
-        if windowed:
-            # TODO: If you change this to torch.reshape(pose, (-1,) + pose.shape[-2:]), it should always be correct windowed or not.
-            # If ^ is true, you can probably remove this "windowed" argument.
-            flattened_pose = torch.reshape(pose, (-1,) + pose.shape[2:])
+        flattened_pose = torch.reshape(pose, (-1,) + pose.shape[-2:])
         local_qtn = inv_kin_torch(
             flattened_pose,
             skeleton_config["KINEMATIC_TREE"],
@@ -489,12 +463,7 @@ def projected_2D_kinematics(
             torch.ones_like(local_qtn[..., [-1]]) - 2 * local_qtn[..., [-1]] ** 2
         )
         local_ang = torch.clip(local_ang, torch.tensor(-1), torch.tensor(1))
-        if windowed:
-            data["x6d"] = torch.reshape(
-                local_ang, (-1, config["model"]["window"]) + local_ang.shape[1:]
-            )
-        else:
-            data["x6d"] = local_ang
+        data["x6d"] = torch.reshape(local_ang, pose.shape[:-1] + (2,))
 
     if "offsets" in data_keys:
         segment_lens = get_segment_len_torch(
@@ -503,18 +472,14 @@ def projected_2D_kinematics(
             torch.tensor(skeleton_config["OFFSET"]).type(torch.float32),
             device=device,
         )
-        if windowed:
-            data["offsets"] = torch.reshape(
-                segment_lens, (-1, config["model"]["window"]) + segment_lens.shape[1:]
-            )
-        else:
-            data["offsets"] = segment_lens
+        data["offsets"] = torch.reshape(segment_lens, pose.shape)
 
     if "root" in data_keys:
         root = pose[..., 0, :2]
         data["root"] = root
 
     if "target_pose" in data_keys:
+        # # if you really want to confirm the rotation representation reconstructs the target
         # reshaped_x6d = torch.concatenate(
         #     [local_ang[..., :], torch.zeros_like(local_ang[..., [0]])], axis=-1
         # )
@@ -522,6 +487,15 @@ def projected_2D_kinematics(
         #     [reshaped_x6d[..., [1, 0, 2]], reshaped_x6d[..., :]], axis=-1
         # )
         # reshaped_x6d[..., 3] *= -1
+        # data["target_pose"] = fwd_kin_cont6d_torch(
+        #     reshaped_x6d.to("cuda"),
+        #     skeleton_config["KINEMATIC_TREE"],
+        #     segment_lens.to("cuda"),
+        #     root_pos=torch.zeros(reshaped_x6d.shape[0], 3).to("cuda"),
+        #     do_root_R=True,
+        #     eps=1e-8,
+        # ).reshape(data["x6d"].shape[:-1] + (3,))[..., 0:2]
+
         data["target_pose"] = pose[..., :2]
 
     return data

@@ -363,7 +363,7 @@ class MouseDataset2D(MouseDataset):
 
         if "raw_pose" in self.ind_with_window_inds:
             query["raw_pose"] = self.data["raw_pose"][
-                self.window_inds[idx] % len(self.data["raw_pose"])
+                torch.remainder(self.window_inds[idx], len(self.data["raw_pose"]))
             ]
 
         query.update(

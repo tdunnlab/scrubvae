@@ -5,7 +5,6 @@ import torch
 import numpy as np
 import random
 from dappy import read
-from ssumo.get.data import projected_2D_kinematics
 from ssumo.data.dataset import *
 
 
