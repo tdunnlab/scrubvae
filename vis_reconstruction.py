@@ -13,7 +13,7 @@ from math import pi
 def visualize_2D_reconstruction(model, loader, label, connectivity, config):
     n_keypts = loader.dataset.n_keypts
     kinematic_tree = loader.dataset.kinematic_tree
-    # model.eval()
+    model.eval()
     with torch.no_grad():
         # Let's see how reconstruction looks on train data
         data = next(iter(loader))
@@ -27,7 +27,6 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
         data = get_projected_2D_kinematics(
             data,
             axis,
-            config,
             skeleton_config,
         )
         data = {k: v.to("cuda") for k, v in data.items()}

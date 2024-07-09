@@ -6,8 +6,7 @@ import torch
 from ssumo.data.dataset import *
 from torch.utils.data import DataLoader
 from pathlib import Path
-import scipy.linalg as spl
-import random
+from math import pi
 
 TRAIN_IDS = {
     # "immunostain": np.arange(74),
@@ -376,39 +375,58 @@ def calculate_2D_mouse_kinematics(
     len_proj = 1
     if project_axis == None:
         return data, window_inds
+    if type(project_axis) == int:
+        window_inds = torch.cat(
+            [len(data["raw_pose"]) * i + window_inds for i in range(project_axis)],
+            dim=0,
+        )
+        data["raw_pose"] = torch.from_numpy(data["raw_pose"])[
+            window_inds % len(data["raw_pose"])
+        ].to("cuda")
+        axis = torch.rand(len(window_inds)) * pi / 2
+        axis = torch.cat(
+            [
+                torch.zeros(len(window_inds))[:, None],
+                -torch.cos(axis)[:, None],
+                -torch.sin(axis)[:, None],
+            ],
+            dim=1,
+        ).to("cuda")
+        data = get_projected_2D_kinematics(
+            {k: v for k, v in data.items()},
+            axis,
+            skeleton_config,
+        )
+
+        data = {k: v.cpu().numpy() for k, v in data.items()}
+        return data, window_inds
 
     len_proj = len(project_axis)
     window_inds = torch.cat(
         [len(data["raw_pose"]) * i + window_inds for i in range(len_proj)],
         dim=0,
     )
-    data_arr = []
-    data["raw_pose"] = torch.from_numpy(data["raw_pose"]).to("cuda")
-    for axis in project_axis:
-        axis = torch.tensor(axis).to("cuda")
-        data_arr.append(
-            get_projected_2D_kinematics(
-                {k: v for k, v in data.items()},
-                axis,
-                skeleton_config,
-            )
-        )
-        data_arr[-1]["view_axis"] = (
-            torch.tensor(axis)[None, :]
-            .repeat((len(data["raw_pose"]), 1))
-            .type(torch.FloatTensor)
-        )
 
-    data.update(
-        {
-            k: torch.cat([data_arr[i][k] for i in range(len(project_axis))], dim=0)
-            .cpu()
-            .numpy()
-            for k, v in data.items()
-            if k != "raw_pose"
-        }
+    project_axis = torch.tensor(project_axis).to("cuda")
+    project_axis = (
+        torch.repeat_interleave(project_axis, len(data["raw_pose"]), 0)
+        .type(torch.FloatTensor)
+        .to("cuda")
     )
-    data["raw_pose"] = data["raw_pose"].cpu().numpy()
+
+    data["raw_pose"] = (
+        torch.from_numpy(data["raw_pose"]).to("cuda").repeat(len_proj, 1, 1)
+    )
+
+    data = get_projected_2D_kinematics(
+        data,
+        project_axis,
+        skeleton_config,
+    )
+    data["raw_pose"] = data["raw_pose"][: len(project_axis) / len_proj]
+    data["view_axis"] = project_axis
+
+    data = {k: v.cpu().numpy() for k, v in data.items()}
 
     return data, window_inds
 
@@ -420,19 +438,50 @@ def get_projected_2D_kinematics(
 ):
     data_keys = list(data.keys())
     pose = data["raw_pose"]
+    if len(axis.shape) > 1:
+        assert len(axis) == len(pose)
     device = pose.device
 
-    proj_x = torch.tensor([0, 1, 0]).type(torch.FloatTensor).to(device)
-    if axis[1] != 0:
-        proj_x = torch.tensor([1, -axis[0] / axis[1], 0]).to(device)
-    proj_y = torch.linalg.cross(proj_x, axis)
-    proj_x /= torch.norm(proj_x)
-    proj_y /= torch.norm(proj_y)
-    if proj_y[2] < 0:
-        proj_y *= -1
-        proj_x *= -1
+    proj_x = torch.zeros_like(axis)
+    proj_x[..., 0] = 1
+    ax = axis[axis[..., 1] != 0]
+    if len(ax) > 0:
+        proj_x[axis[..., 1] != 0] = torch.cat(
+            [
+                torch.ones_like(ax[..., 0])[..., None],
+                (-ax[..., 0] / ax[..., 1])[..., None],
+                torch.zeros_like(ax[..., 0])[..., None],
+            ],
+            dim=-1,
+        ).to(device)
 
-    pose = pose @ torch.cat([proj_x[None, ...], proj_y[None, ...]], axis=0).T
+    proj_y = torch.linalg.cross(proj_x, axis)
+
+    proj_x /= torch.norm(proj_x, dim=-1)[..., None].repeat(
+        [1 for i in proj_x.shape[1:]] + [3]
+    )
+    proj_y /= torch.norm(proj_y, dim=-1)[..., None].repeat(
+        [1 for i in proj_x.shape[1:]] + [3]
+    )
+    proj_y[proj_y[..., 2] < 0] = -proj_y[proj_y[..., 2] < 0]
+    proj_x[proj_y[..., 2] < 0] = -proj_x[proj_y[..., 2] < 0]
+
+    flat_pose = pose.reshape((-1,) + pose.shape[-2:])
+    proj_matrices = torch.cat(
+        [proj_x[..., None, :], proj_y[..., None, :]], axis=-2
+    ).transpose(-1, -2)
+
+    if len(proj_matrices.shape) == 2:
+        proj_matrices = proj_matrices[None, ...]
+    proj_matrices = torch.repeat_interleave(
+        proj_matrices,
+        int(len(flat_pose) / len(proj_matrices)),
+        dim=0,
+    )
+
+    pose = torch.bmm(flat_pose, proj_matrices).reshape(
+        data["raw_pose"].shape[:-1] + (2,)
+    )
 
     # # rotate to +x on 2d axis
     # rotv = pose[:, 1] - pose[:, 0]
