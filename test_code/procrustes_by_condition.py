@@ -25,7 +25,7 @@ loader, model = ssumo.get.data_and_model(
 )
 
 latents = (
-    ssumo.get.latents_2D(
+    ssumo.get.latents(
         config,
         model,
         sys.argv[2],

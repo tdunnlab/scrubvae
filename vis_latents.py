@@ -33,20 +33,15 @@ loader, model = ssumo.get.data_and_model(
     verbose=0,
 )
 
-if config["data"].get("is_2D"):
-    latents = ssumo.get.latents_2D(
-        config,
-        model,
-        sys.argv[2],
-        loader,
-        device="cuda",
-        dataset_label=dataset_label,
-        recompute=False,
-    )
-else:
-    latents = ssumo.get.latents(
-        config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
-    )
+latents = ssumo.get.latents(
+    config,
+    model,
+    sys.argv[2],
+    loader,
+    device="cuda",
+    dataset_label=dataset_label,
+    recompute=False,
+)
 
 if z_null is not None:
     print("Projecting latents to decoder null space")

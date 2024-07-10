@@ -28,34 +28,20 @@ loader, model = ssumo.get.data_and_model(
     verbose=0,
 )
 
-if config["data"]["is_2D"]:
-    latents = (
-        ssumo.get.latents_2D(
-            config,
-            model,
-            sys.argv[2],
-            loader,
-            device="cuda",
-            dataset_label=dataset_label,
-        )
-        .cpu()
-        .detach()
-        .numpy()
+latents = (
+    ssumo.get.latents(
+        config,
+        model,
+        sys.argv[2],
+        loader,
+        device="cuda",
+        dataset_label=dataset_label,
+        recompute=False,
     )
-else:
-    latents = (
-        ssumo.get.latents(
-            config,
-            model,
-            sys.argv[2],
-            loader,
-            device="cuda",
-            dataset_label=dataset_label,
-        )
-        .cpu()
-        .detach()
-        .numpy()
-    )
+    .cpu()
+    .detach()
+    .numpy()
+)
 
 # heading = dataset[:]["heading"].cpu().detach().numpy()
 # feat = np.arctan2(heading[:, 0], heading[:, 1])

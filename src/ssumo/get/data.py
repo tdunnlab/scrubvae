@@ -371,7 +371,7 @@ def calculate_2D_mouse_kinematics(
     for k in data_keys:
         if k == "raw_pose":
             continue
-        data[k] = np.zeros(len(data["raw_pose"]))
+        data[k] = torch.zeros(len(data["raw_pose"]))
     len_proj = 1
     if project_axis == None:
         return data, window_inds
@@ -383,6 +383,7 @@ def calculate_2D_mouse_kinematics(
         data["raw_pose"] = torch.from_numpy(data["raw_pose"])[
             window_inds % len(data["raw_pose"])
         ].to("cuda")
+        torch.manual_seed(1)
         axis = torch.rand(len(window_inds)) * pi / 2
         axis = torch.cat(
             [
@@ -398,7 +399,9 @@ def calculate_2D_mouse_kinematics(
             skeleton_config,
         )
 
+        data["view_axis"] = axis
         data = {k: v.cpu().numpy() for k, v in data.items()}
+
         return data, window_inds
 
     len_proj = len(project_axis)

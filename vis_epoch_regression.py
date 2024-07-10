@@ -28,23 +28,30 @@ if ("log_class" in method) or ("qda" in method):
     disentangle_keys = ["ids"]
 else:
     if ("mf" in experiment_folder) or ("pd" in experiment_folder):
-        disentangle_keys = ["avg_speed_3d"]#, "heading"]
+        disentangle_keys = ["avg_speed_3d"]  # , "heading"]
     else:
         disentangle_keys = ["avg_speed_3d", "heading"]
 
+disentangle_keys = ["view_axis"]
 print(disentangle_keys)
 metrics = {}
 for an_key in analysis_keys:
     folder = "{}/{}/".format(RESULTS_PATH, an_key)
     print("Reading in folder: {}".format(folder))
     metrics[an_key] = ssumo.eval.metrics.epoch_regression(
-        folder, method, dataset_label, save_load=True, disentangle_keys=disentangle_keys
+        folder,
+        method,
+        dataset_label,
+        save_load=True,
+        disentangle_keys=disentangle_keys,
     )
 
 if (method == "log_class") or ("_cv" in method):
     rows = 1
     figsize = (15, 10)
-    metrics_keys = ["Accuracy"] if ("log_class" in method) or ("qda" in method) else ["R2"]
+    metrics_keys = (
+        ["Accuracy"] if ("log_class" in method) or ("qda" in method) else ["R2"]
+    )
 else:
     rows = 2
     figsize = (15, 15)
@@ -62,7 +69,7 @@ if task_id == "":
                     ax = ax_arr
                 else:
                     ax = ax_arr[i]
-                
+
                 if "_cv" in method:
                     print(np.array(metrics[p][key][metric]).shape)
                     metric_to_plot = np.array(metrics[p][key][metric]).mean(axis=-1)
@@ -80,7 +87,9 @@ if task_id == "":
                 ax.set_ylabel(metric)
                 ax.legend()
                 ax.set_xlabel("Epoch")
-                print("{}{}{}:{}".format(p, key, metric, metrics[p][key][metric]))#max(min(metrics[p][key][metric])
+                print(
+                    "{}{}{}:{}".format(p, key, metric, metrics[p][key][metric])
+                )  # max(min(metrics[p][key][metric])
                 # ax.set_ylim(bottom= 0)
 
                 # ax.set_ylim(top=1)
