@@ -8,7 +8,7 @@ from scipy import stats
 # from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 from sklearn.decomposition import PCA
 import colorcet as cc
 from sklearn.model_selection import KFold
@@ -93,7 +93,7 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
 
     if var_ind == 0:
         config = read.config(
-            RESULTS_PATH + m_dict["CVAE"][0] + "/model_config.yaml"
+            RESULTS_PATH + m_dict["C-VAE"][0] + "/model_config.yaml"
         )
         loader = ssumo.get.mouse_data(
             data_config=config["data"],
@@ -125,7 +125,7 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
         path = "{}{}/".format(RESULTS_PATH, m_dict[m_key][0])
         z = np.load(path + "latents/Train_{}.npy".format(m_dict[m_key][1]))
         z = z[ids != not_id]
-        z = StandardScaler().fit_transform(z)
+        # z = StandardScaler().fit_transform(z)
 
         if var_key == "pd_speed":
             lc[m_key] = log_class_rand_cv(z, pd_label, 51, 5)

@@ -69,9 +69,9 @@ def total_correlation(z, mu, L):
         total correlation for batch, scalar value
 
     """
-    logvar = torch.log(torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1)).diagonal(
-        dim1=-1, dim2=-2
-    ))
+    logvar = torch.log(
+        torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1)).diagonal(dim1=-1, dim2=-2)
+    )
     # Compute log(q(z(x_j)|x_i)) for every sample/dimension in the batch, which is a tensor of
     # shape (n_frames, n_dims). In the following comments,
     # (n_frames, n_frames, n_dims) are indexed by [j, i, l].
@@ -149,7 +149,7 @@ def vae_BXEntropy_loss(x, x_hat, mu, log_var):
     return B_XEntropy + KL_div
 
 
-def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
+def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root_hat=None):
     # if root == None:
     #     root = torch.zeros((x.shape[0], 3), device=x.device)
     if root_hat == None:
@@ -196,13 +196,23 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
         batch_loss["rotation"] = rotation_loss(data["x6d"], data_o["x6d"])
 
     if "prior" in loss_scale.keys():
-        if type(data_o["mu"]) is tuple:
-            # For if you have multiple latent spaces (e.g. hierarchical)
-            batch_loss["prior"] = 0
-            for mu, L in zip(data_o["mu"], data_o["L"]):
-                batch_loss["prior"] += prior_loss(mu, L)
-        else:
+        # if type(data_o["mu"]) is tuple:
+        #     # For if you have multiple latent spaces (e.g. hierarchical)
+        #     batch_loss["prior"] = 0
+        #     for mu, L in zip(data_o["mu"], data_o["L"]):
+        #         batch_loss["prior"] += prior_loss(mu, L)
+        # else:
+        if "L" in data_o.keys():
             batch_loss["prior"] = prior_loss(data_o["mu"], data_o["L"])
+        elif "beta_dist" in data_o.keys():
+            p = torch.distributions.Beta(
+                torch.ones_like(data_o["alpha"]),
+                torch.ones_like(data_o["beta"]),
+            )
+            batch_loss["prior"] = (
+                torch.distributions.kl_divergence(data_o["beta_dist"], p).sum(-1).sum()
+                / batch_size
+            )
 
     if "jpe" in loss_scale.keys():
         batch_loss["jpe"] = mpjpe_loss(
@@ -213,6 +223,31 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
         )
 
     if "root" in loss_scale.keys():
+
+        # test_pose = fwd_kin_cont6d_torch(
+        #     data["x6d"].reshape(-1, 18, 6),
+        #     model.kinematic_tree,
+        #     data["offsets"].reshape(-1, 18, 3),
+        #     root_pos=data["root"].reshape(-1, 3),
+        #     do_root_R=True,
+        #     eps=1e-8,
+        # ).reshape(data["x6d"].shape[:-1] + (3,))
+        # from neuroposelib import visualization as vis
+        # from neuroposelib import read
+        # connectivity = read.connectivity_config("/mnt/home/jwu10/working/ssumo/configs/mouse_skeleton.yaml")
+
+        # vis.pose.arena3D(
+        #     test_pose[:10,...].cpu().detach().numpy().reshape(-1, 18, 3),
+        #     connectivity,
+        #     frames=[0],
+        #     centered=False,
+        #     fps=45,
+        #     N_FRAMES=51*10,
+        #     VID_NAME="train_target.mp4",
+        #     SAVE_ROOT="./",
+        # )
+        # import pdb; pdb.set_trace()
+
         batch_loss["root"] = (
             torch.nn.MSELoss(reduction="sum")(data_o["root"], data["root"]) / batch_size
         )

@@ -1,13 +1,13 @@
 import numpy as np
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 import tqdm
 from sklearn.decomposition import PCA
 from data.dataset import MouseDataset
 import utils
 from torch.utils.data import DataLoader
-from dappy import read, write
-from dappy import visualization as vis
+from neuroposelib import read, write
+from neuroposelib import visualization as vis
 import scipy.linalg as spl
 from base_path import RESULTS_PATH
 
@@ -21,7 +21,7 @@ connectivity = read.connectivity_config(
     "/mnt/home/jwu10/working/behavior_vae/configs/mouse_skeleton.yaml"
 )
 
-# from dappy import augmentations
+# from neuroposelib import augmentations
 # pose, ids = read.pose_h5(config["data_path"])
 # meta, _ = read.meta("/mnt/home/jwu10/working/ceph/data/ensemble_healthy/metadata.csv", id=ids)
 aug_levels = np.linspace(0.5, 1.5, 7)

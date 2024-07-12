@@ -2,8 +2,8 @@ import numpy as np
 import torch
 import ssumo
 from ssumo.data import quaternion as qtn
-from dappy import read
-from dappy import visualization as vis
+from neuroposelib import read
+from neuroposelib import visualization as vis
 from ssumo.data.dataset import get_frame_yaw
 
 RESULTS_PATH = "/mnt/ceph/users/jwu10/results/vae/"

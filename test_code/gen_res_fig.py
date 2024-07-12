@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import ssumo
-from dappy import read, preprocess
+from neuroposelib import read, preprocess
 import torch
 from ssumo.data.dataset import (
     get_angle2D,
@@ -31,16 +31,16 @@ titles = {
 }
 
 downsample = 32
-f = plt.figure(figsize=(12, 8))
+f = plt.figure(figsize=(12, 6))
 subf = f.subfigures(2, 1)
-for var_ind, var_key in enumerate(["avg_speed_3d", "heading"]):
+for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
     print(var_key)
     models = read.config(CODE_PATH + "configs/exp_finals.yaml")[var_key]
-    models = {m[0]: [m[1], m[2]] for m in models if (m[0] != "Vanilla VAE")}
+    models = {m[0]: [m[1], m[2]] for m in models if (m[0] != "VAE")}
 
     torch.manual_seed(0)
     config = read.config(
-        RESULTS_PATH + models["Mutual Information"][0] + "/model_config.yaml"
+        RESULTS_PATH + models["SC-VAE-MI"][0] + "/model_config.yaml"
     )
     # config["data"]["stride"] = downsample
     if var_key == "heading":
@@ -116,10 +116,10 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading"]):
         #     avg_speed_3d_rand[:,dim] = torch.clamp(avg_speed_3d_rand[:,dim], min=spd_true.min(dim=0)[0][dim], max=None)
         avg_speed_3d_rand = torch.clamp(avg_speed_3d_rand, min=spd_true.min(dim=0)[0], max=spd_true.max(dim=0)[0])
 
-        kinematic_tree = loader.dataset.kinematic_tree
-        n_keypts = loader.dataset.n_keypts
-        arena_size = loader.dataset.arena_size
-        discrete_classes = loader.dataset.discrete_classes
+    kinematic_tree = loader.dataset.kinematic_tree
+    n_keypts = loader.dataset.n_keypts
+    arena_size = loader.dataset.arena_size
+    discrete_classes = loader.dataset.discrete_classes
 
     loader.dataset.window_inds = loader.dataset.window_inds[::downsample]
     assert len(loader.dataset.window_inds) == len(spd_true)
@@ -297,4 +297,4 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading"]):
     #         ax.set_ylim(bottom=jpe_min - 0.1, top=jpe_max + 0.1)
 
 # f.tight_layout()
-plt.savefig("./results/genres_final.png")
+plt.savefig("./results/genres_final.png", dpi=400)

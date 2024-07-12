@@ -2,13 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import ssumo
 import pickle
-from scipy.spatial.distance import cdist, pdist
 from scipy import stats
 
 # from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 from sklearn.decomposition import PCA
 import colorcet as cc
 from sklearn.model_selection import KFold
@@ -22,6 +21,7 @@ from ssumo.eval.metrics import (
     qda_rand_cv,
     linear_rand_cv,
     mlp_rand_cv,
+    mmd_estimate
 )
 import torch
 
@@ -31,67 +31,20 @@ plt.rcParams["font.sans-serif"] = "Arial"
 CODE_PATH = "/mnt/home/jwu10/working/ssumo/"
 RESULTS_PATH = "/mnt/ceph/users/jwu10/results/vae/"
 
-
-def mmd_estimate(X, Y, h=None):
-    """
-    Given samples from two distributions in a common
-    common feature space, this function computes an
-    estimate of the maximal mean discrepancy (MMD)
-    distance with a squared exponential kernel.
-
-    Reference
-    ---------
-    Gretton et al. (2012). A Kernel Two-Sample Test.
-    Journal of Machine Learning Research 13: 723-773.
-
-    Parameters
-    ----------
-    X : ndarray (num_x_samples x num_features)
-        First set of observed samples, assumed to be
-        drawn from some unknown distribution P.
-
-    Y : ndarray (num_y_samples x num_features)
-        Second set of observed samples, assumed to be
-        drawn from some unknown distribution Q.
-
-    h : float
-        Bandwidth parameter
-
-    Returns
-    -------
-    dist : float
-        An unbiased estimator of the MMD.
-    """
-
-    # Compute pairwise distances
-    xd = pdist(X, metric="euclidean")
-    yd = pdist(Y, metric="euclidean")
-    xyd = cdist(X, Y, metric="euclidean").ravel()
-
-    if h is None:
-        h = np.median(np.concatenate((xd, yd, xyd))) ** 2
-    # Compute unbiased MMD distance estimate.
-    kxx = np.mean(np.exp(-(xd**2) / h))
-    kyy = np.mean(np.exp(-(yd**2) / h))
-    kxy = np.mean(np.exp(-(xyd**2) / h))
-    return kxx + kyy - 2 * kxy
-
 titles = {
     "pd_speed": "Average Speed",
     "pd_ids": "Animal ID",
 }
 
-f = plt.figure(figsize=(15, 15))
-gs = f.add_gridspec(4, 8)
+f = plt.figure(figsize=(14, 9))
+subf = f.subfigures(3,1, height_ratios=[1,1,1.75])
 
 for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
     m_config = read.config(CODE_PATH + "configs/exp_finals.yaml")[var_key]
     m_dict = {m[0]: [m[1], m[2]] for m in m_config}
 
     if var_ind == 0:
-        config = read.config(
-            RESULTS_PATH + m_dict["CVAE"][0] + "/model_config.yaml"
-        )
+        config = read.config(RESULTS_PATH + m_dict["C-VAE"][0] + "/model_config.yaml")
         loader = ssumo.get.mouse_data(
             data_config=config["data"],
             window=config["model"]["window"],
@@ -116,7 +69,7 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
         fluorescence = fluorescence[ids != not_id]
         speed = speed[ids != not_id]
 
-    qda, lc, lin, mlp, mmd, mmd_id_pd, mmd_id_healthy = {}, {}, {}, {}, {}, {}, {}
+    lc, lin, mmd, mmd_id_pd, mmd_id_healthy = {}, {}, {}, {}, {}
     print(var_key)
     for m_key in m_dict:
         path = "{}{}/".format(RESULTS_PATH, m_dict[m_key][0])
@@ -126,54 +79,44 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
 
         if var_key == "pd_speed":
             lc[m_key] = log_class_rand_cv(z, pd_label, 51, 5)
-            qda[m_key] = qda_rand_cv(z, pd_label, 51, 5)
             lin[m_key] = linear_rand_cv(z, speed, 51, 5)
-            mlp[m_key] = mlp_rand_cv(z, speed, 51, 5)
 
-            lc[m_key + " + Speed"] = log_class_rand_cv(np.concatenate([z,speed],axis=-1), pd_label, 51, 5)
-            qda[m_key + " + Speed"] = qda_rand_cv(np.concatenate([z,speed],axis=-1), pd_label, 51, 5)
+            if ("MALS" in m_key) or ("MI" in m_key):
+                lc[m_key + "\n+ Speed"] = log_class_rand_cv(
+                    np.concatenate([z, speed], axis=-1), pd_label, 51, 5
+                )
 
         if var_key == "pd_ids":
             window = 51
-            qda[m_key], lc[m_key] = [], []
-            kf = KFold(n_splits=len(discrete_classes), shuffle=False)
-            # for i, (train_i, test_i) in enumerate(kf.split(discrete_classes)):
-            test_i = [21,22]
-            for i, train_i in enumerate(discrete_classes[~np.isin(discrete_classes,test_i)]):
-                z_train = z[np.isin(ids[ids != not_id], [test_i])][# [discrete_classes])][#[test_i])][
-                    ::window
-                ]
-                # print(discrete_classes[test_i], print(discrete_classes[train_i]))
-                y_train = pd_label[
-                    np.isin(ids[ids != not_id], [test_i])#[discrete_classes])#[test_i])
-                ][::window].ravel()
-                z_test = z[np.isin(ids[ids != not_id], train_i)][#])][#discrete_classes[train_i])][
-                    ::window
-                ]
-                # y_test = pd_label[np.isin(ids[ids!=not_id], discrete_classes[train_i])][::window]
-                y_test = np.zeros((len(z_test), 2))
+            # lc[m_key] = []
+            # kf = KFold(n_splits=len(discrete_classes), shuffle=False)
+            # # for i, (train_i, test_i) in enumerate(kf.split(discrete_classes)):
+            # test_i = [21,22]
+            # for i, train_i in enumerate(discrete_classes[~np.isin(discrete_classes,test_i)]):
+            #     z_train = z[np.isin(ids[ids != not_id], [test_i])][# [discrete_classes])][#[test_i])][
+            #         ::window
+            #     ]
+            #     # print(discrete_classes[test_i], print(discrete_classes[train_i]))
+            #     y_train = pd_label[
+            #         np.isin(ids[ids != not_id], [test_i])#[discrete_classes])#[test_i])
+            #     ][::window].ravel()
+            #     z_test = z[np.isin(ids[ids != not_id], train_i)][#])][#discrete_classes[train_i])][
+            #         ::window
+            #     ]
+            #     # y_test = pd_label[np.isin(ids[ids!=not_id], discrete_classes[train_i])][::window]
+            #     y_test = np.zeros((len(z_test), 2))
 
-                y_test[
-                    np.arange(len(z_test)),
-                    pd_label[np.isin(ids[ids != not_id], train_i)][#discrete_classes[train_i])][
-                        ::window
-                    ],
-                ] = 1
+            #     y_test[
+            #         np.arange(len(z_test)),
+            #         pd_label[np.isin(ids[ids != not_id], train_i)][#discrete_classes[train_i])][
+            #             ::window
+            #         ],
+            #     ] = 1
 
-                clf = QuadraticDiscriminantAnalysis().fit(z_train, y_train)
-                # y_pred = clf.predict(z_test)
-                # acc = (y_test == y_pred).sum()/len(y_test)
-                # qda[m_key] += [acc]
-                assert (clf.classes_ == np.array([0,1])).sum() == 2
-                qda[m_key] += [roc_auc_score(y_test, clf.predict_proba(z_test))]
-
-                clf = LogisticRegression(solver="sag", max_iter=300, C=0.5).fit(
-                    z_train, y_train
-                )
-                lc[m_key] += [roc_auc_score(y_test, clf.predict_proba(z_test))]
-                # y_pred = clf.predict(z_test)
-                # acc = (y_test == y_pred).sum()/len(y_test)
-                # lc[m_key] += [acc]
+            #     clf = LogisticRegression(solver="sag", max_iter=300, C=0.5).fit(
+            #         z_train, y_train
+            #     )
+            #     lc[m_key] += [roc_auc_score(y_test, clf.predict_proba(z_test))]
 
             # mmd[m_key] = []
             # mmd_id_pd[m_key] = []
@@ -202,193 +145,174 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
             mmd[m_key] = []
             mmd_id_pd[m_key] = []
             mmd_id_healthy[m_key] = []
-            counter = 0
+            mmd_id_pd_mat = np.zeros((len(discrete_classes), len(discrete_classes)))
+            mmd_id_healthy_mat = np.zeros(
+                (len(discrete_classes), len(discrete_classes))
+            )
             for i in range(len(discrete_classes)):
-                pd_i = ((fluorescence < 0.9) & (ids[ids!=not_id] == discrete_classes[i])).ravel()
-                healthy_i = ((fluorescence >= 0.9) & (
-                    ids[ids!=not_id] == discrete_classes[i]
-                )).ravel()
+                pd_i = (
+                    (fluorescence < 0.9) & (ids[ids != not_id] == discrete_classes[i])
+                ).ravel()
+                healthy_i = (
+                    (fluorescence >= 0.9) & (ids[ids != not_id] == discrete_classes[i])
+                ).ravel()
 
                 pd_z_i = z[pd_i, ...]
                 healthy_z_i = z[healthy_i, ...]
                 mmd[m_key] += [mmd_estimate(pd_z_i[::window], healthy_z_i[::window])]
 
-                mmd_id_pd_temp = []
-                mmd_id_healthy_temp = []
-                for j in range(len(discrete_classes)):
-                    if j==i:
-                        pass
-                    else:
-                        pd_j = ((fluorescence < 0.9) & (ids[ids!=not_id] == discrete_classes[j])).ravel()
-                        healthy_j = ((fluorescence >= 0.9) & (
-                            ids[ids!=not_id] == discrete_classes[j]
-                        )).ravel()
-                        pd_z_j = z[pd_j, ...]
-                        healthy_z_j = z[healthy_j, ...]
+                for j in range(i + 1, len(discrete_classes)):
+                    pd_j = (
+                        (fluorescence < 0.9)
+                        & (ids[ids != not_id] == discrete_classes[j])
+                    ).ravel()
+                    healthy_j = (
+                        (fluorescence >= 0.9)
+                        & (ids[ids != not_id] == discrete_classes[j])
+                    ).ravel()
+                    pd_z_j = z[pd_j, ...]
+                    healthy_z_j = z[healthy_j, ...]
 
-                        mmd_id_pd_temp += [mmd_estimate(pd_z_i[::window], pd_z_j[::window])]
-                        mmd_id_healthy_temp += [mmd_estimate(healthy_z_i[::window], healthy_z_j[::window])]
+                    mmd_id_pd_mat[i, j] = mmd_estimate(
+                        pd_z_i[::window], pd_z_j[::window]
+                    )
+                    mmd_id_healthy_mat[i, j] = mmd_estimate(
+                        healthy_z_i[::window], healthy_z_j[::window]
+                    )
 
-                counter+=1
-                mmd_id_pd[m_key] += [mmd[m_key][-1]/np.mean(mmd_id_pd_temp)]
-                mmd_id_healthy[m_key] += [mmd[m_key][-1]/np.mean(mmd_id_healthy_temp)]             
+            mmd_id_pd_mat += np.triu(mmd_id_pd_mat, k=1).T
+            mmd_id_healthy_mat += np.triu(mmd_id_healthy_mat, k=1).T
 
-
-            
+            for i in range(len(discrete_classes)):
+                mmd_id_pd[m_key] += [
+                    mmd[m_key][i]
+                    / (
+                        np.mean(mmd_id_pd_mat[i, np.arange(len(discrete_classes)) != i]))
+                ]
+                mmd_id_healthy[m_key] += [
+                    mmd[m_key][i]
+                    / (
+                        np.mean(
+                            mmd_id_healthy_mat[i, np.arange(len(discrete_classes)) != i]
+                        )
+                    )
+                ]
 
     if var_key == "pd_speed":
         lc["Speed Only"] = log_class_rand_cv(speed, pd_label, 51, 5)
-        qda["Speed Only"] = qda_rand_cv(speed, pd_label, 51, 5)
 
-    ### Plot 5 Fold R2 Decoding
-    bar_ax = f.add_subplot(gs[var_ind, :4])
-    bar_ax.set_title("Parkinson's Prediction from Latents with {} Scrubbing".format(titles[var_key]),fontsize=14)
     w = 0.25  # bar width
-    x = np.arange(len(lc.keys())) + 0.33  # x-coordinates of your bars
-    # colors = [(0, 0, 1, 1), (1, 0, 0, 1)]    # corresponding colors
+    if var_key == "pd_speed":
+        gs = subf[var_ind].add_gridspec(1, 12)
+        ### Plot 5 Fold R2 Decoding
+        bar_ax = subf[var_ind].add_subplot(gs[:7])
+        bar_ax.set_title(
+            "Logistic PD Classification with Average Speed Scrubbing".format(
+                titles[var_key]
+            ),
+            fontsize=14,
+        )
+        x = np.arange(len(lc.keys()))  # x-coordinates of your bars
+        # colors = [(0, 0, 1, 1), (1, 0, 0, 1)]    # corresponding colors
 
-    bar_ax.bar(
-        x,
-        height=[np.mean(lc[k]) for k in lc.keys()],
-        width=w,  # bar width
-        # tick_label=list(lc.keys()),
-        color = "#9871bb",
-        label="Logistic",
-    )
-    # print(lc)
-    # print(qda)
-
-    # for i in range(len(discrete_classes)):
-    #     bar_ax.plot(x, [v for k, v in lc.items()], lw=0.5)
-
-    ### PD Decoding
-    for i, key in enumerate(lc.keys()):
-        # distribute scatter randomly across whole width of bar
-        bar_ax.scatter(x[i] + np.random.uniform(-0.1, 0.1,len(lc[key])), lc[key], marker="o", c="k", s=1)
-
-    bar_ax.bar(
-        x + 0.33,
-        height=[np.mean(qda[k]) for k in qda.keys()],
-        width=w,  # bar width
-        # tick_label=list(qda.keys()),
-        color= "#d05873",
-        label="QDA",
-    )
-    for i, key in enumerate(qda.keys()):
-        # distribute scatter randomly across whole width of bar
-        bar_ax.scatter(
-            x[i] + 0.33 + np.random.uniform(-0.1, 0.1,len(qda[key])), qda[key], marker="o", c="k", s=1
+        bar_ax.bar(
+            x,
+            height=[np.mean(lc[k]) for k in lc.keys()],
+            width=w,  # bar width
+            # tick_label=list(lc.keys()),
+            color="#9871bb",
+            label="Logistic",
         )
 
-    print({k:np.mean(qda[k]) for k in lc.keys()})
+        ### PD Decoding
+        for i, key in enumerate(lc.keys()):
+            # distribute scatter randomly across whole width of bar
+            bar_ax.scatter(
+                x[i] + np.random.uniform(-0.1, 0.1, len(lc[key])),
+                lc[key],
+                marker="o",
+                c="k",
+                s=1,
+            )
 
-    # for i in range(len(discrete_classes)):
-    #     bar_ax.plot(x, [v for k, v in qda.items()], lw=0.5)
+        bar_ax.set_xticks(x)
+        bar_ax.set_xticklabels(list(lc.keys()))
+        bar_ax.set_ylabel("AUROC")
 
-    bar_ax.set_xticks(x + 0.33 / 2)
-    bar_ax.set_xticklabels(list(lc.keys()))
-    bar_ax.set_ylabel("AUROC")
-    bar_ax.legend()
+        print("AUROC Values")
+        print({k: np.mean(lc[k]) for k in lc.keys()})
+        # bar_ax.legend()
 
-    if var_key == "pd_speed":
-        bar_ax = f.add_subplot(gs[var_ind, 4:])
-        x = np.arange(len(lin.keys())) + 0.33
+        bar_ax = subf[var_ind].add_subplot(gs[7:])
+        x = np.arange(len(lin.keys()))
         ### Speed Decoding
         bar_ax.bar(
             x,
             height=[np.mean(lin[k]) for k in lin.keys()],
             width=w,  # bar width
             # tick_label=list(lc.keys()),
-            color = "#009392",
+            color="#009392",
             label="Linear",
         )
 
+        print("Linear Regression Values")
+        print({k: np.mean(lin[k]) for k in lin.keys()})
+
         for i, key in enumerate(lin.keys()):
             # distribute scatter randomly across whole width of bar
-            bar_ax.scatter(x[i] + np.random.uniform(-0.1, 0.1,len(lin[key])), lin[key], marker="o", c="k", s=1)
-
-        bar_ax.bar(
-            x + 0.33,
-            height=[np.mean(mlp[k])for k in mlp.keys()],
-            width=w,  # bar width
-            color = "#028bc3",
-            # tick_label=list(qda.keys()),
-            label="Nonlinear (MLP)",
-        )
-        for i, key in enumerate(mlp.keys()):
-            # distribute scatter randomly across whole width of bar
             bar_ax.scatter(
-                x[i] + 0.33 + np.random.uniform(-0.1, 0.1,len(mlp[key])), mlp[key], marker="o", c="k", s=1
+                x[i] + np.random.uniform(-0.1, 0.1, len(lin[key])),
+                lin[key],
+                marker="o",
+                c="k",
+                s=1,
             )
 
-        bar_ax.set_xticks(x + 0.33 / 2)
-        bar_ax.set_xticklabels(list(mlp.keys()))
+        bar_ax.set_title("Linear Regression of Average Speed", fontsize=15)
+        bar_ax.set_xticks(np.arange(len(lin.keys())))#+ 0.33 / 2)
+        bar_ax.set_xticklabels(list(lin.keys()))
         bar_ax.set_ylabel(r"$R^2$")
-        bar_ax.legend()
-
-    if var_key == "pd_ids":
-        bar_ax = f.add_subplot(gs[var_ind, 4:])
-        x = np.arange(len(mmd.keys())) + 0.33
-        ### Speed Decoding
-        bar_ax.bar(
-            x,
-            height=[np.mean(mmd[k]) for k in mmd.keys()],
-            width=w,  # bar width
-            # tick_label=list(lc.keys()),
-            label="MMD",
-        )
-
-        for i, key in enumerate(mmd.keys()):
-            # distribute scatter randomly across whole width of bar
-            bar_ax.scatter(x[i] + np.random.uniform(-0.1, 0.1,len(mmd[key])), mmd[key], marker="o", c="k", s=1)
-
-        bar_ax.set_xticks(x)
-        bar_ax.set_xticklabels(list(mmd.keys()))
-        bar_ax.set_ylabel("MMD")
-        bar_ax.set_title("Maximum Mean Discrepancy Between Healthy and PD", fontsize=15)
         # bar_ax.legend()
 
+    if var_key == "pd_ids":
+        x = np.arange(len(mmd.keys()))
         print("Mean MMD PD v Healthy")
-        print({k:np.mean(mmd[k]) for k in mmd.keys()})
+        print({k: np.mean(mmd[k]) for k in mmd.keys()})
         print("STD MMD PD v Healthy")
-        print({k:np.std(mmd[k]) for k in mmd.keys()})
-
-        for i, k in enumerate(mmd.keys()):
-            # print(mmd)
-            # import pdb; pdb.set_trace()
-            ax = f.add_subplot(gs[var_ind+2,i*2:i*2+2])
-            idx = np.unique(fluorescence, return_index=True)[1]
-            ax.scatter(fluorescence[np.sort(idx)][:-1], mmd[k])
-            ax.set_xlabel("Integrated Fluorescence")
-            ax.set_ylabel("MMD")
-            ax.set_title("{}\nPearson: {:3f}".format(k, stats.pearsonr(fluorescence[np.sort(idx)][:-1],mmd[k])[0]))
+        print({k: np.std(mmd[k]) for k in mmd.keys()})
 
             # ax2 = f.add_subplot(gs[var_ind+1,4:])
-        bar_ax = f.add_subplot(gs[var_ind+1,4:])
+        bar_ax = subf[var_ind].add_subplot(gs[6:])
+        subf[var_ind].suptitle("Ratio of Disease MMD to Animal Identity MMD", fontsize=15)
         x = np.arange(len(mmd_id_pd.keys()))
         ### Speed Decoding
         bar_ax.bar(
             x,
-            height=[np.mean(mmd_id_pd[k])  for k in mmd_id_pd.keys()],
+            height=[np.mean(mmd_id_pd[k]) for k in mmd_id_pd.keys()],
             width=w,  # bar width
             # tick_label=list(lc.keys()),
-            label="MMD",
+            color = "#DEA1D1",
         )
 
         for i, key in enumerate(mmd_id_pd.keys()):
             # print(mmd_id_pd)
             # distribute scatter randomly across whole width of bar
             bar_ax.scatter(
-                x[i] + np.random.uniform(-0.1,0.1,len(mmd_id_pd[key])), mmd_id_pd[key], marker="o", c="k", s=0.5, alpha=1/3
+                x[i] + np.random.uniform(-0.1, 0.1, len(mmd_id_pd[key])),
+                mmd_id_pd[key],
+                marker="o",
+                c="k",
+                s=1,
             )
 
         bar_ax.set_xticks(x)
         bar_ax.set_xticklabels(list(mmd_id_pd.keys()))
-        bar_ax.set_ylabel("MMD")
-        bar_ax.set_title("Maximum Mean Discrepancy Between Individual PD Sessions", fontsize=15)
+        bar_ax.set_ylabel("Maximum Mean Discrepancy")
+        bar_ax.set_title(
+            "Healthy Sessions",
+        )
 
-
-        bar_ax = f.add_subplot(gs[var_ind+1,:4])
+        bar_ax = subf[var_ind].add_subplot(gs[:6])
         x = np.arange(len(mmd_id_healthy.keys()))
         ### Speed Decoding
         bar_ax.bar(
@@ -396,22 +320,67 @@ for var_ind, var_key in enumerate(["pd_speed", "pd_ids"]):
             height=[np.mean(mmd_id_healthy[k]) for k in mmd_id_healthy.keys()],
             width=w,  # bar width
             # tick_label=list(lc.keys()),
-            label="MMD",
+            color = "#DEA1D1",
         )
 
         for i, key in enumerate(mmd_id_healthy.keys()):
             # print(mmd_id_healthy)
             # distribute scatter randomly across whole width of bar
             bar_ax.scatter(
-                x[i] + np.random.uniform(-0.1,0.1,len(mmd_id_healthy[key])), mmd_id_healthy[key], marker="o", c="k", s=0.5, alpha=1/3
+                x[i] + np.random.uniform(-0.1, 0.1, len(mmd_id_healthy[key])),
+                mmd_id_healthy[key],
+                marker="o",
+                c="k",
+                s=1,
             )
 
         bar_ax.set_xticks(x)
         bar_ax.set_xticklabels(list(mmd_id_healthy.keys()))
-        bar_ax.set_ylabel("MMD")
-        bar_ax.set_title("Maximum Mean Discrepancy Between Individual Healthy Sessions", fontsize=15)
+        bar_ax.set_ylabel("Maximum Mean Discrepancy")
+        bar_ax.set_title(
+            "PD Sessions"
+        )
+
+        gs = subf[var_ind+1].add_gridspec(1, 12)
+        subf[var_ind+1].suptitle("MMD Correlation to Integrated Fluorescence",fontsize=15)
+        for i, k in enumerate(mmd.keys()):
+            # print(mmd)
+            # import pdb; pdb.set_trace()
+            ax = subf[var_ind+1].add_subplot(gs[i * 3 : i * 3 + 3])
+            idx = np.unique(fluorescence, return_index=True)[1]
+            ax.scatter(fluorescence[np.sort(idx)][:-1], mmd[k])
+            ax.set_xlabel("Integrated Fluorescence")
+            ax.set_ylabel("Maximum Mean Discrepancy")
+            ax.set_title(
+                "{}\nPearson: {:3f}".format(
+                    k, stats.pearsonr(fluorescence[np.sort(idx)][:-1], mmd[k])[0]
+                )
+            )
+
         # bar_ax.legend()
 
 
-f.tight_layout()
-plt.savefig("./results/pd_new.png")
+subf[0].subplots_adjust(left=0.075,
+                            bottom=0.2, 
+                            right=0.96, 
+                            top=0.9,
+                            wspace=1.5, 
+                            hspace=6)
+
+subf[1].subplots_adjust(left=0.075,
+                            bottom=0.1, 
+                            right=0.96, 
+                            top=0.85,
+                            wspace=1.5, 
+                            hspace=3)
+
+subf[2].subplots_adjust(left=0.075,
+                            bottom=0.13, 
+                            right=0.96, 
+                            top=0.81,
+                            wspace=1.75, 
+                            hspace=3)
+
+
+# f.tight_layout()
+plt.savefig("./results/pd_new.png",dpi=400)

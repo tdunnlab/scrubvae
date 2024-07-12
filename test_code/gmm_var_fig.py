@@ -8,11 +8,12 @@ import matplotlib.transforms as mtrans
 # from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 from sklearn.decomposition import PCA
 import colorcet as cc
 from scipy.stats import circvar
 import tqdm
+from ssumo.eval.metrics import linear_rand_cv,mlp_rand_cv
 
 # from matplotlib import rc
 
@@ -80,16 +81,16 @@ titles = {
     "ids": "Animal ID",
 }
 
-f = plt.figure(figsize=(16, 8))
+f = plt.figure(figsize=(16, 7))
 gs = f.add_gridspec(3, 7)
-for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
+for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
     print(var_key)
     models = read.config(CODE_PATH + "configs/exp_finals.yaml")[var_key]
     models = {m[0]: [m[1], m[2]] for m in models}
 
     if var_ind == 0:
         config = read.config(
-            RESULTS_PATH + models["CVAE"][0] + "/model_config.yaml"
+            RESULTS_PATH + models["C-VAE"][0] + "/model_config.yaml"
         )
         loader = ssumo.get.mouse_data(
             data_config=config["data"],
@@ -103,8 +104,8 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
     downsample = 5
     if var_key == "heading":
         var_plt = np.arctan2(var[:, 1], var[:, 0])
-        np.save(config["data"]["data_path"] + "heading_rad.npy", var_plt)
-        import pdb; pdb.set_trace()
+        # np.save(config["data"]["data_path"] + "heading_rad.npy", var_plt)
+        # import pdb; pdb.set_trace()
         cmap = cc.cm["colorwheel"]
     elif var_key == "avg_speed_3d":
         var_plt = var.mean(axis=-1)
@@ -232,13 +233,18 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
         fontsize=14,
     )
     w = 0.25  # bar width
-    x = np.arange(len(models.keys())) + 0.33  # x-coordinates of your bars
     # colors = [(0, 0, 1, 1), (1, 0, 0, 1)]    # corresponding colors
 
     if var_key in ["heading", "avg_speed_3d"]:
+        if var_key == "heading":
+            lin_cv["VAE Processed"] = linear_rand_cv(z, var, 51, 5)
+            mlp_cv["VAE Processed"] = mlp_rand_cv(z, var, 51, 5)
+
+        x = np.arange(len(lin_cv.keys())) + 0.33  # x-coordinates of your bars
+
         bar_ax.bar(
             x,
-            height=[np.mean(lin_cv[k]) for k in models.keys()],
+            height=[np.mean(lin_cv[k]) for k in lin_cv.keys()],
             width=w,  # bar width
             color = palette_1[0],
             # tick_label=list(lin_cv.keys()),
@@ -252,7 +258,7 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
 
         bar_ax.bar(
             x + 0.33,
-            height=[np.mean(mlp_cv[k]) for k in models.keys()],
+            height=[np.mean(mlp_cv[k]) for k in mlp_cv.keys()],
             width=w,  # bar width
             color = palette_1[1],
             # tick_label=list(mlp_cv.keys()),
@@ -277,7 +283,7 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
         x = np.arange(len(models.keys())) + 0.33 
         bar_ax.bar(
             x-0.13,
-            height=[np.mean(lc_cv[k]) for k in models.keys()],
+            height=[np.mean(lc_cv[k]) for k in lc_cv.keys()],
             width=w,  # bar width
             color = palette_1[2],
             # tick_label=list(lc_cv.keys()),
@@ -293,7 +299,7 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
 
         bar_ax.bar(
             x + 0.2,
-            height=[np.mean(qda_cv[k]) for k in models.keys()],
+            height=[np.mean(qda_cv[k]) for k in qda_cv.keys()],
             width=w,  # bar width
             color = palette_1[3],
             tick_label=list(qda_cv.keys()),
@@ -334,9 +340,9 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
             path=path,
             covariance_type="diag",
         )
-        gmm_var["Vanilla Processed"] = []
+        gmm_var["VAE Processed"] = []
         for i in range(n_components):
-            gmm_var["Vanilla Processed"] += [
+            gmm_var["VAE Processed"] += [
                         [
                             circvar(var_plt[k_pred == i], high=np.pi, low=-np.pi),
                             (k_pred == i).sum() / len(k_pred) * n_components,
@@ -380,4 +386,4 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
         )
 
 f.tight_layout()
-plt.savefig("./results/metrics_final.png")
+plt.savefig("./results/metrics_final.png",dpi=400)

@@ -224,6 +224,7 @@ def train_epoch_mcmi(
             var_mode=var_mode,
             device=device,
         )
+        
         epoch_loss = {k: v + batch_loss[k].detach() for k, v in epoch_loss.items()}
 
     return epoch_loss

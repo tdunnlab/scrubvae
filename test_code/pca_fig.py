@@ -6,7 +6,7 @@ import pickle
 # from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 from sklearn.decomposition import PCA
 import colorcet as cc
 from scipy.stats import circvar
@@ -25,16 +25,16 @@ titles = {
     "ids": "Animal ID",
 }
 
-f = plt.figure(figsize=(15, 7))
+f = plt.figure(figsize=(15, 6))
 subf = f.subfigures(3, 1)
-for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
+for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
     models = read.config(CODE_PATH + "configs/exp_finals.yaml")[var_key]
     models = {m[0]: [m[1], m[2]] for m in models}
     print(models)
 
     if var_ind == 0:
         config = read.config(
-            RESULTS_PATH + models["Conditional VAE"][0] + "/model_config.yaml"
+            RESULTS_PATH + models["C-VAE"][0] + "/model_config.yaml"
         )
         loader = ssumo.get.mouse_data(
             data_config=config["data"],
@@ -67,7 +67,7 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
         z = np.load(path + "latents/Train_{}.npy".format(models[model][1]))
 
         pca = PCA(
-            n_components=2 if model not in ["Vanilla VAE", "Conditional VAE"] else 4
+            n_components=2 if model not in ["VAE", "C-VAE"] else 4
         )
         pcs = pca.fit_transform(z[::downsample, :].astype(np.float64))
 
@@ -88,11 +88,11 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
         ax[i].spines['right'].set_visible(False)
         ax[i].spines['bottom'].set_visible(False)
         ax[i].spines['left'].set_visible(False)
-        if model not in ["Vanilla VAE", "Conditional VAE"]:
+        if model not in ["VAE", "C-VAE"]:
             ax[i].set_title(model)
         i += 1
 
-        if model in ["Vanilla VAE", "Conditional VAE"]:
+        if model in ["VAE", "C-VAE"]:
             # ax = f.add_subplot(gs[var_ind, i])
             if var_key == "ids":
                 im = ax[i].scatter(
@@ -152,7 +152,7 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
         subf[var_ind].subplots_adjust(left=0.03,
                             bottom=0.25, 
                             right=0.97, 
-                            top=0.7,
+                            top=0.75,
                             wspace=0.75, 
                             hspace=4)
     else:
@@ -163,4 +163,4 @@ for var_ind, var_key in enumerate(["avg_speed_3d", "heading", "ids"]):
                             wspace=0.75, 
                             hspace=4)
 # f.tight_layout()
-plt.savefig("./results/pca_final.png")
+plt.savefig("./results/pca_final.png",dpi=400)

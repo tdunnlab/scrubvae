@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import ssumo
-from dappy import read
+from neuroposelib import read
 import torch
 from ssumo.data.dataset import get_angle2D, get_frame_yaw, fwd_kin_cont6d_torch, get_speed_parts
 import tqdm

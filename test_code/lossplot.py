@@ -3,7 +3,6 @@ import torch
 import matplotlib.pyplot as plt
 from ssumo.params import read
 import ssumo
-import pdb
 from tqdm import tqdm
 from pathlib import Path
 import numpy as np

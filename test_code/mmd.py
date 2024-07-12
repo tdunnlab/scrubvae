@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.spatial.distance import cdist, pdist
 import ssumo
-from dappy import read
+from neuroposelib import read
 import sys
 import matplotlib.pyplot as plt
 

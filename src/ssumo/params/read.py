@@ -1,5 +1,5 @@
 import yaml
-from dappy import read
+from neuroposelib import read
 from pathlib import Path
 from ssumo.params import PARAM_KEYS
 from pathlib import Path

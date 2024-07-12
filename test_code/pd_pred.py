@@ -1,8 +1,8 @@
 import ssumo
 from torch.utils.data import DataLoader
-from dappy import read
+from neuroposelib import read
 import torch
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 import numpy as np
 from pathlib import Path
 import sys

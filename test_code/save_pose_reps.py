@@ -1,4 +1,4 @@
-from dappy import read, preprocess
+from neuroposelib import read, preprocess
 import numpy as np
 import ssumo.data.quaternion as qtn
 import torch

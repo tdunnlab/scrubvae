@@ -5,7 +5,7 @@ import pickle
 # from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 from sklearn.decomposition import PCA
 import colorcet as cc
 from scipy.stats import circvar

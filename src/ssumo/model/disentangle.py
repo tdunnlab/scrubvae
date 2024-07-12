@@ -233,190 +233,10 @@ class QuadraticDiscriminantFilter(nn.Module):
 
         return ll_loss / len(self.classes)
 
-
-# class QuadraticDiscriminantFilter(nn.Module):
-#     """
-#     Trains a two quadratic binary classifiers with streaming minibatches of data.
-
-#     The forgetting rates of the two classifiers are automatically tuned.
-#     """
-
-#     def __init__(self, nx, classes, lamdiff=1e-2, delta=1e-3):
-#         super().__init__()
-
-#         # Running averages of means
-#         self.classes = classes
-#         num_classes = len(classes)
-
-#         param_names = [
-#             "m0a",
-#             "m1a",
-#             "m0b",
-#             "m1b",
-#             "S0a",
-#             "S1a",
-#             "S0b",
-#             "S1b",
-#         ]
-#         for label in self.classes:
-#             for name in param_names:
-#                 if "m" in name:
-#                     self.register_buffer(
-#                         "{}_{}".format(name, label),
-#                         torch.zeros(nx, requires_grad=False)[None, :],
-#                     )
-#                 elif "S" in name:
-#                     self.register_buffer(
-#                         "{}_{}".format(name, label), torch.eye(nx, requires_grad=False)
-#                     )
-
-#             self.register_buffer(
-#                 "lama_{}".format(label), torch.tensor([0.2], requires_grad=False)
-#             )
-#             self.register_buffer(
-#                 "lamb_{}".format(label),
-#                 getattr(self, "lama_{}".format(label)) + lamdiff,
-#             )
-
-#         # Update parameters for the forgetting factors
-#         self.delta = delta
-#         self.lamdiff = lamdiff
-
-#     def forward(self, mu):
-#         return 0
-
-#     def cgll(self, x, m, S):
-#         """
-#         Compute Gaussian Log Likelihood
-#         """
-#         resids = torch.sum((x - m) * torch.linalg.solve(S, (x - m).T).T, axis=1)
-#         return -0.5 * (torch.logdet(S) + resids)
-
-#     def update(self, x, y):
-#         for label in self.classes:
-#             i0 = y != label
-#             i1 = y == label
-#             empirical = {}
-#             # Empirical mean for -1/+1 class labels
-#             empirical["m0"] = torch.mean(x[i0], axis=0, keepdim=True).detach()
-#             empirical["m1"] = torch.mean(x[i1], axis=0, keepdim=True).detach()
-
-#             # Empirical covariance for -1/+1 class labels
-#             empirical["S0"] = torch.cov(x[i0].T, correction=0).detach()
-#             empirical["S1"] = torch.cov(x[i1].T, correction=0).detach()
-
-#             # Update classifier A/B, with forgetting factor `lama/b'
-#             for cl in ["a", "b"]:
-#                 for par in empirical.keys():
-#                     # (1 - lama/b) * (current moving avg)
-#                     forgetting = (
-#                         1 - getattr(self, "lam{}_{}".format(cl, label))
-#                     ) * getattr(self, "{}{}_{}".format(par, cl, label))
-
-#                     updating = (
-#                         getattr(self, "lam{}_{}".format(cl, label)) * empirical[par]
-#                     )
-
-#                     setattr(
-#                         self, "{}{}_{}".format(par, cl, label), forgetting + updating
-#                     )
-
-#         return self
-
-#     def evaluate_loss(self, x, y, update=True):
-#         """
-#         Parameters
-#         ----------
-#         x : torch.tensor
-#             (batch_size x nx) matrix of independent variables.
-
-#         y : torch.tensor
-#             (batch_size) vector of +1/-1 class labels,
-
-#         Returns
-#         -------
-#         log_likelihood : torch.tensor
-#             Average log likelihood of the two quadratic decoders.
-#         """
-
-#         ll_loss = 0
-#         for label in self.classes:
-#             # Indices for -1/+1 class labels
-#             i0 = y != label
-#             i1 = y == label
-
-#             # Compute log likelihood score for classifier A
-#             lla0 = self.cgll(
-#                 x,
-#                 getattr(self, "m0a_{}".format(label)),
-#                 getattr(self, "S0a_{}".format(label)),
-#             )
-#             lla1 = self.cgll(
-#                 x,
-#                 getattr(self, "m1a_{}".format(label)),
-#                 getattr(self, "S1a_{}".format(label)),
-#             )
-#             lla = torch.sum(i0 * lla0 + i1 * lla1)
-
-#             # Compute log likelihood score for classifier B
-#             llb0 = self.cgll(
-#                 x,
-#                 getattr(self, "m0b_{}".format(label)),
-#                 getattr(self, "S0b_{}".format(label)),
-#             )
-#             llb1 = self.cgll(
-#                 x,
-#                 getattr(self, "m1b_{}".format(label)),
-#                 getattr(self, "S1b_{}".format(label)),
-#             )
-#             llb = torch.sum(i0 * llb0 + i1 * llb1)
-
-#             # If classifier A is better than B, we decrease the forgetting factors
-#             # by self.delta
-#             if update and (lla > llb):
-#                 setattr(
-#                     self,
-#                     "lama_{}".format(label),
-#                     torch.clamp(
-#                         getattr(self, "lama_{}".format(label)) - self.delta, 0.0, 1.0
-#                     ),
-#                 )
-#                 setattr(
-#                     self,
-#                     "lamb_{}".format(label),
-#                     getattr(self, "lama_{}".format(label)) + self.lamdiff,
-#                 )
-
-#             # If classifier B is better than A, we decrease the forgetting factors
-#             # by self.delta
-#             elif update:
-#                 setattr(
-#                     self,
-#                     "lamb_{}".format(label),
-#                     torch.clamp(
-#                         getattr(self, "lamb_{}".format(label)) + self.delta, 0.0, 1.0
-#                     ),
-#                 )
-#                 setattr(
-#                     self,
-#                     "lama_{}".format(label),
-#                     getattr(self, "lamb_{}".format(label)) - self.lamdiff,
-#                 )
-
-#             # Return average log-likelihood ratios of the two linear decoders
-#             batch_y = (i1 * 2 - 1).float()
-#             llra = batch_y @ (lla1 - lla0)
-#             llrb = batch_y @ (llb1 - llb0)
-
-#             ll_loss += (llra + llrb) * 0.5
-
-#         return ll_loss / len(self.classes)
-
-
 class MovingAvgLeastSquares(nn.Module):
 
     def __init__(
-        self, nx, ny, lamdiff=1e-1, delta=1e-4, bias=False, polynomial_order=1
+        self, nx, ny, lamdiff=1e-1, delta=1e-4, bias=False, polynomial_order=1, l2_reg = 0,
     ):
         super().__init__()
         self.bias = bias
@@ -428,6 +248,11 @@ class MovingAvgLeastSquares(nn.Module):
             )
 
         nx = int(nx_poly) + self.bias
+        if l2_reg == None:
+            self.l2_reg = 0
+        else:
+            self.l2_reg = l2_reg
+
         print("Moving Avg Least Squares Bias: {}".format(self.bias))
         # Running average of covariances for first linear decoder
         self.register_buffer("Sxx0", torch.eye(nx, requires_grad=False))
@@ -473,22 +298,21 @@ class MovingAvgLeastSquares(nn.Module):
             C_idx = torch.combinations(idx, i + 1, with_replacement=True)
             x_list += [x[:, C_idx].prod(dim=-1)/len(C_idx)*n_features]
 
-            # batch_size, n_features = x.shape
-            # x_einsum = torch.einsum("ij,ik->ijk", x_list[i], x)
-            # import pdb; pdb.set_trace()
-            # idx = torch.triu_indices(*x_einsum.shape[-2:])
-            # x_list += [x_einsum[:, idx[0], idx[1]]]
         return torch.column_stack(x_list)
 
     def forward(self, x):
         x = self.polynomial_expansion(x)
 
         if self.bias:
-            x = torch.column_stack((x, torch.ones(x.shape[0], 1, device="cuda")))
+            x = torch.column_stack((x, torch.ones(x.shape[0], 1, device=x.device)))
+            l2_reg = torch.ones(x.shape[1], device=x.device) * self.l2_reg
+            l2_reg[-1] = 0
+        else:
+            l2_reg = torch.ones(x.shape[1], device=x.device) * self.l2_reg
 
         # Solve optimal decoder weights (normal equations)
-        W0 = torch.linalg.solve(self.Sxx0, self.Sxy0)
-        W1 = torch.linalg.solve(self.Sxx1, self.Sxy1)
+        W0 = torch.linalg.solve(self.Sxx0.diagonal_scatter(self.Sxx0.diagonal() + l2_reg), self.Sxy0)
+        W1 = torch.linalg.solve(self.Sxx1.diagonal_scatter(self.Sxx1.diagonal() + l2_reg), self.Sxy1)
 
         # Predicted values for y
         yhat0 = x @ W0
@@ -502,6 +326,7 @@ class MovingAvgLeastSquares(nn.Module):
             x = torch.column_stack((x, torch.ones(x.shape[0], 1, device="cuda")))
         xx = (x.T @ x).detach()
         xy = (x.T @ y).detach()
+
         # Compute moving averages for the next batch of data
         self.Sxx0 = self.lam0 * self.Sxx0 + xx
         self.Sxy0 = self.lam0 * self.Sxy0 + xy

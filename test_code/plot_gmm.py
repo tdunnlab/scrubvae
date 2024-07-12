@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from dappy import read
+from neuroposelib import read
 import utils
 import pickle
 from sklearn.decomposition import PCA

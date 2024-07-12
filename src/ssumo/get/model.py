@@ -80,6 +80,7 @@ def model(
                 feat_dim_dict[feat],
                 bias=loss_config[feat + "_mals"] < 0,
                 polynomial_order=disentangle_config["polynomial"],
+                l2_reg=disentangle_config["l2_reg"],
             )
 
     # Quadratic Discriminant Filter for class scrubbing
@@ -120,6 +121,7 @@ def model(
             conditional_keys=conditional_keys,
             arena_size=arena_size,
             kinematic_tree=kinematic_tree,
+            prior=model_config["prior"],
             ch=model_config["channel"],
             discrete_classes=discrete_classes
         )

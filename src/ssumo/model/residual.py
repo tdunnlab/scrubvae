@@ -188,9 +188,11 @@ class ResidualEncoder(nn.Module):
         window=200,
         activation="prelu",
         is_diag=False,
+        prior="gaussian",
         init_dilation=None,
     ):
         super(ResidualEncoder, self).__init__()
+        self.prior = prior
         self.conv_in = nn.Conv1d(in_channels, ch[0], 7, 1, 3)
         self.activation = nn.Tanh() if activation == "tanh" else nn.PReLU()
 
@@ -209,19 +211,30 @@ class ResidualEncoder(nn.Module):
         self.flatten = nn.Flatten()
 
         flatten_dim = find_latent_dim(window, kernel, len(ch) - 1, dilation) * ch[-1]
-        self.fc_mu = nn.Linear(flatten_dim, z_dim)
-        sig_dim = z_dim if is_diag else z_dim * (z_dim + 1) // 2
-        self.fc_sigma = nn.Sequential(
-            nn.Linear(flatten_dim, sig_dim), CholeskyL(z_dim, is_diag)
-        )
+
+        if prior == "gaussian":
+            sig_dim = z_dim if is_diag else z_dim * (z_dim + 1) // 2
+            self.fc_mu = nn.Linear(flatten_dim, z_dim)
+            self.fc_sigma = nn.Sequential(
+                nn.Linear(flatten_dim, sig_dim), CholeskyL(z_dim, is_diag)
+            )
+        elif prior == "beta":
+            self.fc_alpha = nn.Linear(flatten_dim, z_dim)
+            self.fc_beta = nn.Linear(flatten_dim, z_dim)
 
     def forward(self, x):
         x = self.activation(self.conv_in(x))
         x = self.res_layers(x)
         x = self.flatten(x)
-        mu = self.fc_mu(x)
-        sigma = self.fc_sigma(x)
-        return mu, sigma
+        if self.prior == "gaussian":
+            mu = self.fc_mu(x)
+            sigma = self.fc_sigma(x)
+            return mu, sigma
+        elif self.prior == "beta":
+            alpha = F.softplus(self.fc_alpha(x)) + 1
+            beta = F.softplus(self.fc_beta(x)) + 1
+            return alpha, beta
+        return 0
 
 
 class ResidualDecoder(nn.Module):
@@ -280,8 +293,13 @@ class ResidualDecoder(nn.Module):
 
 
 class VAE(nn.Module):
-    def __init__(self):
+    def __init__(self, prior="gaussian"):
         super(VAE, self).__init__()
+        self.prior = prior
+        if prior == "gaussian":
+            self.dist_params = ["mu","L"]
+        elif prior == "beta":
+            self.dist_params = ["alpha","beta"]
         return self
 
     def sampling(self, mu, L):
@@ -299,7 +317,12 @@ class VAE(nn.Module):
 
     def forward(self, data):
         data_o = self.encode(data)
-        z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+        if self.prior == "gaussian":
+            z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+        elif self.prior == "beta":
+            beta_dist = torch.distributions.Beta(data_o["alpha"], data_o["beta"])
+            data_o["beta_dist"] = beta_dist
+            z = beta_dist.rsample()*2-1
         data_o["z"] = z
 
         # Running disentangle
@@ -349,8 +372,9 @@ class ResVAE(VAE):
         disentangle_keys=None,
         conditional_keys=None,
         discrete_classes=None,
+        prior="gaussian",
     ):
-        super().__init__()
+        super().__init__(prior=prior)
         self.in_channels = in_channels
         self.ch = ch
         self.window = window
@@ -369,6 +393,7 @@ class ResVAE(VAE):
             window=window,
             activation=activation,
             is_diag=is_diag,
+            prior=prior,
             init_dilation=init_dilation,
         )
         self.decoder = ResidualDecoder(
@@ -409,9 +434,12 @@ class ResVAE(VAE):
             x_in = data["x6d"]
 
         data_o = {}
-        data_o["mu"], data_o["L"] = self.encoder(
+        data_o[self.dist_params[0]], data_o[self.dist_params[1]] = self.encoder(
             x_in.moveaxis(1, -1).view(-1, self.in_channels, self.window)
         )
+
+        if self.prior == "beta":
+            data_o["mu"] = (data_o["alpha"]-1)/(data_o["alpha"] + data_o["beta"] - 2)*2-1
         return data_o
 
     def decode(self, z, data):

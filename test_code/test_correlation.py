@@ -4,7 +4,7 @@ import ssumo
 # from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 import torch
 
 RESULTS_PATH = "/mnt/ceph/users/jwu10/results/vae/"

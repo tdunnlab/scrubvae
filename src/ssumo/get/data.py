@@ -1,4 +1,4 @@
-from dappy import read, preprocess
+from neuroposelib import read, preprocess
 import numpy as np
 import ssumo.data.quaternion as qtn
 from typing import List
@@ -10,10 +10,11 @@ from pathlib import Path
 TRAIN_IDS = {
     # "immunostain": np.arange(74),
     # "immunostain": np.array([1,6,35,36,38,43,72,73]),
-    "immunostain": np.array([18,19,21,36,55,56,58,73]),
+    "immunostain": np.array([18, 19, 21, 36, 55, 56, 58, 73]),
     "ensemble_healthy": np.arange(3),
     "neurips_mouse": np.arange(9),
 }
+
 
 def get_babel(
     data_config: dict,
@@ -38,7 +39,7 @@ def get_babel(
     # May also need to reorder keypoints
     skeleton_config = read.config(data_config["skeleton_path"])
 
-    # TODO: Load in pose (Frames x keypoints x 3) and ids (1 per video) similar to dappy
+    # TODO: Load in pose (Frames x keypoints x 3) and ids (1 per video) similar to neuroposelib
     pose, ids = None, None  # Load or index train or test
 
     # Save raw pose in dataset if specified
@@ -250,6 +251,7 @@ def mouse_data(
                         key
                     )
                 )
+                
                 key_min = data[key].min(dim=0)[0] * 0.9
                 data[key] -= key_min
                 key_max = data[key].max(dim=0)[0] * 1.1
@@ -267,11 +269,13 @@ def mouse_data(
     if "ids" in data.keys():
         if "immunostain" in data_config["data_path"]:
             if not ((data_config["stride"] == 5) or (data_config["stride"] == 10)):
-                data["ids"][data["ids"]>=37]-= 37
+                data["ids"][data["ids"] >= 37] -= 37
                 unique_ids = torch.unique(data["ids"])
                 discrete_classes["ids"] = torch.arange(len(unique_ids)).long()
                 for id in unique_ids:
-                    data["ids"][data["ids"]==id] = discrete_classes["ids"][id==unique_ids]
+                    data["ids"][data["ids"] == id] = discrete_classes["ids"][
+                        id == unique_ids
+                    ]
             else:
                 discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
         else:
@@ -323,25 +327,6 @@ def calculate_mouse_kinematics(
         pose = preprocess.median_filter(pose, ids, 5)
 
     data = {"raw_pose": pose} if "raw_pose" in data_keys else {}
-    speed_key = [key for key in data_keys if "speed" in key]
-    assert len(speed_key) < 2
-    if len(speed_key) > 0:
-        if ("part_speed" in speed_key) or ("avg_speed_3d" in speed_key):
-            speed = get_speed_parts(
-                pose=pose,
-                parts=[
-                    [0, 1, 2, 3, 4, 5],  # spine and head
-                    [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
-                    [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
-                ],
-            )
-            if "avg_speed_3d" in speed_key:
-                speed = np.concatenate(
-                    [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
-                )
-        else:
-            speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
-            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
 
     if data_config["remove_speed_outliers"] is not None:
         outlier_frames = get_speed_outliers(
@@ -349,14 +334,12 @@ def calculate_mouse_kinematics(
         )
         window_inds = np.delete(window_inds, outlier_frames, 0)
 
-    if len(speed_key) > 0:
-        data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1)
-
     yaw = get_frame_yaw(pose, 0, 1)[..., None]
 
     if "heading_change" in data_keys:
-        data["heading_change"] = np.diff(yaw[window_inds], n=1, axis=-1).sum(
-            axis=-1, keepdims=True
+        heading2D = get_angle2D(yaw)
+        data["heading_change"] = np.sqrt(
+            (np.diff(heading2D[window_inds], n=1, axis=1) ** 2).sum(axis=1)
         )
 
     if "heading" in data_keys:
@@ -388,11 +371,15 @@ def calculate_mouse_kinematics(
 
         if "fwd" in data_config["direction_process"]:
             if "mid" in data_config["direction_process"]:
+                print(
+                    "Preprocessing poses such that the central pose\npasses through the origin in the x+ direction"
+                )
                 ## Center frame of a window is translated to center and rotated to x+
                 fwd_qtn = np.zeros((len(window_inds), 4))
                 fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
                 local_qtn = local_qtn[window_inds]
                 fwd_qtn = np.repeat(fwd_qtn[:, None, :], window, axis=1)
+
             else:
                 fwd_qtn = np.zeros((len(local_qtn), 4))
                 fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
@@ -402,17 +389,21 @@ def calculate_mouse_kinematics(
             if "root" in data_keys:
                 root = qtn.qrot_np(fwd_qtn, root)
 
-            assert len(root) == len(window_inds)
-            assert len(local_qtn) == len(window_inds)
+            if "mid" in data_config["direction_process"]:
+                assert len(root) == len(window_inds)
+                assert len(local_qtn) == len(window_inds)
+            else:
+                assert len(local_qtn) == len(pose)
 
         data["x6d"] = qtn.quaternion_to_cont6d_np(local_qtn)
 
+    offsets = get_segment_len(
+        pose,
+        skeleton_config["KINEMATIC_TREE"],
+        np.array(skeleton_config["OFFSET"]),
+    )
     if "offsets" in data_keys:
-        data["offsets"] = get_segment_len(
-            pose,
-            skeleton_config["KINEMATIC_TREE"],
-            np.array(skeleton_config["OFFSET"]),
-        )
+        data["offsets"] = offsets
 
     if "root" in data_keys:
         data["root"] = root
@@ -421,6 +412,7 @@ def calculate_mouse_kinematics(
         print("Root Mins: {}".format(root.min(axis=frame_dim_inds)))
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
+
     if "ids" in data_keys:
         data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
 
@@ -433,16 +425,19 @@ def calculate_mouse_kinematics(
         fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
         data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
 
-    if "target_pose" in data_keys:
+    speed_key = [key for key in data_keys if "speed" in key]
+    assert len(speed_key) < 2
+    if ("target_pose" in data_keys) or (len(speed_key) > 0):
         reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
         if data_config["direction_process"] == "midfwd":
-            offsets = data["offsets"][window_inds].reshape(
-                reshaped_x6d.shape[:2] + (-1,)
+            offsets = torch.tensor(
+                offsets[window_inds].reshape(reshaped_x6d.shape[:2] + (-1,)),
+                dtype=torch.float32,
             )
         else:
-            offsets = data["offsets"]
+            offsets = torch.tensor(offsets, dtype=torch.float32)
 
-        data["target_pose"] = fwd_kin_cont6d_torch(
+        target_pose = fwd_kin_cont6d_torch(
             reshaped_x6d,
             skeleton_config["KINEMATIC_TREE"],
             offsets,
@@ -450,5 +445,65 @@ def calculate_mouse_kinematics(
             do_root_R=True,
             eps=1e-8,
         ).reshape(data["x6d"].shape[:-1] + (3,))
+
+        if data_config["direction_process"] == "midfwd":
+            target_pose[:, 25, 1, 1] = 0
+        else:
+            target_pose[:, 1, 1] = 0
+
+    if "target_pose" in data_keys:
+        data["target_pose"] = target_pose
+
+    if len(speed_key) > 0:
+        if data_config["direction_process"] == "midfwd":
+            wind_pose = target_pose
+        else:
+            wind_pose = target_pose[window_inds]
+
+        if data_config["direction_process"] in ["midfwd", "x360"]:
+            wind_root = data["root"]
+        else:
+            wind_root = data["root"][window_inds]
+
+        if ("part_speed" in speed_key) or ("avg_speed_3d" in speed_key):
+            root_spd = torch.sqrt(
+                (torch.diff(wind_root, n=1, axis=1) ** 2).sum(axis=-1)
+            ).mean(axis=1)
+            parts = [
+                [0, 1, 2, 3, 4, 5],  # spine and head
+                [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
+                [5, 12, 13, 14, 15, 16, 17],  # legs from back spine
+            ]
+            dxyz = torch.zeros((len(root_spd), 3))
+            for i, part in enumerate(parts):
+                pose_part = (
+                    wind_pose
+                    - wind_pose[:, window // 2, None, part[0] : part[0] + 1, :]
+                )
+                relative_dxyz = (
+                    torch.diff(
+                        pose_part[:, :, part[1:], :],
+                        n=1,
+                        axis=1,
+                    )
+                    ** 2
+                ).sum(axis=-1)
+                dxyz[:, i] = torch.sqrt(relative_dxyz).mean(axis=(1, 2))
+            if "avg_speed_3d" in speed_key:
+                speed = torch.cat(
+                    [
+                        root_spd[:, None],  # root
+                        dxyz[:, 0:1],  # spine and head
+                        dxyz[:, 1:].mean(axis=-1, keepdims=True),  # limbs
+                    ],
+                    axis=-1,
+                )
+        else:
+            speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
+            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1)
+            speed = torch.tensor(speed[window_inds].mean(axis=-1, keepdims=True), dtype=torch.float32)
+
+    if len(speed_key) > 0:
+        data[speed_key[0]] = speed
 
     return data, window_inds

@@ -1,6 +1,6 @@
 from base_path import RESULTS_PATH, CODE_PATH
 import matplotlib.pyplot as plt
-from dappy import read
+from neuroposelib import read
 from pathlib import Path
 import numpy as np
 import pickle

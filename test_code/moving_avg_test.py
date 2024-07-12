@@ -2,7 +2,7 @@ import torch
 from torch.nn.functional import mse_loss
 import numpy as np
 import ssumo
-from dappy import read
+from neuroposelib import read
 from base_path import RESULTS_PATH
 from torch.utils.data import DataLoader
 from sklearn.metrics import r2_score

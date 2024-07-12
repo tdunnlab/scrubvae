@@ -2,7 +2,7 @@ import utils
 import numpy as np
 import torch
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 import tqdm
 from sklearn.decomposition import PCA
 import scipy.linalg as spl

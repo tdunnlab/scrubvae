@@ -3,7 +3,7 @@ from ssumo.data.dataset import fwd_kin_cont6d_torch
 import numpy as np
 import torch
 from ssumo.plot import trace, PLANE
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 
 
 def project_to_null(z, weight):

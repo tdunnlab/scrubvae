@@ -2,12 +2,12 @@ from ssumo.data.dataset import fwd_kin_cont6d_torch
 from torch.utils.data import DataLoader
 import ssumo
 import torch
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 import numpy as np
 from pathlib import Path
 import tqdm
 import matplotlib.pyplot as plt
-from dappy import read
+from neuroposelib import read
 
 PARTS = ["Root", "Head + Spine", "L-Arm", "R-Arm", "L-Leg", "R-Leg"]
 

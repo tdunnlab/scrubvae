@@ -1,6 +1,6 @@
-from dappy.embed import Embed
+from neuroposelib.embed import Embed
 import ssumo
-from dappy import read
+from neuroposelib import read
 from torch.utils.data import DataLoader
 import numpy as np
 import scipy.linalg as spl

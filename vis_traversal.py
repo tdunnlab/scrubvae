@@ -1,10 +1,10 @@
 import numpy as np
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 import ssumo
 from base_path import RESULTS_PATH
 import sys
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 import torch
 from sklearn.linear_model import LinearRegression
 
