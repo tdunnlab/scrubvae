@@ -224,30 +224,6 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
 
     if "root" in loss_scale.keys():
 
-        # test_pose = fwd_kin_cont6d_torch(
-        #     data["x6d"].reshape(-1, 18, 6),
-        #     model.kinematic_tree,
-        #     data["offsets"].reshape(-1, 18, 3),
-        #     root_pos=data["root"].reshape(-1, 3),
-        #     do_root_R=True,
-        #     eps=1e-8,
-        # ).reshape(data["x6d"].shape[:-1] + (3,))
-        # from neuroposelib import visualization as vis
-        # from neuroposelib import read
-        # connectivity = read.connectivity_config("/mnt/home/jwu10/working/ssumo/configs/mouse_skeleton.yaml")
-
-        # vis.pose.arena3D(
-        #     test_pose[:10,...].cpu().detach().numpy().reshape(-1, 18, 3),
-        #     connectivity,
-        #     frames=[0],
-        #     centered=False,
-        #     fps=45,
-        #     N_FRAMES=51*10,
-        #     VID_NAME="train_target.mp4",
-        #     SAVE_ROOT="./",
-        # )
-        # import pdb; pdb.set_trace()
-
         batch_loss["root"] = (
             torch.nn.MSELoss(reduction="sum")(data_o["root"], data["root"]) / batch_size
         )

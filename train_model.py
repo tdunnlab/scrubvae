@@ -3,8 +3,10 @@ from ssumo.params import read
 import sys
 from base_path import RESULTS_PATH
 from pathlib import Path
-import pickle
+import wandb
 ### Set/Load Parameters
+
+wandb.login()
 analysis_key = sys.argv[1]
 
 if len(sys.argv) > 2:
@@ -14,6 +16,8 @@ if len(sys.argv) > 2:
     analysis_key = "{}/{}/".format(analysis_key, folders[int(job_id)])
 
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
+
+run = wandb.init(project = analysis_key, config=config)
 
 loader, model = ssumo.get.data_and_model(
     config,

@@ -40,6 +40,8 @@ dataset_label = "Train"
 if method in regression_methods:
     if ("log_class" in method) or ("qda" in method):
         disentangle_keys = ["ids"]
+    elif "1d" in experiment_folder:
+        disentangle_keys = ["avg_speed", "heading"]
     else:
         disentangle_keys = ["avg_speed_3d", "heading"]
 
