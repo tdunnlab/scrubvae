@@ -4,7 +4,7 @@ from ssumo.train.losses import get_batch_loss, balance_disentangle
 from ssumo.train.mutual_inf import MutInfoEstimator
 from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter
 from ssumo.plot.eval import loss as plt_loss
-from ssumo.get.data import get_projected_2D_kinematics
+from ssumo.get.data import get_projected_2D_kinematics, get_random_axis
 import torch.optim as optim
 import tqdm
 import pickle
@@ -191,10 +191,7 @@ def train_epoch_2D_view(
             for param in model.parameters():
                 param.grad = None
 
-        axis = torch.rand(1) * pi / 2
-        axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
-            device
-        )
+        axis = get_random_axis(1).to(device)
         data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
         data = {k: v.to(device) for k, v in data.items()}
         data = get_projected_2D_kinematics(
@@ -203,10 +200,7 @@ def train_epoch_2D_view(
             skeleton_config,
         )
         if config["data"].get("decode_alternate"):
-            axis = torch.rand(1) * pi / 2
-            axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
-                device
-            )
+            axis = get_random_axis(1).to(device)
             data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
             data["target_pose"] = get_projected_2D_kinematics(
                 {k: data[k] for k in ["raw_pose", "target_pose"]},
@@ -266,11 +260,7 @@ def train_epoch_mcmi_2D_view(
             for param in model.parameters():
                 param.grad = None
 
-        # Same as above, use torch.rand_like() instead of math module
-        axis = torch.rand(1) * pi / 2
-        axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
-            device
-        )
+        axis = get_random_axis(1).to(device)
         data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
         data = {k: v.to(device) for k, v in data.items()}
         data = get_projected_2D_kinematics(
@@ -279,10 +269,7 @@ def train_epoch_mcmi_2D_view(
             skeleton_config,
         )
         if config["data"].get("decode_alternate"):
-            axis = torch.rand(1) * pi / 2
-            axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
-                device
-            )
+            axis = get_random_axis(1).to(device)
             data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
             data["target_pose"] = get_projected_2D_kinematics(
                 {k: data[k] for k in ["raw_pose", "target_pose"]},

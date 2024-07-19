@@ -1,5 +1,5 @@
 from ssumo.data.dataset import fwd_kin_cont6d_torch
-from ssumo.get.data import get_projected_2D_kinematics
+from ssumo.get.data import get_projected_2D_kinematics, get_random_axis
 from torch.utils.data import DataLoader
 from dappy import read
 import torch
@@ -18,10 +18,7 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
         # Let's see how reconstruction looks on train data
         data = next(iter(loader))
         skeleton_config = read.config(config["data"]["skeleton_path"])
-        axis = torch.rand(1) * pi / 2
-        axis = torch.cat([torch.zeros(1), -torch.cos(axis), -torch.sin(axis)]).to(
-            "cuda"
-        )
+        axis = get_random_axis(1).to("cuda")
         data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
         data = {k: v.to("cuda") for k, v in data.items()}
         data = get_projected_2D_kinematics(

@@ -323,6 +323,22 @@ def mouse_data(
     return loader
 
 
+def get_random_axis(length: int = 1):
+    # axis = torch.rand(length) * pi / 2 # right side to under 90d
+    axis = torch.rand(length) * pi / 18  # right side to under 10d
+    axis = torch.cat(
+        [
+            torch.zeros(length)[:, None],
+            -torch.cos(axis)[:, None],
+            -torch.sin(axis)[:, None],
+        ],
+        dim=1,
+    )
+    if length == 1:
+        axis = axis[0]
+    return axis
+
+
 def calculate_2D_mouse_kinematics(
     config: dict,
     skeleton_config: dict,
@@ -384,15 +400,7 @@ def calculate_2D_mouse_kinematics(
             window_inds % len(data["raw_pose"])
         ].to("cuda")
         torch.manual_seed(1)
-        axis = torch.rand(len(window_inds)) * pi / 2
-        axis = torch.cat(
-            [
-                torch.zeros(len(window_inds))[:, None],
-                -torch.cos(axis)[:, None],
-                -torch.sin(axis)[:, None],
-            ],
-            dim=1,
-        ).to("cuda")
+        axis = get_random_axis(len(window_inds)).to("cuda")
         data = get_projected_2D_kinematics(
             {k: v for k, v in data.items()},
             axis,

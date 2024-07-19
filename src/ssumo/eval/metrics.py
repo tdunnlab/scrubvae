@@ -27,6 +27,7 @@ def epoch_regression(
     label = method + "_reg"
     config = read.config(path + "/model_config.yaml")
     config["model"]["load_model"] = config["out_path"]
+    config["data"]["project_axis"] = 1
 
     pickle_path = "{}/{}_{}.p".format(config["out_path"], label, dataset_label)
     if Path(pickle_path).is_file() and save_load:

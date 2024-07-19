@@ -3,7 +3,6 @@ from ssumo.params import read
 import sys
 from base_path import RESULTS_PATH
 from pathlib import Path
-import pickle
 
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
