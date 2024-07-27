@@ -413,6 +413,8 @@ class ResVAE(VAE):
         else:
             self.disentangle = nn.ModuleDict(nn.ModuleDict())
 
+        self.mi_estimator = None
+
     def normalize_root(self, root):
         norm_root = root - self.arena_size[0]
         norm_root = 2 * norm_root / (self.arena_size[1] - self.arena_size[0]) - 1
@@ -439,7 +441,10 @@ class ResVAE(VAE):
         )
 
         if self.prior == "beta":
-            data_o["mu"] = (data_o["alpha"]-1)/(data_o["alpha"] + data_o["beta"] - 2)*2-1
+            data_o["mu"] = (data_o["alpha"]-1+1e-8)/(data_o["alpha"] + data_o["beta"] - 2 + 2e-8)*2-1
+
+        # if torch.any(torch.isnan(data_o["mu"])):
+        #     import pdb; pdb.set_trace()
         return data_o
 
     def decode(self, z, data):

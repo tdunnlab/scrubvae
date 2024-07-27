@@ -73,7 +73,7 @@ if method in regression_methods:
         ## Plot R^2
         for key in disentangle_keys:
             f, ax_arr = plt.subplots(rows, 1, figsize=figsize)
-            plt.title("R2 of Regression Using {}".format(method.title()))
+            plt.title("R2 of Regression of {} Using {}".format(key, method.title()))
             for path_i, p in enumerate(analysis_keys):
 
                 for i, metric in enumerate(metrics_keys):

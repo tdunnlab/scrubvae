@@ -3,7 +3,7 @@ import torch
 from ssumo.data.rotation_conversion import rotation_6d_to_matrix
 from ssumo.data.dataset import fwd_kin_cont6d_torch
 import numpy as np
-
+import wandb
 LN2PI = np.log(2 * np.pi)
 
 
@@ -228,7 +228,16 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
             torch.nn.MSELoss(reduction="sum")(data_o["root"], data["root"]) / batch_size
         )
 
-    num_methods = len(data_o["disentangle"].keys())
+    if "mcmi" in loss_scale.keys():
+        variables = torch.cat(
+                        [data[k] for k in model.disentangle_keys], dim=-1
+                    )
+        if model.mi_estimator is not None:
+            batch_loss["mcmi"] = model.mi_estimator(data_o["mu"], variables)
+        else:
+            batch_loss["mcmi"] = 0
+
+    # num_methods = len(data_o["disentangle"].keys())
     methods_dict = disentangle_config["method"]
     for method, disentangle_keys in methods_dict.items():
         num_keys = len(disentangle_keys)
@@ -304,10 +313,6 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
 
     if "orthogonal_cov" in loss_scale.keys():
         batch_loss["orthogonal_cov"] = hierarchical_orthogonal_loss(*data_o["L"])
-
-    # for loss in batch_loss.keys():
-    #     if not (loss_scale[loss] > 0):
-    #         batch_loss[loss].detach()
 
     batch_loss["total"] = sum(
         [loss_scale[k] * batch_loss[k] for k in batch_loss.keys() if loss_scale[k] != 0]

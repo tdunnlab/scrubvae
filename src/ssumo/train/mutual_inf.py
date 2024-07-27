@@ -1,8 +1,11 @@
 import torch
 
+
 class MutInfoEstimator(torch.nn.Module):
 
-    def __init__(self, x_s, y_s, var_s, bandwidth, var_mode="sphere", device="cuda"):
+    def __init__(
+        self, x_s, y_s, bandwidth, var_mode="sphere", model_var=None, device="cuda"
+    ):
         """
         x_s: array with shape (num_s, x_dim)
         y_s: array with shape (num_s, y_dim)
@@ -11,8 +14,9 @@ class MutInfoEstimator(torch.nn.Module):
         device: "cuda" or "cpu"
         """
         super().__init__()
+
         self.register_buffer("x_s", x_s)
-        self.register_buffer("y_s",y_s)
+        self.register_buffer("y_s", y_s)
         log2pi = torch.log(torch.tensor([2 * torch.pi], device=device))
         self.num_s = x_s.shape[0]
         assert y_s.shape[0] == self.num_s
@@ -21,13 +25,17 @@ class MutInfoEstimator(torch.nn.Module):
         self.var_mode = var_mode
 
         if self.var_mode == "sphere":
-            self.register_buffer("var_s",torch.tensor([var_s], device=device, requires_grad=False))
+            self.register_buffer(
+                "var_s", torch.tensor([bandwidth], device=device, requires_grad=False)
+            )
             logA_x = self.x_dim * (log2pi + torch.log(self.var_s))
         elif self.var_mode == "diagonal":
-            self.register_buffer("var_s", var_s)
-            logA_x = (
-                self.x_dim * log2pi + torch.sum(torch.log(self.var_s), dim=-1)
-            )[None, :]
+            self.register_buffer(
+                "var_s", model_var.diagonal(dim1=-2, dim2=-1) ** 2 + bandwidth
+            )
+            logA_x = (self.x_dim * log2pi + torch.sum(torch.log(self.var_s), dim=-1))[
+                None, :
+            ]
 
         self.gamma = bandwidth
 
@@ -76,5 +84,4 @@ class MutInfoEstimator(torch.nn.Module):
         # Average over num_samples (axis=-1)
         E_log_py = torch.logsumexp(log_py_each, axis=-1)
 
-        return (E_log_pxy - E_log_px - E_log_py).mean() # - 1/num_samples
- 
+        return (E_log_pxy - E_log_px - E_log_py).mean()  # - 1/num_samples
