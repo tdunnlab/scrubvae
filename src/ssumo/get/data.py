@@ -324,8 +324,8 @@ def mouse_data(
 
 
 def get_random_axis(length: int = 1):
-    # axis = torch.rand(length) * pi / 2 # right side to under 90d
-    axis = torch.rand(length) * pi / 18  # right side to under 10d
+    axis = torch.rand(length) * pi / 2  # right side to under 90d
+    # axis = torch.rand(length) * pi / 18  # right side to under 10d
     axis = torch.cat(
         [
             torch.zeros(length)[:, None],

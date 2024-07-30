@@ -191,8 +191,9 @@ def train_epoch_2D_view(
             for param in model.parameters():
                 param.grad = None
 
-        axis = get_random_axis(1).to(device)
-        data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+        axis = get_random_axis(len(data["raw_pose"])).to(device)
+        data["view_axis"] = axis
+        # data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
         data = {k: v.to(device) for k, v in data.items()}
         data = get_projected_2D_kinematics(
             data,
@@ -200,8 +201,9 @@ def train_epoch_2D_view(
             skeleton_config,
         )
         if config["data"].get("decode_alternate"):
-            axis = get_random_axis(1).to(device)
-            data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+            axis = get_random_axis(len(data["raw_pose"])).to(device)
+            data["view_axis"] = axis
+            # data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
             data["target_pose"] = get_projected_2D_kinematics(
                 {k: data[k] for k in ["raw_pose", "target_pose"]},
                 axis,
@@ -260,8 +262,9 @@ def train_epoch_mcmi_2D_view(
             for param in model.parameters():
                 param.grad = None
 
-        axis = get_random_axis(1).to(device)
-        data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+        axis = get_random_axis(len(data["raw_pose"])).to(device)
+        data["view_axis"] = axis
+        # data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
         data = {k: v.to(device) for k, v in data.items()}
         data = get_projected_2D_kinematics(
             data,
@@ -269,8 +272,9 @@ def train_epoch_mcmi_2D_view(
             skeleton_config,
         )
         if config["data"].get("decode_alternate"):
-            axis = get_random_axis(1).to(device)
-            data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+            axis = get_random_axis(len(data["raw_pose"])).to(device)
+            data["view_axis"] = axis
+            # data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
             data["target_pose"] = get_projected_2D_kinematics(
                 {k: data[k] for k in ["raw_pose", "target_pose"]},
                 axis,
