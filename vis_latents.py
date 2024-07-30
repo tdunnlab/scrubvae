@@ -22,7 +22,7 @@ k = 50  # Number of clusters
 Path(vis_path).mkdir(parents=True, exist_ok=True)
 
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
-dataset_label = "Train"
+dataset_label = "Test"
 ### Load Datasets
 loader, model = ssumo.get.data_and_model(
     config,

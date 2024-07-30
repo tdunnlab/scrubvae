@@ -28,15 +28,17 @@ def data_and_model(
             data_keys=data_keys,
             shuffle=shuffle,
             normalize=config["disentangle"]["features"],
+            norm_params=None,
         )
 
         loader2 = ssumo.get.mouse_data(
             data_config=config["data"],
             window=config["model"]["window"],
             train=False,
-            data_keys=data_keys,
+            data_keys=["x6d", "root", "offsets", "target_pose", "avg_speed_3d", "heading"],
             shuffle=False,
-            normalize=config["disentangle"]["features"],
+            normalize=["avg_speed_3d"],
+            norm_params=loader1.dataset.norm_params,
         )
     else:
         loader1 = ssumo.get.mouse_data(
@@ -47,7 +49,6 @@ def data_and_model(
             shuffle=shuffle,
             normalize=config["disentangle"]["features"],
         )
-    
 
     model = ssumo.get.model(
         model_config=config["model"],
@@ -60,7 +61,7 @@ def data_and_model(
         arena_size=loader1.dataset.arena_size,
         kinematic_tree=loader1.dataset.kinematic_tree,
         bound=config["data"]["normalize"] == "bounded",
-        discrete_classes = loader1.dataset.discrete_classes,
+        discrete_classes=loader1.dataset.discrete_classes,
         device="cuda",
         verbose=verbose,
     )

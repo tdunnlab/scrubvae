@@ -39,7 +39,7 @@ def epoch_metric(func):
             epochs_to_test = [
                 e
                 for e in get.all_saved_epochs(path)
-                if (e not in metrics["epochs"])# and (e > 100)
+                if (e not in metrics["epochs"])  # and (e > 100)
             ]
             metrics["epochs"] = np.concatenate(
                 [metrics["epochs"], epochs_to_test]
@@ -52,12 +52,14 @@ def epoch_metric(func):
             # else:
             #     metrics = {k: {"R2": [], "R2_Null": []} for k in disentangle_keys}
             metrics = {
-                "epochs": [e for e in get.all_saved_epochs(path)]# if (e > 100)]
+                "epochs": [e for e in get.all_saved_epochs(path)]  # if (e > 100)]
             }  # if (e>100)]
             epochs_to_test = metrics["epochs"]
 
         data_keys = ["x6d", "root"]
-        data_keys += ["ids"] if method in ["linear_cv","mlp_cv","log_class_cv"] else []
+        data_keys += (
+            ["ids"] if method in ["linear_cv", "mlp_cv", "log_class_cv"] else []
+        )
 
         if len(epochs_to_test) > 0:
             loader = get.mouse_data(
@@ -298,6 +300,7 @@ def custom_cv_5folds(i, ids, folds=5):
     idx_train = full_ind[~np.isin(full_ind, idx_test)]
     return idx_train, idx_test
 
+
 def rand_cv(func):
     @functools.wraps(func)
     def wrapper(
@@ -312,14 +315,21 @@ def rand_cv(func):
             start_i = shift_i * (window // 2)
             downsampled_z = z[start_i::window, ...]
             downsampled_y = y_true[start_i::window, ...]
-            kf = KFold(n_splits=folds, shuffle=True)
+            kf = KFold(n_splits=folds, shuffle=True, random_state=100)
             for i, (train_i, test_i) in enumerate(kf.split(downsampled_z)):
-                met += [func(downsampled_z[train_i], downsampled_y[train_i], downsampled_z[test_i],downsampled_y[test_i])]
+                met += [
+                    func(
+                        downsampled_z[train_i],
+                        downsampled_y[train_i],
+                        downsampled_z[test_i],
+                        downsampled_y[test_i],
+                    )
+                ]
 
         print("Train Length: {}, Test Length: {}".format(len(train_i), len(test_i)))
 
         return met
-    
+
     return wrapper
 
 
@@ -330,24 +340,29 @@ def linear_rand_cv(z_train, y_train, z_test, y_test):
     r2 = r2_score(y_test, y_pred)
     return r2
 
+
 @rand_cv
 def log_class_rand_cv(z_train, y_train, z_test, y_test):
     clf = LogisticRegression(
-        multi_class="multinomial", solver="sag", max_iter=300
+        l1_ratio=0.5,
+        penalty="elasticnet",
+        multi_class="multinomial",
+        solver="saga",
+        max_iter=300,
     ).fit(z_train, y_train.ravel())
     y_pred = clf.predict(z_test)
     acc = (y_test.ravel() == y_pred).sum() / len(z_test)
 
     return acc
 
+
 @rand_cv
 def qda_rand_cv(z_train, y_train, z_test, y_test):
-    clf = QuadraticDiscriminantAnalysis().fit(
-        z_train, y_train.ravel()
-    )
+    clf = QuadraticDiscriminantAnalysis().fit(z_train, y_train.ravel())
     y_pred = clf.predict(z_test)
     acc = (y_test.ravel() == y_pred).sum() / len(z_test)
     return acc
+
 
 @rand_cv
 def mlp_rand_cv(z_train, y_train, z_test, y_test):
@@ -423,7 +438,7 @@ def train_MLP(z, y_true, num_epochs=200):
     torch.backends.cudnn.benchmark = True
     z = z.cuda()
     y_true = torch.tensor(y_true, device="cuda")
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    optimizer = optim.AdamW(model.parameters(), lr=0.1)
     model.train()
     with torch.enable_grad():
         for epoch in trange(num_epochs):

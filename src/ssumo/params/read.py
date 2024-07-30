@@ -31,7 +31,7 @@ def config(path):
     
     print("Saving folder: {}".format(config["out_path"]))
 
-    sub_folders = ["weights/", "losses/", "latents/"]
+    sub_folders = ["weights/", "checkpoints/", "latents/"]
     for folder in sub_folders:
         Path(config["out_path"] + folder).mkdir(parents=True, exist_ok=True)
 

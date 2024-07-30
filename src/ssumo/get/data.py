@@ -189,9 +189,8 @@ def mouse_pd_data(
         fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
         data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
 
-    if "ids" in data_keys:
-        ids[ids >= 37] -= 37
-        data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
+    ids[ids >= 37] -= 37
+    data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
 
     for k, v in data.items():
         print("{}: {}".format(k, v.shape))
@@ -206,6 +205,7 @@ def mouse_data(
     data_keys: List[str] = ["x6d", "root", "offsets"],
     shuffle: bool = False,
     normalize: List[str] = [],
+    norm_params: dict = None,
 ):
     """_summary_
 
@@ -242,6 +242,9 @@ def mouse_data(
             train,
             data_keys,
         )
+    
+    if (norm_params is None) or (norm_params == {}):
+        norm_params = {}
 
     for key in normalize:
         if (key not in ["heading", "ids", "fluorescence"]) and (key in data_keys):
@@ -251,35 +254,41 @@ def mouse_data(
                         key
                     )
                 )
-                
-                key_min = data[key].min(dim=0)[0] * 0.9
-                data[key] -= key_min
-                key_max = data[key].max(dim=0)[0] * 1.1
-                data[key] = 2 * data[key] / key_max - 1
+                if key not in norm_params.keys():
+                    norm_params[key] = {}
+                    norm_params[key]["min"] = data[key].min(dim=0)[0] * 0.9
+                    norm_params[key]["max"] = data[key].max(dim=0)[0] * 1.1
+                # key_min = data[key].min(dim=0)[0] * 0.9
+                data[key] -= norm_params[key]["min"]
+                # key_max = data[key].max(dim=0)[0] * 1.1
+                data[key] = 2 * data[key] / norm_params[key]["max"] - 1
                 assert data[key].max() < 1
                 assert data[key].min() > -1
             elif data_config["normalize"] == "z_score":
                 print(
                     "Mean centering and unit standard deviation-scaling {}".format(key)
                 )
-                data[key] -= data[key].mean(axis=0)
-                data[key] /= data[key].std(axis=0)
+                if key not in norm_params.keys():
+                    norm_params[key] = {}
+                    norm_params[key]["mean"] = data[key].mean(axis=0)
+                    norm_params[key]["std"] = data[key].std(axis=0)
+                data[key] -= norm_params[key]["mean"]
+                data[key] /= norm_params[key]["std"]
 
     discrete_classes = {}
-    if "ids" in data.keys():
-        if "immunostain" in data_config["data_path"]:
-            if not ((data_config["stride"] == 5) or (data_config["stride"] == 10)):
-                data["ids"][data["ids"] >= 37] -= 37
-                unique_ids = torch.unique(data["ids"])
-                discrete_classes["ids"] = torch.arange(len(unique_ids)).long()
-                for id in unique_ids:
-                    data["ids"][data["ids"] == id] = discrete_classes["ids"][
-                        id == unique_ids
-                    ]
-            else:
-                discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
+    if "immunostain" in data_config["data_path"]:
+        if not ((data_config["stride"] == 5) or (data_config["stride"] == 10)):
+            data["ids"][data["ids"] >= 37] -= 37
+            unique_ids = torch.unique(data["ids"])
+            discrete_classes["ids"] = torch.arange(len(unique_ids)).long()
+            for id in unique_ids:
+                data["ids"][data["ids"] == id] = discrete_classes["ids"][
+                    id == unique_ids
+                ]
         else:
             discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
+    else:
+        discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
 
     dataset = MouseDataset(
         data,
@@ -289,6 +298,7 @@ def mouse_data(
         len(skeleton_config["LABELS"]),
         label="Train" if train else "Test",
         discrete_classes=discrete_classes,
+        norm_params=norm_params,
     )
 
     loader = DataLoader(
@@ -413,8 +423,7 @@ def calculate_mouse_kinematics(
 
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
-    if "ids" in data_keys:
-        data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
+    data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
 
     if "fluorescence" in data_keys:
         parent_path = str(Path(data_config["data_path"]).parents[0])

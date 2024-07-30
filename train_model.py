@@ -29,10 +29,9 @@ config = read.config(
 )
 
 run = wandb.init(
-    project=args.project, name=name, config=config, dir=RESULTS_PATH + args.project
+    project=args.project, name=name, config=config, dir=RESULTS_PATH + args.project + "/" + name
 )
-
-import pdb; pdb.set_trace()
+print("WANDB directory: {}".format(run.dir))
 
 train_loader, test_loader, model = ssumo.get.data_and_model(
     config,
@@ -43,3 +42,5 @@ train_loader, test_loader, model = ssumo.get.data_and_model(
 )
 
 model = ssumo.train.train(config, model, train_loader, test_loader, run)
+
+run.finish()

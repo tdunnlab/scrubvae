@@ -156,6 +156,34 @@ def get_speed_parts(pose, parts):
 
     return dxyz
 
+def get_speed_parts_torch(pose, parts):
+    print("Getting speed by body parts")
+    root_spd = torch.diff(pose[..., 0, :], n=1, dim=-3, prepend=pose[..., 0:1, 0, :]) ** 2
+    dxyz = torch.zeros((len(root_spd), len(parts) + 1),device=pose.device)
+    dxyz[:, 0] = torch.sqrt(root_spd.sum(dim=-1))
+
+    centered_pose = pose - pose[:, 0:1, :]
+    # ego_pose = preprocess.rotate_spine(
+    #     centered_pose,
+    #     keypt_idx=[0, 1],
+    #     lock_to_x=False,
+    # )
+
+    for i, part in enumerate(parts):
+        pose_part = centered_pose - centered_pose[:, part[0] : part[0] + 1, :]
+        relative_dxyz = (
+            torch.diff(
+                pose_part[:, part[1:], :],
+                n=1,
+                dim=0,
+                prepend=pose_part[0:1, part[1:], :],
+            )
+            ** 2
+        ).sum(dim=-1)
+        dxyz[:, i + 1] = torch.sqrt(relative_dxyz).mean(dim=-1)
+
+    return dxyz
+
 
 def get_window_indices(ids, stride, window):
     print("Calculating windowed indices ...")
@@ -242,12 +270,13 @@ def get_speed_outliers(pose, window_inds, threshold=2.25):
 
 class MouseDataset(Dataset):
     def __init__(
-        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train", discrete_classes = None
+        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train", discrete_classes = None, norm_params=None
     ):
         self.data = data
         self.window_inds = window_inds
         self.n_keypts = n_keypts
         self.discrete_classes = discrete_classes
+        self.norm_params = norm_params
 
         if arena_size is not None:
             self.arena_size = torch.tensor(arena_size)

@@ -235,7 +235,7 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
         if model.mi_estimator is not None:
             batch_loss["mcmi"] = model.mi_estimator(data_o["mu"], variables)
         else:
-            batch_loss["mcmi"] = 0
+            batch_loss["mcmi"] = torch.zeros_like(batch_loss["jpe"])
 
     # num_methods = len(data_o["disentangle"].keys())
     methods_dict = disentangle_config["method"]
