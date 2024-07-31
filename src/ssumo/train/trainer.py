@@ -4,6 +4,7 @@ from ssumo.train.mutual_inf import MutInfoEstimator
 from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter
 from ssumo.plot.eval import loss as plt_loss
 from ssumo.eval import generative_restrictiveness
+from ssumo.eval import cluster
 import torch.optim as optim
 import tqdm
 import pickle
@@ -508,6 +509,24 @@ def train(config, model, train_loader, test_loader, run=None):
             metrics["acc_ids_log_std"] = np.std(acc_log)
             metrics["acc_ids_qda_mean"] = np.mean(acc_qda)
             metrics["acc_ids_qda_std"] = np.std(acc_qda)
+
+            import pdb
+
+            pdb.set_trace()
+
+            vanilla_gmm = np.load(
+                "/mnt/home/jwu10/working/ceph/results/vae/vanilla_64/2/vis_latents_train/z_300_gmm.npy"
+            )
+
+            walking_list = [1, 4, 8, 38, 41, 44]
+
+            cluster.gmm(
+                latents=z_test,
+                n_components=50,
+                label="".format(epoch),
+                covariance_type="diag" if config["model"]["diag"] else "full",
+                path = "{}/clusters/".format(config["out_path"])
+            )
 
             # torch.random.set_rng_state(rand_state)
 
