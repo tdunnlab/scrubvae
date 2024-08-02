@@ -434,7 +434,7 @@ def calculate_2D_mouse_kinematics(
         project_axis,
         skeleton_config,
     )
-    data["raw_pose"] = data["raw_pose"][: len(project_axis) / len_proj]
+    data["raw_pose"] = data["raw_pose"][: int(len(project_axis) / len_proj)]
     data["view_axis"] = project_axis
 
     data = {k: v.cpu().numpy() for k, v in data.items()}
@@ -455,18 +455,19 @@ def get_projected_2D_kinematics(
 
     proj_x = torch.zeros_like(axis)
     proj_x[..., 0] = 1
-    ax = axis[axis[..., 1] != 0]
-    if len(ax) > 0:
-        proj_x[axis[..., 1] != 0] = torch.cat(
-            [
-                torch.ones_like(ax[..., 0])[..., None],
-                (-ax[..., 0] / ax[..., 1])[..., None],
-                torch.zeros_like(ax[..., 0])[..., None],
-            ],
-            dim=-1,
-        ).to(device)
+    # DONT HARDCODE PROJ_X, THIS WON'T WORK WHEN EXPANDING AXIS GENERATION
+    # ax = axis[abs(axis[..., 2]) != 1]
+    # if len(ax) > 0:
+    #     proj_x[abs(axis[..., 2]) != 1] = torch.cat(
+    #         [
+    #             torch.ones_like(ax[..., 0])[..., None],
+    #             (-ax[..., 0] / ax[..., 1])[..., None], # may be div by 0
+    #             torch.zeros_like(ax[..., 0])[..., None],
+    #         ],
+    #         dim=-1,
+    #     ).to(device)
 
-    proj_y = torch.linalg.cross(proj_x, axis)
+    proj_y = torch.linalg.cross(proj_x, -axis)
 
     proj_x /= torch.norm(proj_x, dim=-1)[..., None].repeat(
         [1 for i in proj_x.shape[1:]] + [3]
@@ -474,8 +475,8 @@ def get_projected_2D_kinematics(
     proj_y /= torch.norm(proj_y, dim=-1)[..., None].repeat(
         [1 for i in proj_x.shape[1:]] + [3]
     )
-    proj_y[proj_y[..., 2] < 0] = -proj_y[proj_y[..., 2] < 0]
     proj_x[proj_y[..., 2] < 0] = -proj_x[proj_y[..., 2] < 0]
+    proj_y[proj_y[..., 2] < 0] = -proj_y[proj_y[..., 2] < 0]
 
     flat_pose = pose.reshape((-1,) + pose.shape[-2:])
     proj_matrices = torch.cat(

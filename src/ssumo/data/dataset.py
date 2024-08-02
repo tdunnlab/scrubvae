@@ -37,6 +37,9 @@ def inv_kin_torch(
         .to(device)
     )
     root_quat = qtn.qbetween(forward, target)
+    root_quat[torch.norm(root_quat, dim=1) == 0] = torch.tensor(
+        [0.0, 0.0, 0.0, 1.0]
+    ).to(device)
 
     local_quat = torch.zeros(pose.shape[:-1] + (4,))
     root_quat[0] = torch.tensor([[1.0, 0.0, 0.0, 0.0]])

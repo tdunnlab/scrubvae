@@ -51,7 +51,7 @@ feat = np.concatenate(
     [
         np.full(
             int(len(loader.dataset) / len(axes)),
-            np.abs(np.arctan2(axes[i][1], axes[i][2])),
+            np.abs(np.arctan2(axes[i][2], axes[i][1])),
         )
         for i in range(len(axes))
     ]

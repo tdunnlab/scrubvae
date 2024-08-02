@@ -18,8 +18,15 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
         # Let's see how reconstruction looks on train data
         data = next(iter(loader))
         skeleton_config = read.config(config["data"]["skeleton_path"])
-        axis = get_random_axis(1).to("cuda")
-        data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+        #### Pick projection axes
+        # axis = get_random_axis(1).to("cuda") # single random axis for all
+        # data["view_axis"] = axis[None, :].repeat((len(data["raw_pose"]), 1))
+        axis = get_random_axis(len(data["raw_pose"])).to(
+            "cuda"
+        )  # different random axis each
+        # axis[0] = torch.tensor([0, 0, -1]).to("cuda")
+        data["view_axis"] = axis
+
         data = {k: v.to("cuda") for k, v in data.items()}
         data = get_projected_2D_kinematics(
             data,

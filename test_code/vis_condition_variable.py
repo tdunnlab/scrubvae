@@ -1,5 +1,5 @@
 from ssumo.data.dataset import fwd_kin_cont6d_torch
-from ssumo.get.data import projected_2D_kinematics
+from ssumo.get.data import get_projected_2D_kinematics
 
 from torch.utils.data import DataLoader
 from dappy import read
@@ -30,14 +30,14 @@ def visualize_conditional_variable_2D(model, loader, label, connectivity, config
         )
         axis = np.tile(axis, (config["data"]["batch_size"], 1))
         skeleton_config = read.config(config["data"]["skeleton_path"])
-        data = projected_2D_kinematics(
+        data = get_projected_2D_kinematics(
             data,
-            [0, -np.sqrt(2) / 2, -np.sqrt(2) / 2],
+            torch.tensor([0, -np.sqrt(2) / 2, -np.sqrt(2) / 2])
+            .type(torch.FloatTensor)
+            .to("cuda"),
             # [0, -1, 0], # these give terrible results
             # [0, 0, -1],
-            config,
             skeleton_config,
-            device="cuda",
         )
         # data["view_axis"] = (
         #     torch.tensor(axis)[None, :]
@@ -143,9 +143,9 @@ def visualize_conditional_variable_2D(model, loader, label, connectivity, config
             ],
             title=label + " Data",
             fps=30,
-            figsize=(16, 8),
+            figsize=(24, 8),
             N_FRAMES=config["data"]["batch_size"] * config["model"]["window"],
-            VID_NAME=label + ".mp4",
+            VID_NAME=label + "_cond.mp4",
             SAVE_ROOT=config["out_path"],
         )
 

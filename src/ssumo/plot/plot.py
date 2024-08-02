@@ -77,13 +77,14 @@ def trace(
     centered: bool = True,
     N_FRAMES: int = 300,
     dpi: int = 200,
+    figure_size=(10, 10),
     FIG_NAME: str = "pose_trace.png",
     SAVE_ROOT: str = "./test/pose_vids/",
 ):
     if isinstance(frames, int):
         frames = [frames]
 
-    figsize = (10, 10)
+    figsize = figure_size
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(1, 1, 1)
     pose_vis, limits, links, COLORS = vis.pose._init_vid3D(
