@@ -55,6 +55,8 @@ def latents(
     else:
         print("Found existing latent projections - Loading ...")
         latents = np.load(latent_path)
+        print(latents.shape)
+        print(len(loader.dataset))
         if loader is not None:
             assert latents.shape[0] == len(loader.dataset)
         latents = torch.tensor(latents)

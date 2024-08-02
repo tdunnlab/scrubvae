@@ -33,15 +33,13 @@ titles = {
 downsample = 32
 f = plt.figure(figsize=(12, 6))
 subf = f.subfigures(2, 1)
-for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
+for var_ind, var_key in enumerate(["heading", "avg_speed_3d"]):
     print(var_key)
     models = read.config(CODE_PATH + "configs/exp_finals.yaml")[var_key]
     models = {m[0]: [m[1], m[2]] for m in models if (m[0] != "VAE")}
 
     torch.manual_seed(0)
-    config = read.config(
-        RESULTS_PATH + models["SC-VAE-MI"][0] + "/model_config.yaml"
-    )
+    config = read.config(RESULTS_PATH + models["SC-VAE-MI"][0] + "/model_config.yaml")
     # config["data"]["stride"] = downsample
     if var_key == "heading":
         loader = ssumo.get.mouse_data(
@@ -107,14 +105,16 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
         print(spd_mean)
         spd_true = (loader.dataset[::downsample]["avg_speed_3d"] - spd_mean) / spd_std
         # avg_speed_3d_rand = spd_true[torch.randperm(len(spd_true))]
-        rand_jitter = torch.randn((spd_true.shape[0], 1))*spd_std*1.5+0.5
+        rand_jitter = torch.randn((spd_true.shape[0], 1)) * spd_std * 1.5 + 0.5
 
-        avg_speed_3d_rand = spd_true + rand_jitter # [torch.randperm(len(spd_true))]
+        avg_speed_3d_rand = spd_true + rand_jitter  # [torch.randperm(len(spd_true))]
 
         # for dim in range(avg_speed_3d_rand.shape[-1]):
         #     import pdb; pdb.set_trace()
         #     avg_speed_3d_rand[:,dim] = torch.clamp(avg_speed_3d_rand[:,dim], min=spd_true.min(dim=0)[0][dim], max=None)
-        avg_speed_3d_rand = torch.clamp(avg_speed_3d_rand, min=spd_true.min(dim=0)[0], max=spd_true.max(dim=0)[0])
+        avg_speed_3d_rand = torch.clamp(
+            avg_speed_3d_rand, min=spd_true.min(dim=0)[0], max=spd_true.max(dim=0)[0]
+        )
 
     kinematic_tree = loader.dataset.kinematic_tree
     n_keypts = loader.dataset.n_keypts
@@ -128,7 +128,8 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
     if var_key == "heading":
         # gs2 = subf[var_ind + 1].add_gridspec(1, 4)
         subf[var_ind].suptitle(
-            "Generated {} For Random Input {}".format(titles[var_key], titles[var_key]), fontsize=14
+            "Generated {} For Random Input {}".format(titles[var_key], titles[var_key]),
+            fontsize=14,
         )
         # subf[var_ind + 1].suptitle(
         #     "Generated Joint Position Error For Random {}".format(titles[var_key])
@@ -139,7 +140,8 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
 
     elif var_key == "avg_speed_3d":
         subf[var_ind].suptitle(
-            "Generated {} For Random Input {}".format(titles[var_key], titles[var_key]), fontsize=14
+            "Generated {} For Random Input {}".format(titles[var_key], titles[var_key]),
+            fontsize=14,
         )
 
     for i, model_key in enumerate(models.keys()):
@@ -193,11 +195,13 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
             offsets = data["offsets"].cuda()
 
             if var_key == "heading":
-                root = torch.zeros((data["z"].shape[0]* model.window, 3), device=x6d.device)
+                root = torch.zeros(
+                    (data["z"].shape[0] * model.window, 3), device=x6d.device
+                )
             elif var_key == "avg_speed_3d":
                 root = model.inv_normalize_root(x_hat[..., -3:]).reshape(
-                data["z"].shape[0]* model.window, 3
-            )
+                    data["z"].shape[0] * model.window, 3
+                )
             pose_batch = fwd_kin_cont6d_torch(
                 x6d.reshape((-1, n_keypts, 6)),
                 kinematic_tree,
@@ -221,26 +225,57 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
             pose_out_rot = preprocess.rotate_spine(
                 preprocess.center_spine(pose.reshape((-1, n_keypts, 3)), 0), [0, 1]
             )
-            jpe = np.sqrt(((pose_rot - pose_out_rot.reshape(pose_rot.shape)) ** 2).sum(axis=-1)).mean(axis=(-1, -2))
+            jpe = np.sqrt(
+                ((pose_rot - pose_out_rot.reshape(pose_rot.shape)) ** 2).sum(axis=-1)
+            ).mean(axis=(-1, -2))
             mean_jpe = jpe.mean()
             expected = heading1D_rand
             pred_out = np.arctan2(pred_out[:, 0], pred_out[:, 1])
 
         elif var_key == "avg_speed_3d":
-            speed = get_speed_parts(
-                pose=pose.reshape((-1, n_keypts, 3)),
-                parts=[
-                    [0, 1, 2, 3, 4, 5],  # spine and head
-                    [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
-                    [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
+            # speed = get_speed_parts(
+            #     pose=pose.reshape((-1, n_keypts, 3)),
+            #     parts=[
+            #         [0, 1, 2, 3, 4, 5],  # spine and head
+            #         [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
+            #         [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
+            #     ],
+            # )
+            # speed_3d_out = np.concatenate(
+            #     [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
+            # )
+            # # speed_3d_out = np.concatenate([np.zeros((1,3)), speed_3d_out])
+            # pred_out = speed_3d_out.reshape((-1, model.window, 3))[:, 1:, ...].mean(
+            #     axis=1
+            # )
+            root_spd = torch.sqrt(
+                (torch.diff(pose[..., 0, :], n=1, dim=1) ** 2).sum(dim=-1)
+            ).mean(dim=1)
+            parts = [
+                [0, 1, 2, 3, 4, 5],  # spine and head
+                [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
+                [5, 12, 13, 14, 15, 16, 17],  # legs from back spine
+            ]
+            dxyz = torch.zeros((len(root_spd), 3))
+            for i, part in enumerate(parts):
+                pose_part = pose - pose[:, model.window // 2, None, part[0], None, :]
+                relative_dxyz = (
+                    torch.diff(
+                        pose_part[:, :, part[1:], :],
+                        n=1,
+                        axis=1,
+                    )
+                    ** 2
+                ).sum(axis=-1)
+                dxyz[:, i] = torch.sqrt(relative_dxyz).mean(axis=(1, 2))
+
+            pred_out = torch.cat(
+                [
+                    root_spd[:, None],  # root
+                    dxyz[:, 0:1],  # spine and head
+                    dxyz[:, 1:].mean(axis=-1, keepdims=True),  # limbs
                 ],
-            )
-            speed_3d_out = np.concatenate(
-                [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
-            )
-            # speed_3d_out = np.concatenate([np.zeros((1,3)), speed_3d_out])
-            pred_out = speed_3d_out.reshape((-1, model.window, 3))[:, 1:, ...].mean(
-                axis=1
+                axis=-1,
             )
 
             r2 = r2_score(
@@ -253,9 +288,15 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
 
         ax = subf[var_ind].add_subplot(gs[i])
         ax.set_title(model_key + "\n$R^2 = ${:3f}".format(r2))
-        y_eq_x = np.linspace(min(expected.min(), pred_out.min()), max(expected.max(), pred_out.max()),1000)
+        y_eq_x = np.linspace(
+            min(expected.min(), pred_out.min()),
+            max(expected.max(), pred_out.max()),
+            1000,
+        )
         ax.plot(y_eq_x, y_eq_x, label="$y=x$", c="k", lw=1)
-        ax.scatter(expected, pred_out, s=3, marker="o", facecolors="none", edgecolors="C0")
+        ax.scatter(
+            expected, pred_out, s=3, marker="o", facecolors="none", edgecolors="C0"
+        )
         # xy_min = min(expected.min(), pred_out.min())
         # xy_max = max(expected.max(), pred_out.max())
         # ax.plot(np.linspace(xy_min, xy_max, 1000), np.linspace(xy_min, xy_max, 1000))
@@ -285,12 +326,9 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d"]):
         #     ax.legend()
         #     jpe_ax += [ax]
 
-    subf[var_ind].subplots_adjust(left=0.05,
-                            bottom=0.15, 
-                            right=0.98, 
-                            top=0.75,
-                            wspace=0.3, 
-                            hspace=0.1)
+    subf[var_ind].subplots_adjust(
+        left=0.05, bottom=0.15, right=0.98, top=0.75, wspace=0.3, hspace=0.1
+    )
 
     # if var_key == "heading":
     #     for i, ax in enumerate(jpe_ax):
