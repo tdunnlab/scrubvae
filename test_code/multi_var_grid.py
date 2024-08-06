@@ -7,12 +7,14 @@ from dappy import read
 import torch
 from sklearn.linear_model import LinearRegression
 from ssumo.data.dataset import *
-from ssumo.plot import trace
+from ssumo.plot import trace_grid
 from tqdm import tqdm
 
 RESULTS_PATH = "/mnt/ceph/users/hkoneru/results/vae/"
 ### Set/Load Parameters
-analysis_key = "josh_heading"
+key_id = 0
+analysis_key = ["josh_heading", "josh_double_cond"][key_id]
+epoch = [320, 280][key_id]
 out_path = RESULTS_PATH + analysis_key
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["model"]["load_model"] = config["out_path"]
@@ -26,7 +28,7 @@ dataset_label = "Train"
 loader, model = ssumo.get.data_and_model(
     config,
     load_model=config["out_path"],
-    epoch=320,
+    epoch=epoch,
     dataset_label=dataset_label,
     data_keys=["x6d", "root", "offsets", "avg_speed_3d", "heading"],
     shuffle=False,
@@ -36,7 +38,7 @@ loader, model = ssumo.get.data_and_model(
 latents = ssumo.get.latents(
     config=config,
     model=model,
-    epoch=320,
+    epoch=epoch,
     loader=loader,
     device="cuda",
     dataset_label=dataset_label,
@@ -49,10 +51,12 @@ n_shifts_h = 5
 dis_s = "avg_speed_3d"
 dis_h = "heading"
 # sample_idx = [1000]
-sample_idx = [323237, 324406, 557490]
+sample_idx = [324406]
+# sample_idx = [323237, 324406, 557490]
 # sample_idx = torch.randint(low=0, high=len(loader.dataset), size=(30,))
-shift_s = torch.linspace(-8, 8, n_shifts_s)[:, None].repeat(n_shifts_h, 1)
-shift_h = torch.linspace(np.pi / 2, -np.pi / 2, n_shifts_h)[:, None].repeat_interleave(
+shift_s = torch.linspace(-4.5, 1.5, n_shifts_s)[:, None].repeat(n_shifts_h, 1)
+# shift_s = torch.linspace(-8, 8, n_shifts_s)[:, None].repeat(n_shifts_h, 1)
+shift_h = torch.linspace(np.pi / 3, -np.pi / 3, n_shifts_h)[:, None].repeat_interleave(
     n_shifts_s
 )
 
@@ -102,7 +106,7 @@ for sample_i in tqdm(sample_idx):
     ).reshape(n_shifts_h, n_shifts_s, 3)[:, :, None, None, :].expand(shiftarr.shape)
     pose = shiftarr.reshape((-1,) + shiftarr.shape[3:]) + pose
 
-    trace(
+    trace_grid(
         pose,
         connectivity,
         vis_plane="xy",
@@ -116,26 +120,3 @@ for sample_i in tqdm(sample_idx):
         FIG_NAME=dataset_label + "grid{}_mod.png".format(sample_i),
         SAVE_ROOT=vis_decode_path,
     )
-    # vis.pose.grid3D(
-    #     pose,
-    #     connectivity,
-    #     frames=np.arange(n_shifts + 1) * model.window,
-    #     centered=False,
-    #     subtitles=subtitles,
-    #     title=dataset_label + " Data - {} Traversal".format(disentangle_key),
-    #     fps=20,
-    #     N_FRAMES=model.window,
-    #     VID_NAME=dataset_label + "grid{}_mod.mp4".format(sample_i),
-    #     SAVE_ROOT=vis_decode_path,
-    # )
-
-    # vis.pose.arena3D(
-    #     pose,
-    #     connectivity,
-    #     frames=np.arange(n_shifts + 1) * model.window,
-    #     centered=False,
-    #     fps=15,
-    #     N_FRAMES=model.window,
-    #     VID_NAME=dataset_label + "arena{}_mod.mp4".format(sample_i),
-    #     SAVE_ROOT=vis_decode_path,
-    # )
