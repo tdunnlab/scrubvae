@@ -36,7 +36,7 @@ subf = f.subfigures(2, 1)
 for var_ind, var_key in enumerate(["heading", "avg_speed_3d"]):
     print(var_key)
     models = read.config(CODE_PATH + "configs/exp_finals.yaml")[var_key]
-    models = {m[0]: [m[1], m[2]] for m in models if (m[0] != "VAE")}
+    models = {m[0]: [m[1], m[2]] for m in models if (m[0] != "VAE") and (m[0] != "beta-VAE")}
 
     torch.manual_seed(0)
     config = read.config(RESULTS_PATH + models["SC-VAE-MI"][0] + "/model_config.yaml")

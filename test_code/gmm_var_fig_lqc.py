@@ -81,16 +81,16 @@ titles = {
     "ids": "Animal ID",
 }
 
-f = plt.figure(figsize=(16, 7))
-gs = f.add_gridspec(3, 7)
-for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
+f = plt.figure(figsize=(13, 3))
+gs = f.add_gridspec(1, 7)
+for var_ind, var_key in enumerate(["heading"]):
     print(var_key)
-    models = read.config(CODE_PATH + "configs/exp_finals.yaml")[var_key]
+    models = read.config(CODE_PATH + "configs/exp_lqc.yaml")[var_key]
     models = {m[0]: [m[1], m[2]] for m in models}
 
     if var_ind == 0:
         config = read.config(
-            RESULTS_PATH + models["C-VAE"][0] + "/model_config.yaml"
+            RESULTS_PATH + models["SC-VAE-MALS"][0] + "/model_config.yaml"
         )
         loader = ssumo.get.mouse_data(
             data_config=config["data"],
@@ -125,7 +125,7 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
         if var_key in ["heading", "avg_speed_3d"]:
             try:
                 model_lin_cv = pickle.load(
-                    open(path + "linear_rand_cv_reg_Train.p", "rb")
+                    open(path + "linear_rand_cv_Train.p", "rb")
                 )
                 lin_cv[model] = np.array(model_lin_cv[var_key]["R2"])[
                     np.array(model_lin_cv["epochs"]) == models[model][1]
@@ -135,7 +135,7 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
                 lin_cv[model] = np.zeros(5)
 
             try:
-                model_mlp_cv = pickle.load(open(path + "mlp_rand_cv_reg_Train.p", "rb"))
+                model_mlp_cv = pickle.load(open(path + "mlp_rand_cv_Train.p", "rb"))
                 mlp_cv[model] = np.array(model_mlp_cv[var_key]["R2"])[
                     np.array(model_mlp_cv["epochs"]) == models[model][1]
                 ].ravel()
@@ -145,7 +145,7 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
         else:
             try:
                 model_lc_cv = pickle.load(
-                    open(path + "log_class_rand_cv_reg_Train.p", "rb")
+                    open(path + "log_class_rand_cv_Train.p", "rb")
                 )
                 lc_cv[model] = np.array(model_lc_cv[var_key]["Accuracy"])[
                     np.array(model_lc_cv["epochs"]) == models[model][1]
@@ -154,7 +154,7 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
                 lc_cv[model] = np.zeros(5)
 
             try:
-                model_qda_cv = pickle.load(open(path + "qda_rand_cv_reg_Train.p", "rb"))
+                model_qda_cv = pickle.load(open(path + "qda_rand_cv_Train.p", "rb"))
                 qda_cv[model] = np.array(model_qda_cv[var_key]["Accuracy"])[
                     np.array(model_qda_cv["epochs"]) == models[model][1]
                 ].ravel()
@@ -182,57 +182,29 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
 
         gmm_var[model] = []
 
-        if var_key == "ids":
-            for i in tqdm.tqdm(range(3)):
-                for j in range(i + 1, 3):
-                    gmm_var[model] += [
-                        [
-                            mmd_estimate(
-                                z[var_plt == i, :][::100], z[var_plt == j, :][::100]
-                            ),
-                            1,
-                        ]
+    
+        for i in range(n_components):
+            if var_key == "heading":
+                gmm_var[model] += [
+                    [
+                        circvar(var_plt[k_pred == i], high=np.pi, low=-np.pi),
+                        (k_pred == i).sum() / len(k_pred) * n_components,
                     ]
-
-        else:
-            for i in range(n_components):
-                if var_key == "heading":
-                    gmm_var[model] += [
-                        [
-                            circvar(var_plt[k_pred == i], high=np.pi, low=-np.pi),
-                            (k_pred == i).sum() / len(k_pred) * n_components,
-                        ]
+                ]
+            elif var_key == "avg_speed_3d":
+                gmm_var[model] += [
+                    [
+                        np.var(var_plt[k_pred == i]),
+                        (k_pred == i).sum() / len(k_pred) * n_components,
                     ]
-                elif var_key == "avg_speed_3d":
-                    gmm_var[model] += [
-                        [
-                            np.var(var_plt[k_pred == i]),
-                            (k_pred == i).sum() / len(k_pred) * n_components,
-                        ]
-                    ]
-                elif var_key == "ids":
-                    hist = (
-                        np.histogram(
-                            var_plt[k_pred == i],
-                            bins=np.arange(var_plt.max() + 2) - 0.5,
-                        )[0]
-                        / (k_pred == i).sum()
-                    )
-                    entropy = np.nan_to_num(hist * np.log2(1 / hist))
-                    print(entropy)
-                    gmm_var[model] += [
-                        [
-                            entropy.sum(),
-                            (k_pred == i).sum() / len(k_pred) * n_components,
-                        ]
-                    ]
+                ]
 
     ### Plot 5 Fold R2 Decoding
     bar_ax = f.add_subplot(gs[var_ind, :4])
     bar_ax.set_title(
         "5-Fold {} Decoding from Latents".format(titles[var_key]),
         family="Arial",
-        fontsize=14,
+        fontsize=12,
     )
     w = 0.25  # bar width
     # colors = [(0, 0, 1, 1), (1, 0, 0, 1)]    # corresponding colors
@@ -254,8 +226,6 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
             # tick_label=list(lin_cv.keys()),
             label="Linear",
         )
-        print([np.mean(lin_cv[k]) for k in lin_cv.keys()])
-        print(lin_cv.keys())
         for i, key in enumerate(lin_cv.keys()):
             # distribute scatter randomly across whole width of bar
             bar_ax.scatter(
@@ -270,8 +240,6 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
             # tick_label=list(mlp_cv.keys()),
             label="MLP",
         )
-        print([np.mean(mlp_cv[k]) for k in mlp_cv.keys()])
-        print(mlp_cv.keys())
         for i, key in enumerate(mlp_cv.keys()):
             # distribute scatter randomly across whole width of bar
             bar_ax.scatter(
@@ -362,14 +330,14 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
     # Plot Variance
     var_ax = f.add_subplot(gs[var_ind, 4:])
     if var_key == "ids":
-        var_ax.set_title("{} Maximum Mean Discrepancy".format(titles[var_key]),fontsize=14)
+        var_ax.set_title("{} Maximum Mean Discrepancy".format(titles[var_key]),fontsize=12)
         var_ax.set_ylabel("MMD")
         means_to_plt = [np.mean(np.prod(gmm_var[k], axis=-1)) for k in gmm_var.keys()]
     else:
         if var_key == "heading":
-            var_ax.set_title("{} GMM Cluster Circular Variance".format(titles[var_key]), fontsize=14)
+            var_ax.set_title("{} GMM Cluster Circular Variance".format(titles[var_key]), fontsize=12)
         else:
-            var_ax.set_title("{} GMM Cluster Variance".format(titles[var_key]), fontsize=14)
+            var_ax.set_title("{} GMM Cluster Variance".format(titles[var_key]), fontsize=12)
         var_ax.set_ylabel(r"$\sigma^2$")
         means_to_plt = [np.mean(np.prod(gmm_var[k], axis=-1)) for k in gmm_var.keys()]
     # colors = [(0, 0, 1, 1), (1, 0, 0, 1)]    # corresponding colors
@@ -394,4 +362,4 @@ for var_ind, var_key in enumerate(["heading","avg_speed_3d", "ids"]):
         )
 
 f.tight_layout()
-plt.savefig("./results/metrics_final.png",dpi=400)
+plt.savefig("./results/metrics_final_lqc.png",dpi=400)

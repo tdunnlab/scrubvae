@@ -351,8 +351,8 @@ def qda_rand_cv(z_train, y_train, z_test, y_test):
 
 @rand_cv
 def mlp_rand_cv(z_train, y_train, z_test, y_test):
-    model = train_MLP(z_train, y_train, 200)[0]
-    y_pred = model(z_test.cuda()).cpu().detach().numpy()
+    model = train_MLP(torch.tensor(z_train), y_train, 200)[0]
+    y_pred = model(torch.tensor(z_test).cuda()).cpu().detach().numpy()
     r2 = r2_score(y_test, y_pred)
     return r2
 
