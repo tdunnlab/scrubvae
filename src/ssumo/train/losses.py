@@ -4,6 +4,7 @@ from ssumo.data.rotation_conversion import rotation_6d_to_matrix
 from ssumo.data.dataset import fwd_kin_cont6d_torch
 import numpy as np
 import wandb
+
 LN2PI = np.log(2 * np.pi)
 
 
@@ -223,17 +224,16 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
         )
 
     if "root" in loss_scale.keys():
-
         batch_loss["root"] = (
             torch.nn.MSELoss(reduction="sum")(data_o["root"], data["root"]) / batch_size
         )
 
+    # if ("mcmi" in loss_scale.keys()) or ("adversarial_net" in model.disentangle.keys()):
+    #     var = torch.cat([data[k] for k in model.disentangle_keys], dim=-1)
+
     if "mcmi" in loss_scale.keys():
-        variables = torch.cat(
-                        [data[k] for k in model.disentangle_keys], dim=-1
-                    )
         if model.mi_estimator is not None:
-            batch_loss["mcmi"] = model.mi_estimator(data_o["mu"], variables)
+            batch_loss["mcmi"] = model.mi_estimator(data_o["mu"], data_o["var"])
         else:
             batch_loss["mcmi"] = torch.zeros_like(batch_loss["jpe"])
 
@@ -300,6 +300,26 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
                 batch_loss[key + "_ma"] = model.disentangle[method][key].evaluate_loss(
                     latent, data[key]
                 )
+
+            if method == "adversarial_net":
+                var_ind = model.disentangle_keys.index(key)
+                z_aug, var_aug = model.disentangle[method][key].shuffle(
+                    data_o["mu"], data_o["var"], var_ind
+                )
+                y_pred = model.disentangle[method][key].forward(z_aug, var_aug)
+                y = (
+                    torch.tensor([0, 1], device=data_o["mu"].device)[:, None]
+                    .repeat(1, batch_size)
+                    .ravel()
+                )
+                y = torch.nn.functional.one_hot(y, 2).float()
+
+                ce = torch.nn.CrossEntropyLoss(reduction="sum")
+                batch_loss[key + "_an"] = 0
+                for y_ens in y_pred:
+                    batch_loss[key + "_an"] += ce(y_ens, y)
+                    
+                batch_loss[key + "_an"] /= - (len(y_pred) * batch_size)
 
     if "total_correlation" in loss_scale.keys():
         batch_loss["total_correlation"] = total_correlation(

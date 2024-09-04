@@ -311,7 +311,7 @@ def rand_cv(func):
         **kwargs,
     ):
         met = []
-        for shift_i in range(2):
+        for shift_i in range(1):
             start_i = shift_i * (window // 2)
             downsampled_z = z[start_i::window, ...]
             downsampled_y = y_true[start_i::window, ...]
@@ -346,7 +346,7 @@ def log_class_rand_cv(z_train, y_train, z_test, y_test):
     clf = LogisticRegression(
         l1_ratio=0.5,
         penalty="elasticnet",
-        multi_class="multinomial",
+        multi_class="ovr",
         solver="saga",
         max_iter=300,
     ).fit(z_train, y_train.ravel())

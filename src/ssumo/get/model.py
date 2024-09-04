@@ -103,6 +103,15 @@ def model(
                 model_config["z_dim"], discrete_classes[feat]
             )
 
+    if "adversarial_net" in methods.keys():
+        from ssumo.model.disentangle import AdvNetScrubber
+
+        disentangle["adversarial_net"] = {}
+        for feat in methods["adversarial_net"]:
+            disentangle["adversarial_net"][feat] = AdvNetScrubber(
+                model_config["z_dim"] + conditional_dim
+            )
+
     ### Initialize/load model
     if model_config["type"] == "rcnn":
         from ssumo.model.residual import ResVAE
@@ -123,7 +132,7 @@ def model(
             kinematic_tree=kinematic_tree,
             prior=model_config["prior"],
             ch=model_config["channel"],
-            discrete_classes=discrete_classes
+            discrete_classes=discrete_classes,
         )
 
     if verbose > 0:

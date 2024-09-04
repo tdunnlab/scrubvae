@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch
 from torch.nn.functional import mse_loss
 import numpy as np
+import torch.optim as optim
 
 
 class MovingAverageFilter(nn.Module):
@@ -28,7 +29,7 @@ class MovingAverageFilter(nn.Module):
         self.lamdiff = lamdiff
 
     def forward(self, *args, **kwargs):
-        return 
+        return
 
     def evaluate_loss(self, x, y):
         """
@@ -112,7 +113,8 @@ class QuadraticDiscriminantFilter(nn.Module):
                 torch.zeros(n_classes, nx, requires_grad=False),
             )
             self.register_buffer(
-                "S{}".format(name), torch.eye(nx, requires_grad=False)[None,:].repeat(n_classes, 1, 1)
+                "S{}".format(name),
+                torch.eye(nx, requires_grad=False)[None, :].repeat(n_classes, 1, 1),
             )
 
         self.register_buffer("lama", torch.ones(n_classes, requires_grad=False) * 0.2)
@@ -122,7 +124,7 @@ class QuadraticDiscriminantFilter(nn.Module):
         self.lamdiff = lamdiff
 
     def forward(self, *args, **kwargs):
-        return 
+        return
 
     def cgll(self, x, m, S):
         """
@@ -211,17 +213,13 @@ class QuadraticDiscriminantFilter(nn.Module):
             # If classifier A is better than B, we decrease the forgetting factors
             # by self.delta
             if update and (lla > llb):
-                self.lama[i] = torch.clamp(
-                        self.lama[i] - self.delta, 0.0, 1.0
-                    )
+                self.lama[i] = torch.clamp(self.lama[i] - self.delta, 0.0, 1.0)
                 self.lamb[i] = self.lama[i] + self.lamdiff
 
             # If classifier B is better than A, we decrease the forgetting factors
             # by self.delta
             elif update:
-                self.lamb[i] = torch.clamp(
-                        self.lamb[i] + self.delta, 0.0, 1.0
-                    )
+                self.lamb[i] = torch.clamp(self.lamb[i] + self.delta, 0.0, 1.0)
                 self.lama[i] = self.lamb[i] - self.lamdiff
 
             # Return average log-likelihood ratios of the two linear decoders
@@ -233,10 +231,18 @@ class QuadraticDiscriminantFilter(nn.Module):
 
         return ll_loss / len(self.classes)
 
+
 class MovingAvgLeastSquares(nn.Module):
 
     def __init__(
-        self, nx, ny, lamdiff=1e-1, delta=1e-4, bias=False, polynomial_order=1, l2_reg = 0,
+        self,
+        nx,
+        ny,
+        lamdiff=1e-1,
+        delta=1e-4,
+        bias=False,
+        polynomial_order=1,
+        l2_reg=0,
     ):
         super().__init__()
         self.bias = bias
@@ -296,7 +302,7 @@ class MovingAvgLeastSquares(nn.Module):
         idx = torch.arange(x.shape[1], dtype=torch.long, device=x.device)
         for i in range(1, self.polynomial_order):
             C_idx = torch.combinations(idx, i + 1, with_replacement=True)
-            x_list += [x[:, C_idx].prod(dim=-1)/len(C_idx)*n_features]
+            x_list += [x[:, C_idx].prod(dim=-1) / len(C_idx) * n_features]
 
         return torch.column_stack(x_list)
 
@@ -311,8 +317,12 @@ class MovingAvgLeastSquares(nn.Module):
             l2_reg = torch.ones(x.shape[1], device=x.device) * self.l2_reg
 
         # Solve optimal decoder weights (normal equations)
-        W0 = torch.linalg.solve(self.Sxx0.diagonal_scatter(self.Sxx0.diagonal() + l2_reg), self.Sxy0)
-        W1 = torch.linalg.solve(self.Sxx1.diagonal_scatter(self.Sxx1.diagonal() + l2_reg), self.Sxy1)
+        W0 = torch.linalg.solve(
+            self.Sxx0.diagonal_scatter(self.Sxx0.diagonal() + l2_reg), self.Sxy0
+        )
+        W1 = torch.linalg.solve(
+            self.Sxx1.diagonal_scatter(self.Sxx1.diagonal() + l2_reg), self.Sxy1
+        )
 
         # Predicted values for y
         yhat0 = x @ W0
@@ -412,21 +422,21 @@ class MLP(nn.Module):
         return self.mlp(z)
 
 
+# class MLPEnsemble(nn.Module):
+#     def __init__(self, in_dim, out_dim, n_models=3):
+#         super(MLPEnsemble, self).__init__()
+#         mlp_list = []
+#         for i in range(n_models):
+#             mlp_list += [MLP(in_dim, out_dim)]
+#         self.ensemble = nn.ModuleList(mlp_list)
+
+#     def forward(self, z):
+#         return [mlp(z) for mlp in self.ensemble]
+
+
 class MLPEnsemble(nn.Module):
-    def __init__(self, in_dim, out_dim, n_models=3):
-        super(MLPEnsemble, self).__init__()
-        mlp_list = []
-        for i in range(n_models):
-            mlp_list += [MLP(in_dim, out_dim)]
-        self.ensemble = nn.ModuleList(mlp_list)
-
-    def forward(self, z):
-        return [mlp(z) for mlp in self.ensemble]
-
-
-class ReversalEnsemble(nn.Module):
     def __init__(self, in_dim, out_dim, bound=False):
-        super(ReversalEnsemble, self).__init__()
+        super(MLPEnsemble, self).__init__()
 
         # self.lin = nn.Sequential(
         #     nn.Linear(in_dim, out_dim),
@@ -480,7 +490,7 @@ class GRScrubber(nn.Module):
     def __init__(self, in_dim, out_dim, alpha=1.0, bound=False):
         super(GRScrubber, self).__init__()
         self.reversal = nn.Sequential(
-            GradientReversalLayer(alpha), ReversalEnsemble(in_dim, out_dim, bound)
+            GradientReversalLayer(alpha), MLPEnsemble(in_dim, out_dim, bound)
         )
 
     def forward(self, z):
@@ -502,6 +512,61 @@ class GRScrubber(nn.Module):
         for head in self.reversal[1].mlp4:
             if isinstance(head, nn.Linear):
                 head.reset_parameters()
+
+
+class AdvNetScrubber(nn.Module):
+    def __init__(self, in_dim):
+        super(AdvNetScrubber, self).__init__()
+        self.ensemble = MLPEnsemble(in_dim, 2, False)
+        self.optimizer = optim.AdamW(self.parameters(), lr=0.1)
+        self.soft_max = nn.Softmax(-1)
+
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def forward(self, z, v):
+        z = torch.cat([z, v], dim=-1)
+        y = [self.soft_max(y_i) for y_i in self.ensemble(z)]
+        return y
+
+    def shuffle(self, z, v, v_ind):
+        v_shuffle = v.clone()
+        v_shuffle[:, v_ind] = v[torch.randperm(len(z)), v_ind]
+        v_aug = torch.cat([v, v_shuffle], dim=0)
+        z_aug = z.repeat(2, 1)
+
+        return z_aug, v_aug
+
+    def fit(self, z, v, v_ind, y=None, n_iter=5):
+        for param in self.parameters():
+            param.requires_grad = True
+        if y is None:
+            y = (
+                torch.tensor([0, 1], device=z.device)[:, None]
+                .repeat(1, z.shape[0])
+                .ravel()
+            )
+            y = nn.functional.one_hot(y, 2).float()
+
+        with torch.enable_grad():
+            for _ in range(n_iter):
+                for param in self.parameters():
+                    param.grad = None
+
+                z_aug, v_aug = self.shuffle(z, v, v_ind)
+                y_pred = self.forward(z_aug, v_aug)
+                ce = nn.CrossEntropyLoss(reduction="sum")
+                loss = 0
+                for y_ens in y_pred:
+                    loss += ce(y_ens, y)
+
+                (loss / len(y_pred) / z.shape[0]).backward()
+                self.optimizer.step()
+
+        for param in self.parameters():
+            param.requires_grad = False
+        return self.eval()
+
 
 class LinearProjection(nn.Module):
     def __init__(
@@ -554,7 +619,7 @@ class LinearDisentangle(nn.Module):
         elif reversal == "ensemble":
             if (n_models == None) or (n_models == 0):
                 self.reversal = nn.Sequential(
-                    GradientReversalLayer(alpha), ReversalEnsemble(in_dim, out_dim)
+                    GradientReversalLayer(alpha), MLPEnsemble(in_dim, out_dim)
                 )
             else:
                 self.reversal = nn.Sequential(

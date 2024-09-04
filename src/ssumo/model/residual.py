@@ -297,9 +297,9 @@ class VAE(nn.Module):
         super(VAE, self).__init__()
         self.prior = prior
         if prior == "gaussian":
-            self.dist_params = ["mu","L"]
+            self.dist_params = ["mu", "L"]
         elif prior == "beta":
-            self.dist_params = ["alpha","beta"]
+            self.dist_params = ["alpha", "beta"]
         return self
 
     def sampling(self, mu, L):
@@ -318,12 +318,18 @@ class VAE(nn.Module):
     def forward(self, data):
         data_o = self.encode(data)
         if self.prior == "gaussian":
-            z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
+            z = (
+                self.sampling(data_o["mu"], data_o["L"])
+                if self.training
+                else data_o["mu"]
+            )
         elif self.prior == "beta":
             beta_dist = torch.distributions.Beta(data_o["alpha"], data_o["beta"])
             data_o["beta_dist"] = beta_dist
-            z = beta_dist.rsample()*2-1
+            z = beta_dist.rsample() * 2 - 1
         data_o["z"] = z
+
+        data_o.update(self.decode(z, data))
 
         # Running disentangle
         data_o["disentangle"] = {}
@@ -335,6 +341,7 @@ class VAE(nn.Module):
 
         for method, module_dict in self.disentangle.items():
             if method == "linear":
+                ## Placeholder for if we reimplement in the future
                 continue
             else:
                 data_o["disentangle"][method] = {}
@@ -343,13 +350,10 @@ class VAE(nn.Module):
                         latent = data_o["disentangle"]["linear"][k]["z_null"]
                     else:
                         latent = data_o["mu"]
-                    data_o["disentangle"][method][k] = model(latent)
-
-            # data_o["disentangle"][method] = {k: model(latent) for k, model in module_dict.items()}
-        #     k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
-        # }
-
-        data_o.update(self.decode(z, data))
+                    if method == "adversarial_net":
+                        data_o["disentangle"][method][k] = model(latent, data_o["var"])
+                    else:
+                        data_o["disentangle"][method][k] = model(latent)
 
         return data_o
 
@@ -441,7 +445,9 @@ class ResVAE(VAE):
         )
 
         if self.prior == "beta":
-            data_o["mu"] = (data_o["alpha"]-1+1e-8)/(data_o["alpha"] + data_o["beta"] - 2 + 2e-8)*2-1
+            data_o["mu"] = (data_o["alpha"] - 1 + 1e-8) / (
+                data_o["alpha"] + data_o["beta"] - 2 + 2e-8
+            ) * 2 - 1
 
         # if torch.any(torch.isnan(data_o["mu"])):
         #     import pdb; pdb.set_trace()
@@ -450,7 +456,7 @@ class ResVAE(VAE):
     def decode(self, z, data):
         data_o = {}
         if self.conditional_dim > 0:
-            conditional_vars = [
+            data_o["var"] = [
                 (
                     F.one_hot(data[k].ravel().long(), len(self.discrete_classes[k]))
                     if k in self.discrete_classes.keys()
@@ -458,8 +464,9 @@ class ResVAE(VAE):
                 )
                 for k in self.conditional_keys
             ]
+            data_o["var"] = torch.cat(data_o["var"], dim=-1)
             z = torch.cat(
-                [z] + conditional_vars,
+                [z, data_o["var"]],
                 dim=-1,
             )
 

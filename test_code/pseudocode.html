@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>pseudocode.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<p>Given a latent variable, $z_t \in \mathbb{R}^D$ sampled from an encoder network, $q_\phi(\cdot \mid \mathbf{x}_t)$, and a disentanglement variable, $v_t \in \mathbb{R}^N$, we seek to minimize</p>
+<p>$L_\text{scrub}(\phi) = \max_\psi[\mathbb{E}_{\mathbf{x}<em>t, \mathbf{v}<em>t} [\mathbb{E}</em>{\mathbf{z_t}\sim q</em>\phi(\cdot\mid\mathbf{x}_t)}[\log p(\mathbf{v}<em>t \mid f</em>\psi(\mathbf{z}_t))]]]$</p>
+<p>where $f_\psi(\cdot)$ is an adversarial decoder that aims to maximize the log-likelihood of $\mathbf{v}_t$ given $\mathbf{z}_t$. Below, we describe the process.</p>
+<h3 id="algorithm-1-sc-vae-mals"><strong>Algorithm 1: SC-VAE-MALS</strong></h3>
+<p>We consider a linear decoder, $f_{\psi}(\mathbf{z}) = \psi \mathbf{z} = \mathbf{\hat{v}}$, where $\psi = \psi^{(0)}(\psi^{(1)})^{-1}$, which can be evaluated using mean squared error, $L(\mathbf{z}, \mathbf{v}; \psi) = ||\mathbf{v} - f_{\psi_a}(\mathbf{z})||^2_2$.</p>
+<p>$\phi, \theta \leftarrow$ Initialize parameters of the network</p>
+<p>$\psi_a, \psi_b \in \mathbb{R}^{N\times D} \leftarrow$ Initialize parameters of two linear decoders</p>
+<p>Initialize forgetting factors with fixed offset, $\epsilon$</p>
+<p>$\lambda_a \leftarrow \alpha \in (0, 1-\epsilon)$</p>
+<p>$\lambda_b \leftarrow \lambda_a + \epsilon$</p>
+<p><strong>repeat</strong></p>
+<p>Draw minibatch with $K$ samples: $(\mathbf{x_k}, \mathbf{v_k} \in \mathbb{R}^{N\times K})$</p>
+<p>$\mathbf{z_k} \sim q_\phi(\cdot \mid \mathbf{x_k}) \in \mathbb{R}^{D\times K}$</p>
+<p>Calculate mean squared error for each decoder and average for scrubbing loss</p>
+<p>$L_\text{scrub} = -\frac{1}{2}[L(\mathbf{z_k}, \mathbf{v_k}; \psi_a) + L(\mathbf{z_k}, \mathbf{v_k}; \psi_b)]$</p>
+<p>Forgetting factors step by $\Delta$ in the direction of the better decoder between $f_{\psi_a}$ and $f_{\psi_b}$</p>
+<p><strong>if</strong> $L(\mathbf{z_k}, \mathbf{v_k}; \psi_a) &gt; L(\mathbf{z_k}, \mathbf{v_k}; \psi_b)$</p>
+<p>$\lambda_a = max(\lambda_a - \Delta, 0), \lambda_b = \lambda_a + \epsilon$</p>
+<p><strong>else</strong></p>
+<p>$\lambda_b = min(\lambda_b + \Delta, 1), \lambda_a = \lambda_b - \epsilon$</p>
+<p><strong>end if</strong></p>
+<p>Update $\psi_a$ and $\psi_b$ based on the normal equations for ordinary least squares regression</p>
+<p>$\psi_a = [\mathbf{v_k} \mathbf{z_k}^\top + \lambda_a \psi_a^{(0)}] \left ([\mathbf{z_k} \mathbf{z_k}^\top + \lambda_a \psi_a^{(1)}] \right )^{-1}$</p>
+<p>$\psi_b = [\mathbf{v_k} \mathbf{z_k}^\top + \lambda_b \psi_b^{(0)}] \left ([\mathbf{z_k} \mathbf{z_k}^\top + \lambda_b \psi_b^{(1)}] \right )^{-1}$</p>
+<p>Update network parameters</p>
+<p>$\phi \leftarrow \phi + \nabla[L_\text{scrub} + L_\text{ELBO} + L_\text{Recon}]$</p>
+<p>$\theta \leftarrow \theta + \nabla[ L_\text{Recon}]$</p>
+<p><strong>until</strong> convergence</p>
+<h3 id="algorithm-2-sc-vae-qd"><strong>Algorithm 2: SC-VAE-QD</strong></h3>
+<p>We consider the class-conditional Bayesian classifier, $f_{\psi}(\mathbf{z}) = p(v=c|\mathbf{z})$, with likelihood, $p(z|v=c) = Normal(\mathbf{z} | \mu^{(c)}, \Sigma^{(c)} )$. For multi-class problems, we maintain the <em>one vs rest</em> estimator per class where $\psi = { \mu^{(c)}, \Sigma^{(c)}, \mu^{(c')}, \Sigma^{(c')} \ \forall \ c \in C}$. This estimator can be evaluated per class based on the Gaussian log-likelihood, $L(\mathbf{z}, v; \psi^{(c)}) = \ell (\mu_{a}^{(c)}, \Sigma_{a}^{(c)} | \mathbf{z}, v=c) - \ell (\mu_{a}^{(c')}, \Sigma_{a}^{(c')} | \mathbf{z}, v\neq c)$.</p>
+<p>$\phi, \theta \leftarrow$ Initialize parameters of the network</p>
+<p>$\psi_a, \psi_b \leftarrow$ Initialize parameters of two quadratic discriminants</p>
+<p>$\lambda_a \leftarrow \alpha \overrightarrow{\mathbf{1}}_C, \ \alpha \in (0, 1-\epsilon)$</p>
+<p>$\lambda_b \leftarrow \lambda_a + \epsilon\overrightarrow{\mathbf{1}}_C$</p>
+<p><strong>repeat</strong></p>
+<p>Draw minibatch with $K$ samples: $(\mathbf{x_k}, \mathbf{v_k})$</p>
+<p>$\mathbf{z_k} \sim q_\phi(\cdot \mid \mathbf{x_k}) \in \mathbb{R}^{D\times K}$</p>
+<p>$L_\text{scrub} \leftarrow 0$</p>
+<p><strong>for</strong> $c \in C$</p>
+<p>Evaluate the Gaussian log-likelihood ratio for each quadratic classifier and average for the scrubbing loss</p>
+<!-- $L_a = \frac{1}{K} \sum_K \ell (\mu_{a, c}, \Sigma_{a, c} | \mathbf{z}_k) - \ell (\mu_{a, c'}, \Sigma_{a, c'} | \mathbf{z}_k)$
+
+$L_b =\frac{1}{K} \sum_K \ell (\mu_{b, c}, \Sigma_{b, c} | \mathbf{z}_k) - \ell (\mu_{b, c'}, \Sigma_{b, c'} | \mathbf{z}_k)$ -->
+<p>$L_\text{scrub} = L_\text{scrub} + \frac{1}{2K} \sum_K [L(\mathbf{z}_k, v_k; \psi^{(c)}_a) + L(\mathbf{z}_k, v_k; \psi^{(c)}_b)]$</p>
+<p>Forgetting factors step by $\Delta$ in the direction of the better classifier between $f_{\psi_a}$ and $f_{\psi_b}$</p>
+<p><strong>if</strong> $\frac{1}{K} \sum_K L(\mathbf{z}_k, v_k; \psi^{(c)}_a) &gt; \frac{1}{K} \sum_K L(\mathbf{z}_k, v_k; \psi^{(c)}_b)$</p>
+<p>$\lambda_{a}^{(c)} = max(\lambda_{a}^{(c)} - \Delta, 0), \ \lambda_{b}^{(c)} = \lambda_{a}^{(c)} + \epsilon$</p>
+<p><strong>else</strong></p>
+<p>$\lambda_{b}^{(c)} = min(\lambda_{b}^{(c)} + \Delta, 1), \ \lambda_{a}^{(c)} = \lambda_{b}^{(c)} - \epsilon$</p>
+<p><strong>end if</strong></p>
+<p>Update class means and covariances for both estimators</p>
+<p><strong>for</strong> $i = [a, b]$</p>
+<p>$\mu_i^{(c)} = \mathbb{E}<em>{\mathbf{v_k} = c}[\mathbf{z_k}] + \lambda</em>{i}^{(c)} \mu^{(c)}$</p>
+<p>$\Sigma_i^{(c)} = \text{Cov}_{\mathbf{v_k} = c}[\mathbf{z_k}, \mathbf{z_k}]$</p>
+<p>$\mu_i^{(c')} = \mathbb{E}<em>{\mathbf{v_k} \neq c}[\mathbf{z_k}] + \lambda</em>{i}^{(c')} \mu^{(c')}$</p>
+<p>$\Sigma_i^{(c')} = \text{Cov}_{\mathbf{v_k} \neq c}[\mathbf{z_k}, \mathbf{z_k}]$</p>
+<p><strong>end for</strong></p>
+<p><strong>end for</strong></p>
+<p>Update network parameters:</p>
+<p>$\phi \leftarrow \phi + \nabla[L_\text{scrub} + L_\text{ELBO} + L_\text{Recon}]$</p>
+<p>$\theta \leftarrow \theta + \nabla[ L_\text{Recon}]$</p>
+<p><strong>until</strong> convergence</p>
+
+</body>
+</html>
