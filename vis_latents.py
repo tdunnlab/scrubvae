@@ -73,7 +73,6 @@ if vis_clusters:
         )[0]
     )
 
-
     ssumo.plot.sample_clusters(
         loader.dataset[:]["raw_pose"].detach().cpu().numpy(),
         k_pred,
@@ -141,7 +140,6 @@ if vis_clusters:
 
 #     pdb.set_trace()
 
-
 # #### Generate actions modifying 1 latent dimension at a time
 # def adjust_single_dim(
 #     base_latent, latent_means, latent_std, model, window, mean_offsets, out_path
@@ -178,7 +176,6 @@ if vis_clusters:
 #             VID_NAME="latent_{}.mp4".format(i),
 #             SAVE_ROOT=out_path,
 #         )
-
 
 # if gen_actions:
 #     adjust_single_dim(

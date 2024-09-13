@@ -30,12 +30,20 @@ def data_and_model(
             normalize=config["disentangle"]["features"],
             norm_params=None,
         )
-
+        test_config = config["data"]
+        test_config["stride"] = 1
         loader2 = ssumo.get.mouse_data(
-            data_config=config["data"],
+            data_config=test_config,
             window=config["model"]["window"],
             train=False,
-            data_keys=["x6d", "root", "offsets", "target_pose", "avg_speed_3d", "heading"],
+            data_keys=[
+                "x6d",
+                "root",
+                "offsets",
+                "target_pose",
+                "avg_speed_3d",
+                "heading",
+            ],
             shuffle=False,
             normalize=["avg_speed_3d"],
             norm_params=loader1.dataset.norm_params,

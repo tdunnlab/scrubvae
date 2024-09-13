@@ -301,6 +301,36 @@ def mouse_data(
         norm_params=norm_params,
     )
 
+    if not train:
+        vanilla_path = "/mnt/home/jwu10/working/ceph/results/vae/vanilla_64/"
+        gmm_dict = {
+            "midfwd_train": [
+                "{}2/vis_latents_train/z_300_gmm.npy".format(vanilla_path),
+                [1, 4, 8, 38, 41, 44],
+            ],
+            "midfwd_test": [
+                "{}test/vis_latents/z_600_gmm.npy".format(vanilla_path),
+                [8, 23, 30, 34, 35, 37, 46], # 23, 30
+            ],
+            "x360_test": [
+                "{}test_x360/vis_latents/z_600_gmm.npy".format(vanilla_path),
+                [],
+            ]
+        }
+
+        dataset.gmm_pred = {"midfwd_test": np.load(gmm_dict["midfwd_test"][0])}
+        dataset.walking_clusters = {k:v[1] for k,v in gmm_dict.items()}
+
+        ## Pre-randomize avg speed to maintain overall distribution of speeds
+        dataset.data["avg_speed_3d_rand"] = dataset[:]["avg_speed_3d"][
+            torch.randperm(
+                len(dataset), generator=torch.Generator().manual_seed(100)
+            )
+        ]
+
+        if data_config["direction_process"]:
+            dataset.gmm_pred["x360_test"] = np.load(gmm_dict["x360_test"][0])
+
     loader = DataLoader(
         dataset=dataset,
         batch_size=data_config["batch_size"],

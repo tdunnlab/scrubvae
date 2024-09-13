@@ -228,9 +228,6 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
             torch.nn.MSELoss(reduction="sum")(data_o["root"], data["root"]) / batch_size
         )
 
-    # if ("mcmi" in loss_scale.keys()) or ("adversarial_net" in model.disentangle.keys()):
-    #     var = torch.cat([data[k] for k in model.disentangle_keys], dim=-1)
-
     if "mcmi" in loss_scale.keys():
         if model.mi_estimator is not None:
             batch_loss["mcmi"] = model.mi_estimator(data_o["mu"], data_o["var"])

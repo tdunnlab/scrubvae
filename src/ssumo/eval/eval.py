@@ -22,9 +22,9 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
     if key == "heading":
         data["heading"] = torch.rand(
             data["heading"].shape,
-            device=data["heading"].device,
-            generator=torch.Generator(device=data["heading"].device).manual_seed(100),
-        )
+            device=data["heading"].device)
+        #     generator=torch.Generator(device=data["heading"].device).manual_seed(100),
+        # )
         data["heading"] /= torch.linalg.norm(data["heading"], dim=-1, keepdim=True)
     elif key == "avg_speed_3d":
         data["avg_speed_3d"] = data["avg_speed_3d_rand"]

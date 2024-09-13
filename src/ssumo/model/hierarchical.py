@@ -1,3 +1,181 @@
+import torch.nn as nn
+import torch.nn.functional as F
+import torch
+
+def find_latent_dim(
+    window_size: int, kernel: int, num_layers: int, dilation=torch.ones(4)
+):
+    stride = 1 if any(dilation > 1) else 2
+    layer_out = (
+        lambda l_in, dil: (l_in + 2 * (kernel // 2) - dil * (kernel - 1) - 1) / stride
+        + 1
+    )
+
+    l_out = window_size
+    for i in range(num_layers):
+        l_out = layer_out(l_out, dilation[i])
+
+    return int(l_out)
+
+
+def find_out_dim(latent_dim: int, kernel: int, num_layers: int, dilation=torch.ones(4)):
+    stride = 1 if any(dilation > 1) else 2
+    layer_out = (
+        lambda l_in, dil: (l_in - 1) * stride
+        - 2 * (kernel // 2)
+        + dil * (kernel - 1)
+        + 1
+    )
+    l_out = latent_dim
+    for i in range(num_layers):
+        l_out = layer_out(l_out, dilation[-i])
+
+    return int(l_out)
+
+
+class CholeskyL(nn.Module):
+    def __init__(
+        self,
+        z_dim: torch.Tensor,
+        is_diag: bool,
+    ):
+        """
+        Reshapes x input into lower triangle positive definite matrix, L.
+        Such that LL^T = \Sigma
+
+        Option of only creating diagonal L
+        """
+        super(CholeskyL, self).__init__()
+        self.z_dim = z_dim
+        self.is_diag = is_diag
+        # embed the elements into the matrix
+        if is_diag:
+            self.idxs = torch.arange(z_dim)[None, :].repeat(2, 1)
+        else:
+            self.idxs = torch.tril_indices(z_dim, z_dim)
+
+    def forward(self, x):
+        L = torch.zeros(x.shape[0], self.z_dim, self.z_dim, device=x.device)
+        L[:, self.idxs[0], self.idxs[1]] = x
+        # apply softplus to the diagonal entries to guarantee the resulting
+        # matrix is positive definite
+        new_diagonals = F.softplus(L.diagonal(dim1=-2, dim2=-1))
+        L = L.diagonal_scatter(new_diagonals, dim1=-2, dim2=-1)
+        # reshape y_hat so we can concatenate it to L
+        return L
+
+
+class ResidualBlock(nn.Module):
+    def __init__(
+        self, in_channels, out_channels, kernel=5, activation="prelu", dilation=1
+    ):
+        stride = 1 if dilation > 1 else 2
+
+        super(ResidualBlock, self).__init__()
+        self.residual = nn.Sequential(
+            nn.Conv1d(
+                in_channels,
+                out_channels // 2,
+                kernel,
+                stride,
+                kernel // 2,
+                dilation=dilation,
+                bias=True,
+            ),
+            nn.BatchNorm1d(out_channels // 2, eps=1e-4),
+            nn.Tanh() if activation == "tanh" else nn.PReLU(),
+            nn.Conv1d(
+                out_channels // 2,
+                out_channels,
+                kernel,
+                1,
+                kernel // 2,
+                dilation=1,
+                bias=True,
+            ),
+        )
+
+        self.skip = nn.Conv1d(
+            in_channels,
+            out_channels,
+            kernel,
+            stride,
+            kernel // 2,
+            dilation=dilation,
+            bias=True,
+        )
+
+        self.add = nn.Sequential(
+            nn.BatchNorm1d(out_channels, eps=1e-4),
+            nn.Tanh() if activation == "tanh" else nn.PReLU(),
+        )
+
+    def forward(self, x):
+        skip = self.skip(x)
+        x = self.residual(x)
+        return self.add(x + skip)
+
+
+class ResidualBlockTranspose(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel=5,
+        scale_factor=2,
+        activation="prelu",
+        dilation=1,
+    ):
+        super(ResidualBlockTranspose, self).__init__()
+
+        stride = 1 if dilation > 1 else 2
+
+        self.residual = nn.Sequential(
+            nn.ConvTranspose1d(
+                in_channels,
+                in_channels // 2,
+                kernel,
+                1,
+                kernel // 2,
+                dilation=1,
+                bias=True,
+            ),
+            nn.BatchNorm1d(in_channels // 2, eps=1e-4),
+            nn.Tanh() if activation == "tanh" else nn.PReLU(),
+            nn.ConvTranspose1d(
+                in_channels // 2,
+                out_channels,
+                kernel,
+                stride,
+                kernel // 2,
+                dilation=dilation,
+                bias=True,
+            ),
+        )
+
+        self.skip = nn.Sequential(
+            nn.Upsample(scale_factor=scale_factor, mode="linear", align_corners=False),
+            nn.Conv1d(
+                in_channels,
+                out_channels,
+                (kernel + 1),
+                1,
+                kernel // 2,
+                dilation=dilation,
+                bias=True,
+            ),
+        )
+
+        self.add = nn.Sequential(
+            nn.BatchNorm1d(out_channels, eps=1e-4),
+            nn.Tanh() if activation == "tanh" else nn.PReLU(),
+        )
+
+    def forward(self, x):
+        skip = self.skip(x)
+        x = self.residual(x)
+        return self.add(x + skip)
+
 
 class HierarchicalResidualEncoder(nn.Module):
     def __init__(

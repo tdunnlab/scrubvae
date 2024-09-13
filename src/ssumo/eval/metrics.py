@@ -39,7 +39,7 @@ def epoch_metric(func):
             epochs_to_test = [
                 e
                 for e in get.all_saved_epochs(path)
-                if (e not in metrics["epochs"])  # and (e > 100)
+                if (e not in metrics["epochs"]) and (e > 100)
             ]
             metrics["epochs"] = np.concatenate(
                 [metrics["epochs"], epochs_to_test]
@@ -52,7 +52,7 @@ def epoch_metric(func):
             # else:
             #     metrics = {k: {"R2": [], "R2_Null": []} for k in disentangle_keys}
             metrics = {
-                "epochs": [e for e in get.all_saved_epochs(path)]  # if (e > 100)]
+                "epochs": [e for e in get.all_saved_epochs(path) if (e > 100)]
             }  # if (e>100)]
             epochs_to_test = metrics["epochs"]
 
@@ -441,7 +441,7 @@ def train_MLP(z, y_true, num_epochs=200):
     optimizer = optim.AdamW(model.parameters(), lr=0.1)
     model.train()
     with torch.enable_grad():
-        for epoch in trange(num_epochs):
+        for epoch in range(num_epochs):
             for param in model.parameters():
                 param.grad = None
             output = model(z)
@@ -501,3 +501,16 @@ def mmd_estimate(X, Y, h=None):
     kyy = np.mean(np.exp(-(yd**2) / h))
     kxy = np.mean(np.exp(-(xyd**2) / h))
     return kxx + kyy - 2 * kxy
+
+
+def shannon_entropy(x):
+    counts = np.unique(x, return_counts=True)[1]
+    hist = counts / counts.sum()
+    entropy = (hist * np.log(1 / hist)).sum()
+    return entropy
+
+
+def shannon_entropy_torch(x, bins, range):
+    hist = torch.histogram(x, bins=bins, range=range)[0]
+    entropy = torch.nan_to_num(x * torch.log(1 / hist)).sum()
+    return entropy

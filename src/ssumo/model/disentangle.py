@@ -315,7 +315,7 @@ class MovingAvgLeastSquares(nn.Module):
             l2_reg[-1] = 0
         else:
             l2_reg = torch.ones(x.shape[1], device=x.device) * self.l2_reg
-
+        import pdb; pdb.set_trace()
         # Solve optimal decoder weights (normal equations)
         W0 = torch.linalg.solve(
             self.Sxx0.diagonal_scatter(self.Sxx0.diagonal() + l2_reg), self.Sxy0
