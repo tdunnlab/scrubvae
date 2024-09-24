@@ -129,7 +129,7 @@ def get_speed_parts(pose, parts):
     print("Getting speed by body parts")
     root_spd = np.diff(pose[:, 0, :], n=1, axis=0, prepend=pose[0:1, 0, :]) ** 2
     dxyz = np.zeros((len(root_spd), len(parts) + 1))
-    dxyz[:, 0] = np.sqrt(root_spd.sum(axis=-1))
+    dxyz[:, 0] = np.sqrt(root_spd).sum(axis=-1)
 
     centered_pose = preprocess.center_spine(pose, keypt_idx=0)
     # ego_pose = preprocess.rotate_spine(
