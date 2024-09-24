@@ -509,6 +509,11 @@ def shannon_entropy(x):
     entropy = (hist * np.log(1 / hist)).sum()
     return entropy
 
+# def shannon_entropy(x, bins=50, range=(-0.5, 49.5)):
+#     hist = np.histogram(x, bins, range, density=True)[0]
+#     entropy = np.nan_to_num(hist * np.log(1 / hist)).sum()
+#     return entropy
+
 
 def shannon_entropy_torch(x, bins, range):
     hist = torch.histogram(x, bins=bins, range=range)[0]

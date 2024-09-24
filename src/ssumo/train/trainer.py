@@ -25,7 +25,9 @@ import numpy as np
 from pandas import crosstab
 from scipy.optimize import linear_sum_assignment
 import numpy.typing as npt
-from torch.profiler import profile, record_function, ProfilerActivity
+# from torch.profiler import profile, record_function, ProfilerActivity
+from line_profiler import profile
+
 
 class CyclicalBetaAnnealing(torch.nn.Module):
     def __init__(self, beta_max=1, len_cycle=100, R=0.5):
@@ -66,30 +68,39 @@ def predict_batch(model, data, disentangle_keys=None):
 
 
 def get_optimizer_and_lr_scheduler(
-    model, optimization="adamw", lr_schedule="cawr", lr=1e-7
+    model, train_config, load_path=None, start_epoch=None
 ):
-    if optimization == "adam":
+    if train_config["optimizer"] == "adam":
         print("Initializing Adam optimizer ...")
-        optimizer = optim.Adam(model.parameters(), lr=lr)
-    elif optimization == "adamw":
+        optimizer = optim.Adam(model.parameters(), lr=train_config["lr"])
+    elif train_config["optimizer"] == "adamw":
         print("Initializing AdamW optimizer ...")
-        optimizer = optim.AdamW(model.parameters(), lr=lr)
-    elif optimization == "sgd":
+        optimizer = optim.AdamW(model.parameters(), lr=train_config["lr"])
+    elif train_config["optimizer"] == "sgd":
         print("Initializing SGD optimizer ...")
-        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.2, nesterov=True)
+        optimizer = optim.SGD(
+            model.parameters(), lr=train_config["lr"], momentum=0.2, nesterov=True
+        )
     else:
         raise ValueError("No valid optimizer selected")
 
-    if lr_schedule == "cawr":
+    if train_config["lr_schedule"] == "cawr":
         print("Initializing cosine annealing w/warm restarts learning rate scheduler")
         scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50)
-    elif lr_schedule is None:
+    elif train_config["lr_schedule"] is None:
         print("No learning rate scheduler selected")
         scheduler = None
 
+    if load_path is not None:
+        checkpoint = torch.load(
+            "{}/checkpoints/epoch_{}.pth".format(load_path, start_epoch)
+        )
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        scheduler = checkpoint["lr_scheduler"]
+
     return optimizer, scheduler
 
-
+@profile
 def train_test_epoch(
     config,
     model,
@@ -145,8 +156,9 @@ def train_test_epoch(
                                 )
 
             if get_z:
-                z += [data_o["mu"].clone().detach().cpu()]
+                z += [data_o["mu"].clone().detach()]
 
+            # print(config["loss"])
             batch_loss = get_batch_loss(
                 model,
                 data,
@@ -154,6 +166,8 @@ def train_test_epoch(
                 config["loss"],
                 config["disentangle"],
             )
+            # print(batch_loss)
+            # import pdb; pdb.set_trace()
 
             # if "mcmi" in config["loss"]:
             #     var = torch.cat(
@@ -224,7 +238,9 @@ def train_test_epoch(
         for k, v in epoch_metrics.items():
             epoch_metrics[k] = v.item() / len(loader)
             print(
-                "====> Epoch: {} Average {} loss: {:.4f}".format(epoch, k, epoch_metrics[k])
+                "====> Epoch: {} Average {} loss: {:.4f}".format(
+                    epoch, k, epoch_metrics[k]
+                )
             )
 
     if get_z:
@@ -279,8 +295,7 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
 
             data_o = predict_batch(model, data, model.disentangle_keys)
 
-            z += [data_o["mu"].clone().detach().cpu()]
-
+            z += [data_o["mu"].clone().detach()]
             batch_metrics = get_batch_loss(
                 model,
                 data,
@@ -324,7 +339,7 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
             torch.cat(gen_res[key]["pred"], dim=0),
         )
 
-    return epoch_metrics, torch.cat(z, dim=0)
+    return epoch_metrics, torch.cat(z, dim=0).cpu()
 
 
 def train_epoch(config, model, loader, optimizer, scheduler, device="cuda", epoch=0):
@@ -342,17 +357,18 @@ def train_epoch(config, model, loader, optimizer, scheduler, device="cuda", epoc
 
     return epoch_metrics
 
-
+@profile
 def train(config, model, train_loader, test_loader, run=None):
-    torch.autograd.set_detect_anomaly(True)
+    torch.set_float32_matmul_precision("medium")
+    # torch.autograd.set_detect_anomaly(True)
     torch.backends.cudnn.benchmark = True
     # config = balance_disentangle(config, train_loader.dataset)
 
     optimizer, scheduler = get_optimizer_and_lr_scheduler(
         model,
-        config["train"]["optimizer"],
-        config["train"]["lr_schedule"],
-        config["train"]["lr"],
+        config["train"],
+        config["model"]["load_model"],
+        config["model"]["start_epoch"],
     )
 
     if "prior" in config["loss"].keys():
@@ -400,8 +416,8 @@ def train(config, model, train_loader, test_loader, run=None):
 
         metrics["time"] = time.time() - starttime
 
-        if (epoch % 5 == 0):
-            if epoch >=50:
+        if epoch % 5 == 0:
+            if epoch >= 50:
                 # rand_state = torch.random.get_rng_state()
                 # print(rand_state)
                 # torch.manual_seed(100)
@@ -412,7 +428,9 @@ def train(config, model, train_loader, test_loader, run=None):
                     device="cuda",
                     epoch=epoch,
                 )
-                metrics.update({"{}_test".format(k): v for k, v in test_metrics.items()})
+                metrics.update(
+                    {"{}_test".format(k): v for k, v in test_metrics.items()}
+                )
 
                 for key in ["avg_speed_3d", "heading"]:
                     y_true = test_loader.dataset[:][key].detach().cpu().numpy()
@@ -466,9 +484,7 @@ def train(config, model, train_loader, test_loader, run=None):
                     test_loader.dataset.gmm_pred["midfwd_test"],
                     test_loader.dataset.walking_clusters["midfwd_test"],
                 )
-                metrics["entropy_midfwd_test"] = shannon_entropy(
-                    k_pred_e[walking_inds]
-                )
+                metrics["entropy_midfwd_test"] = shannon_entropy(k_pred_e[walking_inds])
 
                 for cluster_key in test_loader.dataset.gmm_pred.keys():
                     mapped = hungarian_match(

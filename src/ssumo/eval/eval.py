@@ -21,8 +21,8 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
     batch_size = data["x6d"].shape[0]
     if key == "heading":
         data["heading"] = torch.rand(
-            data["heading"].shape,
-            device=data["heading"].device)
+            data["heading"].shape, device=data["heading"].device
+        )
         #     generator=torch.Generator(device=data["heading"].device).manual_seed(100),
         # )
         data["heading"] /= torch.linalg.norm(data["heading"], dim=-1, keepdim=True)
@@ -30,7 +30,7 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
         data["avg_speed_3d"] = data["avg_speed_3d_rand"]
 
     data_o = model.decode(z, data)
-    
+
     pose_batch = fwd_kin_cont6d_torch(
         data_o["x6d"].reshape((-1, n_keypts, 6)),
         kinematic_tree,
@@ -129,7 +129,11 @@ def traverse_latent(
         print("Latent Norm: {}".format(torch.linalg.norm(sample_latent[0])))
         sample_latent += graded_z_shift
 
-    data_o = vae.decode(z=sample_latent, data={})
+    data = {
+        k: v.cuda()
+        for k, v in dataset[1000 * torch.ones(n_shifts, dtype=torch.int64)].items()
+    }
+    data_o = vae.decode(z=sample_latent, data=data)
     offsets = dataset[index]["offsets"].cuda()
     pose = (
         fwd_kin_cont6d_torch(
