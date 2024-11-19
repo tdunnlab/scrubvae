@@ -7,6 +7,7 @@ import torch
 from numpy.lib.stride_tricks import sliding_window_view
 from tqdm import trange
 
+
 def inv_kin(
     pose: np.ndarray,
     kinematic_tree: Union[List, np.ndarray],
@@ -91,7 +92,7 @@ def fwd_kin_cont6d_torch(
     else:
         offsets = offset
 
-    pose = torch.zeros(continuous_6d.shape[:-1] + (3,),device=continuous_6d.device)
+    pose = torch.zeros(continuous_6d.shape[:-1] + (3,), device=continuous_6d.device)
     pose[..., 0, :] = root_pos
     for chain in kinematic_tree:
         if do_root_R:
@@ -114,6 +115,7 @@ def fwd_kin_cont6d_torch(
             )
     return pose
 
+
 def normalize_root(root, arena_size):
     norm_root = root - arena_size[0]
     norm_root = 2 * norm_root / (arena_size[1] - arena_size[0]) - 1
@@ -125,11 +127,12 @@ def inv_normalize_root(norm_root, arena_size):
     root += arena_size[0]
     return root
 
+
 def get_speed_parts(pose, parts):
     print("Getting speed by body parts")
     root_spd = np.diff(pose[:, 0, :], n=1, axis=0, prepend=pose[0:1, 0, :]) ** 2
     dxyz = np.zeros((len(root_spd), len(parts) + 1))
-    dxyz[:, 0] = np.sqrt(root_spd.sum(axis=-1))
+    dxyz[:, 0] = np.sqrt(root_spd).sum(axis=-1)  # TODO: Put sum in sqrt
 
     centered_pose = preprocess.center_spine(pose, keypt_idx=0)
     # ego_pose = preprocess.rotate_spine(
@@ -156,10 +159,13 @@ def get_speed_parts(pose, parts):
 
     return dxyz
 
+
 def get_speed_parts_torch(pose, parts):
     print("Getting speed by body parts")
-    root_spd = torch.diff(pose[..., 0, :], n=1, dim=-3, prepend=pose[..., 0:1, 0, :]) ** 2
-    dxyz = torch.zeros((len(root_spd), len(parts) + 1),device=pose.device)
+    root_spd = (
+        torch.diff(pose[..., 0, :], n=1, dim=-3, prepend=pose[..., 0:1, 0, :]) ** 2
+    )
+    dxyz = torch.zeros((len(root_spd), len(parts) + 1), device=pose.device)
     dxyz[:, 0] = torch.sqrt(root_spd.sum(dim=-1))
 
     centered_pose = pose - pose[:, 0:1, :]
@@ -192,16 +198,23 @@ def get_window_indices(ids, stride, window):
     id_diff = np.diff(ids, prepend=ids[0])
     id_change = np.concatenate([[0], np.where(id_diff != 0)[0], [len(ids)]])
     for i in trange(0, len(id_change) - 1):
-        strided_data = sliding_window_view(
-            frame_idx[id_change[i] : id_change[i + 1], ...],
-            window_shape=window,
-            axis=0,
-        )[::stride, ...]
-        window_inds += [torch.squeeze(torch.tensor(strided_data, dtype=int))]
-        assert (
-            np.moveaxis(strided_data[1, ...], -1, 0)
-            - frame_idx[id_change[i] + stride : id_change[i] + window + stride, ...]
-        ).sum() == 0
+        if (id_change[i + 1] - id_change[i]) >= window:
+            strided_data = sliding_window_view(
+                frame_idx[id_change[i] : id_change[i + 1], ...],
+                window_shape=window,
+                axis=0,
+            )[::stride, ...]
+
+            window_inds += [torch.tensor(strided_data, dtype=int)]
+
+            if strided_data.shape[0] > 1:
+                assert (
+                    np.moveaxis(strided_data[1, ...], -1, 0)
+                    - frame_idx[id_change[i] + stride : id_change[i] + window + stride, ...]
+                ).sum() == 0
+        else:
+            print("ID {} length smaller than window size - skipping ...".format(ids[id_change[i]]))
+
 
     window_inds = torch.cat(window_inds, dim=0)
 
@@ -251,6 +264,7 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
 
     return offsets
 
+
 def get_speed_outliers(pose, window_inds, threshold=2.25):
     avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
     avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
@@ -261,16 +275,21 @@ def get_speed_outliers(pose, window_inds, threshold=2.25):
         > threshold
     )[0]
     outlier_frames = np.unique(outlier_frames)
-    print(
-        "Outlier frames above {}: {}".format(
-            threshold, len(outlier_frames)
-        )
-    )
+    print("Outlier frames above {}: {}".format(threshold, len(outlier_frames)))
     return outlier_frames
+
 
 class MouseDataset(Dataset):
     def __init__(
-        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train", discrete_classes = None, norm_params=None
+        self,
+        data,
+        window_inds,
+        arena_size=None,
+        kinematic_tree=None,
+        n_keypts=None,
+        label="Train",
+        discrete_classes=None,
+        norm_params=None,
     ):
         self.data = data
         self.window_inds = window_inds

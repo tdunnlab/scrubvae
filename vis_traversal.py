@@ -7,10 +7,11 @@ from pathlib import Path
 from neuroposelib import read
 import torch
 from sklearn.linear_model import LinearRegression
+from ssumo.data.dataset import get_angle2D
 
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
-disentangle_key = "avg_speed_3d"
+disentangle_key = "ids"
 out_path = RESULTS_PATH + analysis_key
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["model"]["load_model"] = config["out_path"]
@@ -25,6 +26,7 @@ loader, model = ssumo.get.data_and_model(
     epoch=sys.argv[2],
     dataset_label=dataset_label,
     data_keys=["x6d", "root", "offsets", disentangle_key],
+    # normalize=["avg_speed_3d"],
     shuffle=False,
     verbose=0,
 )
@@ -40,10 +42,12 @@ latents = ssumo.get.latents(
 
 # dis_w = LinearRegression().fit(latents, loader.dataset[:][disentangle_key]).coef_
 
-n_shifts = 25
+n_shifts = 2
 # sample_idx = [4000000, 2000000, 3000000, 60000, 1294585]
-sample_idx = [1000, 200000, 400000, 600000]
-shift = torch.linspace(-10, 10, n_shifts)[:, None]
+sample_idx = [1000, 20000, 400000, 600000]
+# shift = torch.linspace(0, np.pi, n_shifts)[:, None]
+# shift = torch.from_numpy(get_angle2D(shift))
+# shift = torch.linspace(-2.5, 5, n_shifts)[:, None]
 
 for sample_i in sample_idx:
     data = loader.dataset[sample_i]
@@ -54,7 +58,9 @@ for sample_i in sample_idx:
         for k, v in data.items()
     }
     z_traverse = latents[sample_i : sample_i + 1, :].repeat(n_shifts + 1, 1).cuda()
-    data[disentangle_key][1:, :] = shift.cuda()
+    # data[disentangle_key][1:, :] += shift.cuda()
+    # import pdb; pdb.set_trace()
+    data["ids"] = torch.arange(3)[:,None].long()
 
     data_o = model.decode(z_traverse, data)
     pose = (
@@ -70,17 +76,17 @@ for sample_i in sample_idx:
         .numpy()
     )
 
-    subtitles = [
-        "{:2f}".format(val)
-        for val in data["fluorescence"].detach().cpu().numpy().squeeze()
-    ]
+    # subtitles = [
+    #     "{:2f}".format(val)
+    #     for val in data["fluorescence"].detach().cpu().numpy().squeeze()
+    # ]
 
     vis.pose.grid3D(
         pose,
         connectivity,
         frames=np.arange(n_shifts + 1) * model.window,
         centered=False,
-        subtitles=subtitles,
+        subtitles=None,
         title=dataset_label + " Data - {} Traversal".format(disentangle_key),
         fps=20,
         N_FRAMES=model.window,
@@ -88,19 +94,32 @@ for sample_i in sample_idx:
         SAVE_ROOT=vis_decode_path,
     )
 
-    ssumo.eval.traverse_latent(
-        model,
-        loader.dataset,
-        latents,
-        torch.tensor(dis_w),
-        sample_i,
+    vis.pose.arena3D(
+        pose,
         connectivity,
-        label=disentangle_key,
-        minmax=10,
-        n_shifts=15,
-        circle=False,
-        save_path=vis_decode_path + "{}/".format(disentangle_key),
+        frames=np.arange(n_shifts + 1) * model.window,
+        centered=False,
+        # subtitles=None,
+        # title=dataset_label + " Data - {} Traversal".format(disentangle_key),
+        fps=20,
+        N_FRAMES=model.window,
+        VID_NAME=dataset_label + "arena{}_mod.mp4".format(sample_i),
+        SAVE_ROOT=vis_decode_path,
     )
+
+    # ssumo.eval.traverse_latent(
+    #     model,
+    #     loader.dataset,
+    #     latents,
+    #     torch.tensor(dis_w),
+    #     sample_i,
+    #     connectivity,
+    #     label=disentangle_key,
+    #     minmax=10,
+    #     n_shifts=15,
+    #     circle=False,
+    #     save_path=vis_decode_path + "{}/".format(disentangle_key),
+    # )
 
     # ## Latent Traversal
     # # norm_z_shift = dis_w / torch.linalg.vector_norm(dis_w,dim=0,keepdim=True)

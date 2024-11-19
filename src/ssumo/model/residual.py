@@ -68,7 +68,7 @@ class CholeskyL(nn.Module):
 
 class ResidualBlock(nn.Module):
     def __init__(
-        self, in_channels, out_channels, kernel=5, activation="prelu", dilation=1
+        self, in_channels, out_channels, kernel=3, activation="prelu", dilation=1
     ):
         stride = 1 if dilation > 1 else 2
 
@@ -122,7 +122,7 @@ class ResidualBlockTranspose(nn.Module):
         self,
         in_channels,
         out_channels,
-        kernel=5,
+        kernel=3,
         scale_factor=2,
         activation="prelu",
         dilation=1,

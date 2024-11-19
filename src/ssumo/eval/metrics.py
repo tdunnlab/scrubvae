@@ -5,7 +5,7 @@ from ssumo import get
 from . import project_to_null
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis, LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler
 import pickle
 from ..model.disentangle import MLP
@@ -363,6 +363,12 @@ def qda_rand_cv(z_train, y_train, z_test, y_test):
     acc = (y_test.ravel() == y_pred).sum() / len(z_test)
     return acc
 
+@rand_cv
+def lda_rand_cv(z_train, y_train, z_test, y_test):
+    clf = LinearDiscriminantAnalysis().fit(z_train, y_train.ravel())
+    y_pred = clf.predict(z_test)
+    acc = (y_test.ravel() == y_pred).sum() / len(z_test)
+    return acc
 
 @rand_cv
 def mlp_rand_cv(z_train, y_train, z_test, y_test):
@@ -438,7 +444,7 @@ def train_MLP(z, y_true, num_epochs=200):
     torch.backends.cudnn.benchmark = True
     z = z.cuda()
     y_true = torch.tensor(y_true, device="cuda")
-    optimizer = optim.AdamW(model.parameters(), lr=0.1)
+    optimizer = optim.AdamW(model.parameters(), lr=0.01)
     model.train()
     with torch.enable_grad():
         for epoch in range(num_epochs):

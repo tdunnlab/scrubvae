@@ -232,8 +232,80 @@ class QuadraticDiscriminantFilter(nn.Module):
         return ll_loss / len(self.classes)
 
 
-class MovingAvgLeastSquares(nn.Module):
+class RecursiveLeastSquares(nn.Module):
+    def __init__(
+        self,
+        nx,  # latent_dim
+        ny,  # y_dim
+        bias=False,
+        polynomial_order = 1,
+    ):
+        super().__init__()
+        self.bias = bias
+        self.polynomial_order = polynomial_order
+        nx_poly = 0
+        for i in range(1, polynomial_order + 1):
+            nx_poly += torch.prod(torch.arange(nx, nx + i)) / torch.prod(
+                torch.arange(i) + 1
+            )
+        nx = int(nx_poly) + bias
+        self.register_buffer("theta", torch.zeros(nx, ny, requires_grad=False))
+        self.register_buffer("P", torch.eye(nx, requires_grad=False))
 
+        # Forgetting factor for the first linear decoder
+        self.register_buffer("lam0", torch.tensor([0.9], requires_grad=False))
+
+    def polynomial_expansion(self, x):
+        """
+        Parameters
+        ----------
+        x1 : torch.tensor
+            (batch_size, num_features) matrix
+
+        x2 : torch.tensor
+            (batch_size, num_features) matrix
+
+        Returns
+        -------
+        Z : torch.tensor
+            (batch_size, num_quadratic_features) matrix.
+
+        Note
+        -----
+        num_quadratic_features = num_features * (num_features + 1) / 2
+        """
+        n_features = x.shape[-1]
+        x_list = [x]
+        idx = torch.arange(x.shape[1], dtype=torch.long, device=x.device)
+        for i in range(1, self.polynomial_order):
+            C_idx = torch.combinations(idx, i + 1, with_replacement=True)
+            x_list += [x[:, C_idx].prod(dim=-1) / len(C_idx) * n_features]
+
+        return torch.column_stack(x_list)
+    
+    def update(self, x, y):
+        # x (batch_size, latent_dim)
+        # y (batch_size, y_dim)
+        x = self.polynomial_expansion(x)
+        if self.bias:
+            x = torch.column_stack((x, torch.ones(x.shape[0], 1, device=x.device)))
+
+        A = x @ self.P @ x.T
+        A = torch.diagonal_scatter(
+            A, A.diagonal(dim1=-2, dim2=-1) + self.lam0, dim1=-2, dim2=-1
+        )
+        self.P -= self.P @ x.T @ torch.linalg.solve(A, x @ self.P)
+        self.P /= self.lam0
+        self.theta = self.theta + self.P @ x.T @ (y - x @ self.theta)
+
+    def forward(self, x):
+        x = self.polynomial_expansion(x)
+        if self.bias:
+            x = torch.column_stack((x, torch.ones(x.shape[0], 1, device=x.device)))
+        return x @ self.theta
+
+
+class MovingAvgLeastSquares(nn.Module):
     def __init__(
         self,
         nx,
@@ -315,8 +387,9 @@ class MovingAvgLeastSquares(nn.Module):
             l2_reg[-1] = 0
         else:
             l2_reg = torch.ones(x.shape[1], device=x.device) * self.l2_reg
-        
+
         # Solve optimal decoder weights (normal equations)
+        # import pdb; pdb.set_trace()
         W0 = torch.linalg.solve(
             self.Sxx0.diagonal_scatter(self.Sxx0.diagonal() + l2_reg), self.Sxy0
         )

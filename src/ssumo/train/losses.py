@@ -155,7 +155,6 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root_hat=None):
     #     root = torch.zeros((x.shape[0], 3), device=x.device)
     if root_hat == None:
         root_hat = torch.zeros_like(pose[..., 0, :])
-
     # pose = fwd_kin_cont6d_torch(
     #     x, kinematic_tree, offsets, root_pos=root, do_root_R=True, eps=1e-8
     # )

@@ -27,7 +27,7 @@ from scipy.optimize import linear_sum_assignment
 import numpy.typing as npt
 # from torch.profiler import profile, record_function, ProfilerActivity
 from line_profiler import profile
-
+from pathlib import Path
 
 class CyclicalBetaAnnealing(torch.nn.Module):
     def __init__(self, beta_max=1, len_cycle=100, R=0.5):
@@ -92,11 +92,12 @@ def get_optimizer_and_lr_scheduler(
         scheduler = None
 
     if load_path is not None:
-        checkpoint = torch.load(
-            "{}/checkpoints/epoch_{}.pth".format(load_path, start_epoch)
-        )
-        optimizer.load_state_dict(checkpoint["optimizer"])
-        scheduler = checkpoint["lr_scheduler"]
+        if Path("{}/checkpoints/epoch_{}.pth".format(load_path, start_epoch)).exists():
+            checkpoint = torch.load(
+                "{}/checkpoints/epoch_{}.pth".format(load_path, start_epoch)
+            )
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            scheduler = checkpoint["lr_scheduler"]
 
     return optimizer, scheduler
 
@@ -129,16 +130,6 @@ def train_test_epoch(
             # with profile(activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
             #     with record_function("model_inference"):
             data = {k: v.to(device) for k, v in data.items()}
-            # if model.conditional_dim > 0:
-            #     data["var"] = [
-            #         (
-            #             F.one_hot(data[k].ravel().long(), len(model.discrete_classes[k]))
-            #             if k in model.discrete_classes.keys()
-            #             else data[k]
-            #         )
-            #         for k in model.conditional_keys
-            #     ]
-            #     data["var"] = torch.cat(data["var"], dim=-1)
 
             data_o = predict_batch(model, data, model.disentangle_keys)
 
@@ -166,31 +157,13 @@ def train_test_epoch(
                 config["loss"],
                 config["disentangle"],
             )
-            # print(batch_loss)
-            # import pdb; pdb.set_trace()
-
-            # if "mcmi" in config["loss"]:
-            #     var = torch.cat(
-            #         [data[k] for k in model.disentangle_keys], dim=-1
-            #     )
-            #     if batch_idx > 0:
-            #         batch_loss["mcmi"] = mi_estimator(data_o["mu"], var)
-            #         batch_loss["total"] += (
-            #             config["loss"]["mcmi"] * batch_loss["mcmi"]
-            #         )
-            #     else:
-            #         batch_loss["mcmi"] = 0
-            # if ("mcmi" in config["loss"].keys()) or (
-            #     "adversarial_net" in model.disentangle.keys()
-            # ):
-            #     var = torch.cat([data[k] for k in model.disentangle_keys], dim=-1)
 
             if mode == "train":
                 for param in model.parameters():
                     param.grad = None
 
                 batch_loss["total"].backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e7)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e6)
                 optimizer.step()
                 if scheduler is not None:
                     scheduler.step(epoch + batch_idx / len(loader))
@@ -203,15 +176,6 @@ def train_test_epoch(
                                     data_o["mu"].detach().clone(),
                                     data[k].detach().clone(),
                                 )
-                        # elif method == "adversarial_net":
-                        #     for k in model.disentangle[method].keys():
-                        #         model.disentangle[method][k].fit(
-                        #             data_o["mu"].detach(),
-                        #             data_o["var"].clone(),
-                        #             model.disentangle_keys.index(k),
-                        #             None,
-                        #             config["disentangle"]["n_iter"],
-                        #         )
 
             epoch_metrics = {
                 k: v + batch_loss[k].detach() for k, v in epoch_metrics.items()
@@ -233,8 +197,6 @@ def train_test_epoch(
                     device=device,
                 )
 
-            # import pdb; pdb.set_trace()
-
         for k, v in epoch_metrics.items():
             epoch_metrics[k] = v.item() / len(loader)
             print(
@@ -244,7 +206,7 @@ def train_test_epoch(
             )
 
     if get_z:
-        return epoch_metrics, torch.cat(z, dim=0)
+        return epoch_metrics, torch.cat(z, dim=0).cpu()
     else:
         return epoch_metrics, 0
 
@@ -261,10 +223,10 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
     with torch.no_grad():
         z = []
         epoch_metrics = {k: 0 for k in ["total"] + list(config["loss"].keys())}
-        gen_res = {
-            k1: {k2: [] for k2 in ["pred", "target"]}
-            for k1 in ["heading", "avg_speed_3d"]
-        }
+        # gen_res = {
+        #     k1: {k2: [] for k2 in ["pred", "target"]}
+        #     for k1 in ["heading", "avg_speed_3d"]
+        # }
 
         if "mcmi" in config["loss"].keys():
             # Update mi_estimator
@@ -292,7 +254,7 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
 
         for batch_idx, data in enumerate(loader):
             data = {k: v.to(device) for k, v in data.items()}
-
+            data["ids"] = torch.zeros_like(data["ids"])
             data_o = predict_batch(model, data, model.disentangle_keys)
 
             z += [data_o["mu"].clone().detach()]
@@ -304,24 +266,24 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
                 config["disentangle"],
             )
 
-            for key in gen_res.keys():
-                key_pred, key_target = generative_restrictiveness(
-                    model, data_o["mu"], data, key, loader.dataset.kinematic_tree
-                )
-                if "speed" in key:
-                    norm_params = {
-                        k: v.to(key_pred.device)
-                        for k, v in loader.dataset.norm_params[key].items()
-                    }
-                    if "mean" in norm_params.keys():
-                        key_pred -= norm_params["mean"]
-                        key_pred /= norm_params["std"]
-                    elif "min" in norm_params.keys():
-                        key_pred -= norm_params["min"]
-                        key_pred = 2 * key_pred / norm_params["max"] - 1
+            # for key in gen_res.keys():
+            #     key_pred, key_target = generative_restrictiveness(
+            #         model, data_o["mu"], data, key, loader.dataset.kinematic_tree
+            #     )
+            #     if "speed" in key:
+            #         norm_params = {
+            #             k: v.to(key_pred.device)
+            #             for k, v in loader.dataset.norm_params[key].items()
+            #         }
+            #         if "mean" in norm_params.keys():
+            #             key_pred -= norm_params["mean"]
+            #             key_pred /= norm_params["std"]
+            #         elif "min" in norm_params.keys():
+            #             key_pred -= norm_params["min"]
+            #             key_pred = 2 * key_pred / norm_params["max"] - 1
 
-                gen_res[key]["pred"] += [key_pred.detach().cpu()]
-                gen_res[key]["target"] += [key_target.detach().cpu()]
+            #     gen_res[key]["pred"] += [key_pred.detach().cpu()]
+            #     gen_res[key]["target"] += [key_target.detach().cpu()]
 
             epoch_metrics = {
                 k: v + batch_metrics[k].detach() for k, v in epoch_metrics.items()
@@ -333,11 +295,11 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
             "====> Epoch: {} Average {} loss: {:.4f}".format(epoch, k, epoch_metrics[k])
         )
 
-    for key in gen_res.keys():
-        epoch_metrics["r2_gen_restrict_{}".format(key)] = r2_score(
-            torch.cat(gen_res[key]["target"], dim=0),
-            torch.cat(gen_res[key]["pred"], dim=0),
-        )
+    # for key in gen_res.keys():
+    #     epoch_metrics["r2_gen_restrict_{}".format(key)] = r2_score(
+    #         torch.cat(gen_res[key]["target"], dim=0),
+    #         torch.cat(gen_res[key]["pred"], dim=0),
+    #     )
 
     return epoch_metrics, torch.cat(z, dim=0).cpu()
 
@@ -360,7 +322,7 @@ def train_epoch(config, model, loader, optimizer, scheduler, device="cuda", epoc
 @profile
 def train(config, model, train_loader, test_loader, run=None):
     torch.set_float32_matmul_precision("medium")
-    # torch.autograd.set_detect_anomaly(True)
+    torch.autograd.set_detect_anomaly(True)
     torch.backends.cudnn.benchmark = True
     # config = balance_disentangle(config, train_loader.dataset)
 
