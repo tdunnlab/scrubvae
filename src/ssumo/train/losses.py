@@ -102,6 +102,9 @@ def total_correlation(z, mu, L):
 
 
 def rotation_loss(x, x_hat, eps=1e-7):
+    """
+    Geodesic rotation loss of two 6D rotation representations
+    """
     assert x.shape[-1] == 6
     assert x_hat.shape[-1] == 6
     batch_size = x.shape[0]
@@ -117,7 +120,12 @@ def rotation_loss(x, x_hat, eps=1e-7):
     return theta
 
 
-def new_rotation_loss(x, x_hat, eps=1e-7):
+def stable_rotation_loss(x, x_hat, eps=1e-7):
+    """
+    Geodesic rotation loss of two 6D rotation representations
+
+    More numerically stable
+    """
     assert x.shape[-1] == 6
     assert x_hat.shape[-1] == 6
     m1 = rotation_6d_to_matrix(x).view((-1, 3, 3))
@@ -126,12 +134,6 @@ def new_rotation_loss(x, x_hat, eps=1e-7):
     sin = torch.linalg.matrix_norm(m2 - m1) / (2**1.5)
     sin = torch.clamp(sin, -1 + eps, 1 - eps)
     return 2 * torch.asin(sin).sum()
-
-
-def regularize_loss(mu, log_var):
-    KL_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-    return KL_div
-
 
 def prior_loss(mu, L):
     var = torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1))
@@ -143,14 +145,10 @@ def prior_loss(mu, L):
     )
     return KL_div / mu.shape[0]
 
-
-def vae_BXEntropy_loss(x, x_hat, mu, log_var):
-    B_XEntropy = F.binary_cross_entropy(x_hat, x.view(-1, 784), reduction="mean")
-    KL_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-    return B_XEntropy + KL_div
-
-
 def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root_hat=None):
+    """
+    Mean per joint position error
+    """
     # if root == None:
     #     root = torch.zeros((x.shape[0], 3), device=x.device)
     if root_hat == None:
@@ -172,13 +170,6 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root_hat=None):
     loss = loss / (pose.shape[0] * pose.shape[-1] * pose.shape[-2])
     return loss
 
-
-def hierarchical_orthogonal_loss(L1, L2):
-    Sig1 = torch.matmul(L1, torch.transpose(L1, dim0=-2, dim1=-1))
-    Sig2 = torch.matmul(torch.transpose(L2, dim0=-2, dim1=-1), L2)
-    return torch.sum(torch.matmul(Sig1, Sig2).diagonal(dim1=-1, dim2=-2))
-
-
 def direct_lsq_loss(z, y, bias=False):
     if bias:
         z = torch.column_stack((z, torch.ones(z.shape[0], 1, device="cuda")))
@@ -193,7 +184,7 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
     batch_loss = {}
 
     if "rotation" in loss_scale.keys():
-        batch_loss["rotation"] = rotation_loss(data["x6d"], data_o["x6d"])
+        batch_loss["rotation"] = stable_rotation_loss(data["x6d"], data_o["x6d"])
 
     if "prior" in loss_scale.keys():
         # if type(data_o["mu"]) is tuple:
@@ -233,7 +224,7 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
         else:
             batch_loss["mcmi"] = torch.zeros_like(batch_loss["jpe"])
 
-    # num_methods = len(data_o["disentangle"].keys())
+    ## Scrubbing losses
     methods_dict = disentangle_config["method"]
     for method, disentangle_keys in methods_dict.items():
         num_keys = len(disentangle_keys)
@@ -322,13 +313,9 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
             data_o["z"], data_o["mu"], data_o["L"]
         )
 
-    # if "speed_regularize" in loss_scale.keys():
-    #     batch_loss["speed_regularize"] = torch.sum(
-    #         torch.diff(data_o["speed_decoder_weight"], n=2, dim=0) ** 2
-    #     )
-
-    if "orthogonal_cov" in loss_scale.keys():
-        batch_loss["orthogonal_cov"] = hierarchical_orthogonal_loss(*data_o["L"])
+    ## TODO: In testing for hierarchical vae
+    # if "orthogonal_cov" in loss_scale.keys():
+    #     batch_loss["orthogonal_cov"] = hierarchical_orthogonal_loss(*data_o["L"])
 
     batch_loss["total"] = sum(
         [loss_scale[k] * batch_loss[k] for k in batch_loss.keys() if loss_scale[k] != 0]

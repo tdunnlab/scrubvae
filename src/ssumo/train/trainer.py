@@ -51,19 +51,12 @@ def get_beta_schedule(schedule, beta):
     return beta_scheduler
 
 
-def predict_batch(model, data, disentangle_keys=None):
-    data_i = {
-        k: v
-        for k, v in data.items()
-        if (k in disentangle_keys) or (k in ["x6d", "root", "var"])
-    }
-
-    return model(data_i)
-
-
 def get_optimizer_and_lr_scheduler(
     model, train_config, load_path=None, start_epoch=None
 ):
+    """
+    Loads in optimizer and learning rate schedulers
+    """
     if train_config["optimizer"] == "adam":
         print("Initializing Adam optimizer ...")
         optimizer = optim.Adam(model.parameters(), lr=train_config["lr"])
@@ -95,6 +88,16 @@ def get_optimizer_and_lr_scheduler(
 
     return optimizer, scheduler
 
+
+def predict_batch(model, data, disentangle_keys=None):
+    data_i = {
+        k: v
+        for k, v in data.items()
+        if (k in disentangle_keys) or (k in ["x6d", "root", "var"])
+    }
+
+    return model(data_i)
+
 @profile
 def train_test_epoch(
     config,
@@ -107,7 +110,6 @@ def train_test_epoch(
     mode="train",
     get_z=False,
 ):
-
     if mode == "train":
         model.train()
         grad_env = torch.enable_grad
@@ -116,6 +118,7 @@ def train_test_epoch(
         grad_env = torch.no_grad
     else:
         raise ValueError("This mode is not recognized.")
+    
     with grad_env():
         z = []
         model.mi_estimator = None
@@ -128,6 +131,7 @@ def train_test_epoch(
             data_o = predict_batch(model, data, model.disentangle_keys)
 
             if mode == "Train":
+                # Fit adversarial neural discriminator scrubbing for n iterations
                 if bool(model.disentangle):
                     for method in model.disentangle.keys():
                         if method == "adversarial_net":
@@ -143,7 +147,6 @@ def train_test_epoch(
             if get_z:
                 z += [data_o["mu"].clone().detach()]
 
-            # print(config["loss"])
             batch_loss = get_batch_loss(
                 model,
                 data,
@@ -153,6 +156,7 @@ def train_test_epoch(
             )
 
             if mode == "train":
+                # Update model parameters
                 for param in model.parameters():
                     param.grad = None
 
@@ -162,6 +166,7 @@ def train_test_epoch(
                 if scheduler is not None:
                     scheduler.step(epoch + batch_idx / len(loader))
 
+                # Update the exponential moving average scrubbers
                 if bool(model.disentangle):
                     for method in model.disentangle.keys():
                         if method in ["moving_avg_lsq", "moving_avg", "qda"]:
@@ -171,7 +176,7 @@ def train_test_epoch(
                                     data[k].detach().clone(),
                                 )
 
-            #
+            # Save loss and other metrics for the epoch
             epoch_metrics = {
                 k: v + batch_loss[k].detach() for k, v in epoch_metrics.items()
             }
@@ -209,6 +214,8 @@ def train_test_epoch(
 
 def test_epoch(config, model, loader, device="cuda", epoch=0):
     print("Running test epoch")
+
+    ##TODO: Test and implement generator consistency code
     # loader.dataset.data["avg_speed_3d_rand"] = loader.dataset[:]["avg_speed_3d"][
     #     torch.randperm(
     #         len(loader.dataset), generator=torch.Generator().manual_seed(100)
@@ -235,6 +242,8 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
             data_o = model.encode(
                 {k: v.to(device) for k, v in data.items() if k in ["x6d", "root"]}
             )
+
+            # Initialize mutual information estimator
             model.mi_estimator = MutInfoEstimator(
                 x_s=data_o["mu"].detach().clone(),
                 y_s=torch.cat([data[k] for k in model.conditional_keys], dim=-1).to(
@@ -329,6 +338,7 @@ def train(config, model, train_loader, test_loader=None, run=None):
         config["model"]["start_epoch"],
     )
 
+    # Apply beta annealing if selected
     if "prior" in config["loss"].keys():
         beta_scheduler = get_beta_schedule(
             config["loss"]["prior"],
@@ -337,14 +347,17 @@ def train(config, model, train_loader, test_loader=None, run=None):
     else:
         beta_scheduler = None
 
+    # Epoch loop
     for epoch in tqdm.trange(
         config["model"]["start_epoch"] + 1, config["train"]["num_epochs"] + 1
     ):
+        # Update beta annealing if applicable
         if beta_scheduler is not None:
             config["loss"]["prior"] = beta_scheduler.get(epoch)
             print("Beta schedule: {:.3f}".format(config["loss"]["prior"]))
 
         starttime = time.time()
+        # Train for an epoch
         train_metrics, z_train = train_epoch(
             config=config,
             model=model,
@@ -356,10 +369,14 @@ def train(config, model, train_loader, test_loader=None, run=None):
         )
         metrics = {"{}_train".format(k): v for k, v in train_metrics.items()}
 
+
+        # Reset parameters for gradient reversal scrubber
         if "grad_reversal" in model.disentangle.keys():
             for key in model.disentangle["grad_reversal"].keys():
                 model.disentangle["grad_reversal"][key].reset_parameters()
 
+
+        # Save automatically tuned smoothing factors for EMA scrubbers
         if "moving_avg_lsq" in model.disentangle.keys():
             for key in model.disentangle["moving_avg_lsq"].keys():
                 metrics["lambda_mals_{}".format(key)] = (
@@ -381,13 +398,14 @@ def train(config, model, train_loader, test_loader=None, run=None):
                 "{}/weights/epoch_{}.pth".format(config["out_path"], epoch),
             )
 
-            if epoch % 5 == 0:
+            if epoch % 20 == 0:
                 torch.save(
                     {"optimizer": optimizer.state_dict(), "lr_scheduler": scheduler},
                     "{}/checkpoints/epoch_{}.pth".format(config["out_path"], epoch),
                 )
 
-            if epoch >= 10:
+            ## Calculate test metrics
+            if epoch >= 50:
                 # rand_state = torch.random.get_rng_state()
                 # print(rand_state)
                 # torch.manual_seed(100)
@@ -403,6 +421,7 @@ def train(config, model, train_loader, test_loader=None, run=None):
                         {"{}_test".format(k): v for k, v in test_metrics.items()}
                     )
 
+                    # Calculate decodability of specified variables
                     for key in ["avg_speed_3d", "heading"]:
                         y_true = test_loader.dataset[:][key].detach().cpu().numpy()
                         r2_lin = linear_rand_cv(
@@ -422,6 +441,7 @@ def train(config, model, train_loader, test_loader=None, run=None):
                         metrics["r2_{}_mlp_mean".format(key)] = np.mean(r2_mlp)
                         metrics["r2_{}_mlp_std".format(key)] = np.std(r2_mlp)
 
+                    # Calculate decodability of identity
                     y_true = (
                         train_loader.dataset[:]["ids"].detach().cpu().numpy().astype(np.int)
                     )
@@ -442,6 +462,7 @@ def train(config, model, train_loader, test_loader=None, run=None):
                     metrics["acc_ids_qda_mean"] = np.mean(acc_qda)
                     metrics["acc_ids_qda_std"] = np.std(acc_qda)
 
+                    # GMM Cluster latents
                     k_pred_e = cluster.gmm(
                         latents=z_test,
                         n_components=50,
@@ -450,12 +471,16 @@ def train(config, model, train_loader, test_loader=None, run=None):
                         path=None,
                     )[0]
 
+                    # Extract walking indices
                     walking_inds = np.in1d(
                         test_loader.dataset.gmm_pred["midfwd_test"],
                         test_loader.dataset.walking_clusters["midfwd_test"],
                     )
+
+                    # Shannon entropy of walking clusters
                     metrics["entropy_midfwd_test"] = shannon_entropy(k_pred_e[walking_inds])
 
+                    # Matching clusters to those from the latents of another vanilla model
                     for cluster_key in test_loader.dataset.gmm_pred.keys():
                         mapped = hungarian_match(
                             k_pred_e, test_loader.dataset.gmm_pred[cluster_key]

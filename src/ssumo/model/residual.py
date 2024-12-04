@@ -6,6 +6,7 @@ import torch
 def find_latent_dim(
     window_size: int, kernel: int, num_layers: int, dilation=torch.ones(4)
 ):
+    # Convolution math
     stride = 1 if any(dilation > 1) else 2
     layer_out = (
         lambda l_in, dil: (l_in + 2 * (kernel // 2) - dil * (kernel - 1) - 1) / stride
@@ -20,6 +21,7 @@ def find_latent_dim(
 
 
 def find_out_dim(latent_dim: int, kernel: int, num_layers: int, dilation=torch.ones(4)):
+    # Convolution math
     stride = 1 if any(dilation > 1) else 2
     layer_out = (
         lambda l_in, dil: (l_in - 1) * stride
@@ -231,6 +233,7 @@ class ResidualEncoder(nn.Module):
             sigma = self.fc_sigma(x)
             return mu, sigma
         elif self.prior == "beta":
+            # Making sure beta distribution has one mode
             alpha = F.softplus(self.fc_alpha(x)) + 1
             beta = F.softplus(self.fc_beta(x)) + 1
             return alpha, beta
@@ -260,7 +263,6 @@ class ResidualDecoder(nn.Module):
         flatten_dim = find_latent_dim(window, kernel, len(ch) - 1, dilation) * ch[-1]
         self.fc_in = nn.Linear(z_dim + conditional_dim, flatten_dim)
         self.unflatten = nn.Unflatten(1, (ch[-1], -1))
-        # self.conv_in = nn.ConvTranspose1d(int(flatten_dim[0]), ch*16, 3, 1, 1)
 
         layers = []
         for i in range(1, len(ch)):
@@ -282,11 +284,9 @@ class ResidualDecoder(nn.Module):
         final_kernel = window - l_out + 7
         print("Final ConvOut Kernel: {}".format(final_kernel))
         self.conv_out = nn.ConvTranspose1d(ch[0], out_channels, final_kernel, 1, 3)
-        # self.activation = nn.Tanh()
 
     def forward(self, x):
         x = self.unflatten(self.fc_in(x))
-        # x = self.activation(self.conv_in(x))
         x = self.res_layers(x)
         x = torch.tanh(self.conv_out(x))
         return x
@@ -317,6 +317,8 @@ class VAE(nn.Module):
 
     def forward(self, data):
         data_o = self.encode(data)
+
+        # Reparameterize
         if self.prior == "gaussian":
             z = (
                 self.sampling(data_o["mu"], data_o["L"])
@@ -327,6 +329,7 @@ class VAE(nn.Module):
             beta_dist = torch.distributions.Beta(data_o["alpha"], data_o["beta"])
             data_o["beta_dist"] = beta_dist
             z = beta_dist.rsample() * 2 - 1
+
         data_o["z"] = z
 
         data_o.update(self.decode(z, data))
@@ -339,6 +342,7 @@ class VAE(nn.Module):
                 for k, model in self.disentangle["linear"].items()
             }
 
+        # Forward pass through all scrubbers if necessary
         for method, module_dict in self.disentangle.items():
             if method == "linear":
                 ## Placeholder for if we reimplement in the future
@@ -410,6 +414,8 @@ class ResVAE(VAE):
             conditional_dim=conditional_dim,
             init_dilation=init_dilation,
         )
+
+        # Scrubbers
         if disentangle is not None:
             self.disentangle = nn.ModuleDict()
             for k, v in disentangle.items():
@@ -445,17 +451,17 @@ class ResVAE(VAE):
         )
 
         if self.prior == "beta":
+            # Renormalizing to be between (-1, 1)
             data_o["mu"] = (data_o["alpha"] - 1 + 1e-8) / (
                 data_o["alpha"] + data_o["beta"] - 2 + 2e-8
             ) * 2 - 1
 
-        # if torch.any(torch.isnan(data_o["mu"])):
-        #     import pdb; pdb.set_trace()
         return data_o
 
     def decode(self, z, data):
         data_o = {}
         if self.conditional_dim > 0:
+            # Concatenating disentanglement variables together
             data_o["var"] = [
                 (
                     F.one_hot(data[k].ravel().long(), len(self.discrete_classes[k]))

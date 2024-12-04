@@ -103,22 +103,6 @@ def get_babel(
     return dataset, loader
 
 
-# Use quaternions and fwd/inv kinematic functions to do the following:
-# 1. Apply inv kin -> local 6D rotation -> fwd kinematics to reconstruct the original pose sequences
-# 2. Once obtaining the decomposed local 6D rotations, visualize purely (0,0,0)-centered pose sequences
-#    using only the fwd kinematic function, i.e. do not apply a translation anywhere.
-# 3. Factor out yaw angle from the quaternions such that when you apply fwd kinematics, all poses will
-#    face in the x+ direction, and be (0,0,0)-centered as in (2.)
-# 3. Again using only the fwd kin function, plot pose sequences such that all segments are of length 1.
-# 4. Hardest one: rotate each window of pose sequences (length 51) such that the MIDDLE POSE is centered
-#    on (0,0,Z) and rotated to face in the x+ direction. The other poses in the sequence should be rotated,
-#    and translated accordingly.
-
-# Models to train - a couple of the best VAE model architectures that you've found.
-# Use pose representation which in which you only center the middle pose on (0,0,Z).
-# Translate other poses according.
-
-
 def mouse_pd_data(
     data_config: dict,
     window: int = 51,
@@ -136,7 +120,10 @@ def mouse_pd_data(
     parent_path = str(Path(data_config["data_path"]).parents[0])
     subfolders = ["/6ohda/", "/healthy/"]
 
+    # Get windows
     window_inds = get_window_indices(ids, data_config["stride"], window)
+
+    # Remove windows with high speed to remove bad tracking
     if data_config["remove_speed_outliers"] is not None:
         outlier_frames = get_speed_outliers(
             pose, window_inds, data_config["remove_speed_outliers"]
@@ -146,6 +133,7 @@ def mouse_pd_data(
         window_inds = window_inds[kept_frames]
         print("Window Inds: {}".format(window_inds.shape))
 
+    # Reading in precalculated and processed data
     saved_tensors = ["avg_speed_3d", "offsets", "root", "target_pose", "x6d"]
     data = {k: [] for k in data_keys if k in saved_tensors}
     for key in data.keys():
@@ -182,6 +170,8 @@ def mouse_pd_data(
         data["raw_pose"] = torch.tensor(pose, dtype=torch.float32)
 
     if "fluorescence" in data_keys:
+        # Read in integrated fluorescence values representing the level of
+        # dopamine denervation
         import pandas as pd
 
         meta = pd.read_csv(parent_path + "/metadata.csv")
@@ -190,10 +180,11 @@ def mouse_pd_data(
         data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
 
     if "pd_label" in data_keys:
-        data["pd_label"] = torch.zeros((len(window_inds),1)).long()
-        data["pd_label"][ids[window_inds[:, 0:1]]>=37] = 1
+        data["pd_label"] = torch.zeros((len(window_inds), 1)).long()
+        data["pd_label"][ids[window_inds[:, 0:1]] >= 37] = 1
         print("pd_label shape: {}".format(data["pd_label"].shape))
 
+    # Each animal has two sessions
     ids[ids >= 37] -= 37
     data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
     print("ids shape: {}".format(data["ids"].shape))
@@ -213,20 +204,9 @@ def mouse_data(
     normalize: List[str] = [],
     norm_params: dict = None,
 ):
-    """_summary_
-
-    Args:
-        data_config (dict): _description_
-        window (int, optional): _description_. Defaults to 51.
-        train_ids (List, optional): _description_. Defaults to [0, 1, 2].
-        train (bool, optional): _description_. Defaults to True.
-        data_keys (List[str], optional): _description_. Defaults to ["x6d", "root", "offsets"].
-        shuffle (bool, optional): _description_. Defaults to False.
-
-    Returns:
-        _type_: _description_
     """
-
+    Load in mouse data and return pytorch dataloaders
+    """
     skeleton_config = read.config(data_config["skeleton_path"])
 
     if "immunostain" in data_config["data_path"]:
@@ -248,12 +228,15 @@ def mouse_data(
             train,
             data_keys,
         )
-    
+
     if (norm_params is None) or (norm_params == {}):
         norm_params = {}
 
+    # Normalize disentanglement variables if needed
     for key in normalize:
-        if (key not in ["heading", "ids", "fluorescence", "pd_label"]) and (key in data_keys):
+        if (key not in ["heading", "ids", "fluorescence", "pd_label"]) and (
+            key in data_keys
+        ):
             if data_config["normalize"] == "bounded":
                 print(
                     "Rescaling decoding variable, {}, to be between -1 and 1".format(
@@ -283,6 +266,7 @@ def mouse_data(
 
     discrete_classes = {}
     if "immunostain" in data_config["data_path"]:
+        # Only if read in raw poses for the PD dataset
         if not ((data_config["stride"] == 5) or (data_config["stride"] == 10)):
             data["ids"][data["ids"] >= 37] -= 37
             unique_ids = torch.unique(data["ids"])
@@ -312,6 +296,7 @@ def mouse_data(
     )
 
     if not train:
+        # Read in validated clustering
         vanilla_path = "/mnt/home/jwu10/working/ceph/results/vae/vanilla_64/"
         gmm_dict = {
             "midfwd_train": [
@@ -320,16 +305,16 @@ def mouse_data(
             ],
             "midfwd_test": [
                 "{}test/vis_latents/z_600_gmm.npy".format(vanilla_path),
-                [8, 23, 30, 34, 35, 37, 46], # 23, 30
+                [8, 23, 30, 34, 35, 37, 46],  # 23, 30
             ],
             "x360_test": [
                 "{}test_x360/vis_latents/z_600_gmm.npy".format(vanilla_path),
                 [],
-            ]
+            ],
         }
 
         dataset.gmm_pred = {"midfwd_test": np.load(gmm_dict["midfwd_test"][0])}
-        dataset.walking_clusters = {k:v[1] for k,v in gmm_dict.items()}
+        dataset.walking_clusters = {k: v[1] for k, v in gmm_dict.items()}
 
         ## Pre-randomize avg speed to maintain overall distribution of speeds
         if "avg_speed_3d" in dataset.data.keys():
@@ -342,6 +327,7 @@ def mouse_data(
         if data_config["direction_process"]:
             dataset.gmm_pred["x360_test"] = np.load(gmm_dict["x360_test"][0])
 
+
     loader = DataLoader(
         dataset=dataset,
         batch_size=data_config["batch_size"],
@@ -351,6 +337,179 @@ def mouse_data(
     )
 
     return loader
+
+
+
+def calculate_mouse_kinematics(
+    data_config: dict,
+    skeleton_config: dict,
+    window: int = 51,
+    train: bool = True,
+    data_keys: List[str] = ["x6d", "root", "offsets"],
+):
+    # Keypoints in pose array are not properly ordered
+    REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
+    pose, ids = read.pose_h5(data_config["data_path"], dtype=np.float64)
+
+    # Split train and test data
+    for k in TRAIN_IDS.keys():
+        if k in data_config["data_path"]:
+            train_ids = TRAIN_IDS[k]
+
+    set_ids = np.in1d(ids, train_ids) if train else ~np.in1d(ids, train_ids)
+    pose = pose[set_ids][:, REORDER, :]
+    ids = ids[set_ids]
+
+    # Get windows
+    window_inds = get_window_indices(ids, data_config["stride"], window)
+
+    ## Smoothing
+    if data_config["filter_pose"]:
+        pose = preprocess.median_filter(pose, ids, 5)
+
+    data = {"raw_pose": pose} if "raw_pose" in data_keys else {}
+    speed_key = [key for key in data_keys if "speed" in key]
+    assert len(speed_key) < 2
+    # Calculate different speed representations
+    if len(speed_key) > 0:
+        if ("part_speed" in speed_key) or ("avg_speed_3d" in speed_key):
+            speed = get_speed_parts(
+                pose=pose,
+                parts=[
+                    [0, 1, 2, 3, 4, 5],  # spine and head
+                    [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
+                    [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
+                ],
+            )
+            if "avg_speed_3d" in speed_key:
+                speed = np.concatenate(
+                    [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
+                )
+        else:
+            speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
+            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
+
+    # Filter out bad tracking using speed threshold
+    if data_config["remove_speed_outliers"] is not None:
+        outlier_frames = get_speed_outliers(
+            pose, window_inds, data_config["remove_speed_outliers"]
+        )
+        window_inds = np.delete(window_inds, outlier_frames, 0)
+
+    # Get average speed over the window
+    if len(speed_key) > 0:
+        data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1)
+
+    # Get yaw of mid-spine -> fwd-spine segment in all frames
+    yaw = get_frame_yaw(pose, 0, 1)[..., None]
+
+    if "heading_change" in data_keys:
+        data["heading_change"] = np.diff(yaw[window_inds], n=1, axis=-1).sum(
+            axis=-1, keepdims=True
+        )
+
+    if "heading" in data_keys:
+        data["heading"] = get_angle2D(yaw[window_inds][:, window // 2])
+
+    # Get yaw of center frame in a window
+    if data_config["direction_process"] in ["midfwd", "x360"]:
+        yaw = yaw[window_inds][:, window // 2]
+
+    if ("root" or "x6d") in data_keys:
+        root = pose[..., 0, :]
+        if data_config["direction_process"] in ["midfwd", "x360"]:
+            # Centering root
+            root = pose[..., 0, :][window_inds]
+            root_center = np.zeros(root.shape)
+            root_center[..., [0, 1]] = root[:, window // 2, [0, 1]][:, None, :]
+
+            root -= root_center
+        elif data_config["direction_process"] == "fwd":
+            root[..., [0, 1]] = 0
+
+    # Applying inverse kinematics to get local quaternions
+    # That representation is the converted to a continuous 6D rotation
+    if "x6d" in data_keys:
+        print("Applying inverse kinematics ...")
+        local_qtn = inv_kin(
+            pose,
+            skeleton_config["KINEMATIC_TREE"],
+            np.array(skeleton_config["OFFSET"]),
+            forward_indices=[1, 0],
+        )
+
+        if "fwd" in data_config["direction_process"]:
+            if "mid" in data_config["direction_process"]:
+                ## Center frame of a window is translated to center and rotated to x+
+                fwd_qtn = np.zeros((len(window_inds), 4))
+                fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
+                local_qtn = local_qtn[window_inds]
+                fwd_qtn = np.repeat(fwd_qtn[:, None, :], window, axis=1)
+            else:
+                # Otherwise just rotate all frames to x+
+                fwd_qtn = np.zeros((len(local_qtn), 4))
+                fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
+
+            local_qtn[..., 0, :] = qtn.qmul_np(fwd_qtn, local_qtn[..., 0, :])
+
+            if "root" in data_keys:
+                root = qtn.qrot_np(fwd_qtn, root)
+
+            assert len(root) == len(window_inds)
+            assert len(local_qtn) == len(window_inds)
+
+        data["x6d"] = qtn.quaternion_to_cont6d_np(local_qtn)
+
+    # Get offsets scaled by segment lengths
+    if "offsets" in data_keys:
+        data["offsets"] = get_segment_len(
+            pose,
+            skeleton_config["KINEMATIC_TREE"],
+            np.array(skeleton_config["OFFSET"]),
+        )
+
+    # Get root positions
+    if "root" in data_keys:
+        data["root"] = root
+        frame_dim_inds = tuple(range(len(root.shape) - 1))
+        print("Root Maxes: {}".format(root.max(axis=frame_dim_inds)))
+        print("Root Mins: {}".format(root.min(axis=frame_dim_inds)))
+
+    data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
+
+    # Get animal IDs
+    data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
+
+    if "fluorescence" in data_keys:
+        # Read in integrated fluorescence for PD dataset
+        parent_path = str(Path(data_config["data_path"]).parents[0])
+        import pandas as pd
+
+        meta = pd.read_csv(parent_path + "/metadata.csv")
+        meta_by_frame = meta.iloc[ids]
+        fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
+        data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
+
+    if "target_pose" in data_keys:
+        # Target pose root does not move
+        reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
+        if data_config["direction_process"] == "midfwd":
+            offsets = data["offsets"][window_inds].reshape(
+                reshaped_x6d.shape[:2] + (-1,)
+            )
+        else:
+            offsets = data["offsets"]
+
+        data["target_pose"] = fwd_kin_cont6d_torch(
+            reshaped_x6d,
+            skeleton_config["KINEMATIC_TREE"],
+            offsets,
+            root_pos=torch.zeros(reshaped_x6d.shape[0], 3),
+            do_root_R=True,
+            eps=1e-8,
+        ).reshape(data["x6d"].shape[:-1] + (3,))
+
+    return data, window_inds
 
 
 # def calculate_mouse_kinematics(
@@ -557,158 +716,3 @@ def mouse_data(
 #         data[speed_key[0]] = speed
 
 #     return data, window_inds
-
-def calculate_mouse_kinematics(
-    data_config: dict,
-    skeleton_config: dict,
-    window: int = 51,
-    train: bool = True,
-    data_keys: List[str] = ["x6d", "root", "offsets"],
-):
-    REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
-    pose, ids = read.pose_h5(data_config["data_path"], dtype=np.float64)
-
-    for k in TRAIN_IDS.keys():
-        if k in data_config["data_path"]:
-            train_ids = TRAIN_IDS[k]
-
-    set_ids = np.in1d(ids, train_ids) if train else ~np.in1d(ids, train_ids)
-    pose = pose[set_ids][:, REORDER, :]
-    ids = ids[set_ids]
-
-    window_inds = get_window_indices(ids, data_config["stride"], window)
-
-    ## Smoothing
-    if data_config["filter_pose"]:
-        pose = preprocess.median_filter(pose, ids, 5)
-
-    data = {"raw_pose": pose} if "raw_pose" in data_keys else {}
-    speed_key = [key for key in data_keys if "speed" in key]
-    assert len(speed_key) < 2
-    if len(speed_key) > 0:
-        if ("part_speed" in speed_key) or ("avg_speed_3d" in speed_key):
-            speed = get_speed_parts(
-                pose=pose,
-                parts=[
-                    [0, 1, 2, 3, 4, 5],  # spine and head
-                    [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
-                    [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
-                ],
-            )
-            if "avg_speed_3d" in speed_key:
-                speed = np.concatenate(
-                    [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
-                )
-        else:
-            speed = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
-            speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
-
-    if data_config["remove_speed_outliers"] is not None:
-        outlier_frames = get_speed_outliers(
-            pose, window_inds, data_config["remove_speed_outliers"]
-        )
-        window_inds = np.delete(window_inds, outlier_frames, 0)
-
-    if len(speed_key) > 0:
-        data[speed_key[0]] = speed[window_inds[:, 1:]].mean(axis=1)
-
-    yaw = get_frame_yaw(pose, 0, 1)[..., None]
-
-    if "heading_change" in data_keys:
-        data["heading_change"] = np.diff(yaw[window_inds], n=1, axis=-1).sum(
-            axis=-1, keepdims=True
-        )
-
-    if "heading" in data_keys:
-        data["heading"] = get_angle2D(yaw[window_inds][:, window // 2])
-
-    if data_config["direction_process"] in ["midfwd", "x360"]:
-        yaw = yaw[window_inds][:, window // 2]  # [..., None]
-
-    if ("root" or "x6d") in data_keys:
-        root = pose[..., 0, :]
-        if data_config["direction_process"] in ["midfwd", "x360"]:
-            # Centering root
-            root = pose[..., 0, :][window_inds]
-            root_center = np.zeros(root.shape)
-            root_center[..., [0, 1]] = root[:, window // 2, [0, 1]][:, None, :]
-
-            root -= root_center
-        elif data_config["direction_process"] == "fwd":
-            root[..., [0, 1]] = 0
-
-    if "x6d" in data_keys:
-        print("Applying inverse kinematics ...")
-        local_qtn = inv_kin(
-            pose,
-            skeleton_config["KINEMATIC_TREE"],
-            np.array(skeleton_config["OFFSET"]),
-            forward_indices=[1, 0],
-        )
-
-        if "fwd" in data_config["direction_process"]:
-            if "mid" in data_config["direction_process"]:
-                ## Center frame of a window is translated to center and rotated to x+
-                fwd_qtn = np.zeros((len(window_inds), 4))
-                fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
-                local_qtn = local_qtn[window_inds]
-                fwd_qtn = np.repeat(fwd_qtn[:, None, :], window, axis=1)
-            else:
-                fwd_qtn = np.zeros((len(local_qtn), 4))
-                fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
-
-            local_qtn[..., 0, :] = qtn.qmul_np(fwd_qtn, local_qtn[..., 0, :])
-
-            if "root" in data_keys:
-                root = qtn.qrot_np(fwd_qtn, root)
-
-            assert len(root) == len(window_inds)
-            assert len(local_qtn) == len(window_inds)
-
-        data["x6d"] = qtn.quaternion_to_cont6d_np(local_qtn)
-
-    if "offsets" in data_keys:
-        data["offsets"] = get_segment_len(
-            pose,
-            skeleton_config["KINEMATIC_TREE"],
-            np.array(skeleton_config["OFFSET"]),
-        )
-
-    if "root" in data_keys:
-        data["root"] = root
-        frame_dim_inds = tuple(range(len(root.shape) - 1))
-        print("Root Maxes: {}".format(root.max(axis=frame_dim_inds)))
-        print("Root Mins: {}".format(root.min(axis=frame_dim_inds)))
-
-    data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
-    # if "ids" in data_keys:
-    data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
-
-    if "fluorescence" in data_keys:
-        parent_path = str(Path(data_config["data_path"]).parents[0])
-        import pandas as pd
-
-        meta = pd.read_csv(parent_path + "/metadata.csv")
-        meta_by_frame = meta.iloc[ids]
-        fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
-        data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
-
-    if "target_pose" in data_keys:
-        reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
-        if data_config["direction_process"] == "midfwd":
-            offsets = data["offsets"][window_inds].reshape(
-                reshaped_x6d.shape[:2] + (-1,)
-            )
-        else:
-            offsets = data["offsets"]
-
-        data["target_pose"] = fwd_kin_cont6d_torch(
-            reshaped_x6d,
-            skeleton_config["KINEMATIC_TREE"],
-            offsets,
-            root_pos=torch.zeros(reshaped_x6d.shape[0], 3),
-            do_root_R=True,
-            eps=1e-8,
-        ).reshape(data["x6d"].shape[:-1] + (3,))
-
-    return data, window_inds

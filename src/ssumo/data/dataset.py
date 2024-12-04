@@ -117,6 +117,9 @@ def fwd_kin_cont6d_torch(
 
 
 def normalize_root(root, arena_size):
+    """
+    Normalize root Cartesian coordinates to be from (-1, 1) based on arena size
+    """
     norm_root = root - arena_size[0]
     norm_root = 2 * norm_root / (arena_size[1] - arena_size[0]) - 1
     return norm_root
@@ -129,6 +132,11 @@ def inv_normalize_root(norm_root, arena_size):
 
 
 def get_speed_parts(pose, parts):
+    """
+    Get the (1) average root displacement, 
+    (2) average speed of the spine relative to the root,
+    and (3) average speed of the limbs relative to the spine
+    """
     print("Getting speed by body parts")
     root_spd = np.diff(pose[:, 0, :], n=1, axis=0, prepend=pose[0:1, 0, :]) ** 2
     dxyz = np.zeros((len(root_spd), len(parts) + 1))
@@ -161,6 +169,12 @@ def get_speed_parts(pose, parts):
 
 
 def get_speed_parts_torch(pose, parts):
+    """
+    Pytorch version
+    Get the (1) average root displacement, 
+    (2) average speed of the spine relative to the root,
+    and (3) average speed of the limbs relative to the spine
+    """
     print("Getting speed by body parts")
     root_spd = (
         torch.diff(pose[..., 0, :], n=1, dim=-3, prepend=pose[..., 0:1, 0, :]) ** 2
@@ -192,6 +206,9 @@ def get_speed_parts_torch(pose, parts):
 
 
 def get_window_indices(ids, stride, window):
+    """
+    Get full indices of an array broken up by sliding windows
+    """
     print("Calculating windowed indices ...")
     window_inds = []
     frame_idx = np.arange(len(ids), dtype=int)
@@ -222,6 +239,9 @@ def get_window_indices(ids, stride, window):
 
 
 def get_frame_yaw(pose, root_i=0, front_i=1):
+    """
+    Get yaw of given segment in radians
+    """
     forward = pose[:, front_i, :] - pose[:, root_i, :]
     forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
     yaw = -np.arctan2(forward[:, 1], forward[:, 0])
@@ -229,6 +249,12 @@ def get_frame_yaw(pose, root_i=0, front_i=1):
 
 
 def get_heading2D(pose, root_i=0, front_i=1):
+    """
+    NOT USED
+
+    Get yaw of given segment as [sin(angle), cos(angle)]
+    i.e., coordinates on a unit circle
+    """
     yaw = get_frame_yaw(pose, root_i, front_i)
     heading2D = get_angle2D(yaw[:, None])
     heading_change = np.diff(heading2D, n=1, axis=0, prepend=heading2D[0:1, :])
@@ -237,18 +263,28 @@ def get_heading2D(pose, root_i=0, front_i=1):
 
 
 def get_angle2D(angle):  # sin is first, then cos
+    """
+    Given angles in radians, return [sin(angle), cos(angle)]
+    i.e., coordinates on a unit circle
+    """
     angle2D = np.concatenate([np.sin(angle)[:, None], np.cos(angle)[:, None]], axis=-1)
     angle2D = angle2D.reshape(angle.shape[:-1] + (-1,))
     return angle2D
 
 
 def get_angle_from_2D(angle2D):
+    """
+    Given coordinates on a unit circle, return angle in radians
+    """
     angle2D = angle2D.reshape(angle2D.shape[0], -1, 2)
     angles = np.arctan2(angle2D[..., 0], angle2D[..., 1])
     return angles
 
 
 def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.ndarray):
+    """
+    Get length of all segments in a pose defined by a kinematic tree
+    """
     parents = [0] * len(offset)
     parents[0] = -1
     for chain in kinematic_tree:
@@ -266,6 +302,9 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
 
 
 def get_speed_outliers(pose, window_inds, threshold=2.25):
+    """
+    Find indices of frames in which the average speed is greater than the defined threshold
+    """
     avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
     avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
     outlier_frames = np.where(
@@ -280,6 +319,9 @@ def get_speed_outliers(pose, window_inds, threshold=2.25):
 
 
 class MouseDataset(Dataset):
+    """
+    Dataset class for mouse dataset
+    """
     def __init__(
         self,
         data,
@@ -303,6 +345,8 @@ class MouseDataset(Dataset):
             self.arena_size = None
 
         self.kinematic_tree = kinematic_tree
+
+        # List of items which have already been windowed
         self.ind_with_window_inds = [
             k for k, v in self.data.items() if v.shape[0] != len(self.window_inds)
         ]
@@ -312,10 +356,12 @@ class MouseDataset(Dataset):
         return len(self.window_inds)
 
     def __getitem__(self, idx):
+        # Use window indices to access arrays which have not been windowed
         query = {
             k: self.data[k][self.window_inds[idx]] for k in self.ind_with_window_inds
         }
 
+        # Query items which have already been windowed
         query.update(
             {
                 k: v[idx]

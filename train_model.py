@@ -1,12 +1,11 @@
 import ssumo
 from ssumo.params import read
-import sys
-from base_path import RESULTS_PATH
+from scripts.base_path import RESULTS_PATH
 from pathlib import Path
 import wandb
 import argparse
 
-# argparse parameters
+# argparse project and job names
 parser = argparse.ArgumentParser(prog="SC-VAE Train", description="Train SC-VAE models")
 parser.add_argument("--job_id", type=int, dest="job_id")
 parser.add_argument("--project", "-p", type=str, dest="project")
@@ -24,6 +23,7 @@ if args.job_id is not None:
 else:
     name = args.name
 
+# Read in config file with all parameters and settings
 config = read.config(
     "{}/{}/{}/model_config.yaml".format(RESULTS_PATH, args.project, name)
 )
@@ -33,6 +33,7 @@ run = wandb.init(
 )
 print("WANDB directory: {}".format(run.dir))
 
+# Get DataLoaders and model
 if "immunostain" in config["data"]["data_path"]:
     train_loader, model = ssumo.get.data_and_model(
         config,
@@ -42,7 +43,6 @@ if "immunostain" in config["data"]["data_path"]:
         shuffle=True,
     )
     test_loader = None
-
 elif "ensemble_healthy" in config["data"]["data_path"]:
     train_loader, test_loader, model = ssumo.get.data_and_model(
         config,
@@ -52,6 +52,7 @@ elif "ensemble_healthy" in config["data"]["data_path"]:
         shuffle=True,
     )
 
+# Train model
 model = ssumo.train.train(config, model, train_loader, test_loader, run)
 
 run.finish()
