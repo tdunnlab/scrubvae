@@ -189,8 +189,14 @@ def mouse_pd_data(
         fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
         data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
 
+    if "pd_label" in data_keys:
+        data["pd_label"] = torch.zeros((len(window_inds),1)).long()
+        data["pd_label"][ids[window_inds[:, 0:1]]>=37] = 1
+        print("pd_label shape: {}".format(data["pd_label"].shape))
+
     ids[ids >= 37] -= 37
     data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
+    print("ids shape: {}".format(data["ids"].shape))
 
     for k, v in data.items():
         print("{}: {}".format(k, v.shape))
@@ -247,7 +253,7 @@ def mouse_data(
         norm_params = {}
 
     for key in normalize:
-        if (key not in ["heading", "ids", "fluorescence"]) and (key in data_keys):
+        if (key not in ["heading", "ids", "fluorescence", "pd_label"]) and (key in data_keys):
             if data_config["normalize"] == "bounded":
                 print(
                     "Rescaling decoding variable, {}, to be between -1 and 1".format(
@@ -287,6 +293,10 @@ def mouse_data(
                 ]
         else:
             discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
+
+        if "pd_label" in data_keys:
+            discrete_classes["pd_label"] = torch.unique(data["pd_label"], sorted=True)
+
     else:
         discrete_classes["ids"] = torch.unique(data["ids"], sorted=True)
 

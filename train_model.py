@@ -33,13 +33,24 @@ run = wandb.init(
 )
 print("WANDB directory: {}".format(run.dir))
 
-train_loader, test_loader, model = ssumo.get.data_and_model(
-    config,
-    dataset_label="Both",
-    data_keys=["x6d", "root", "offsets", "target_pose"]
-    + config["disentangle"]["features"],
-    shuffle=True,
-)
+if "immunostain" in config["data"]["data_path"]:
+    train_loader, model = ssumo.get.data_and_model(
+        config,
+        dataset_label="Train",
+        data_keys=["x6d", "root", "offsets", "target_pose"]
+        + config["disentangle"]["features"],
+        shuffle=True,
+    )
+    test_loader = None
+
+elif "ensemble_healthy" in config["data"]["data_path"]:
+    train_loader, test_loader, model = ssumo.get.data_and_model(
+        config,
+        dataset_label="Both",
+        data_keys=["x6d", "root", "offsets", "target_pose"]
+        + config["disentangle"]["features"],
+        shuffle=True,
+    )
 
 model = ssumo.train.train(config, model, train_loader, test_loader, run)
 

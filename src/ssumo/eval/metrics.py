@@ -11,12 +11,14 @@ import pickle
 from ..model.disentangle import MLP
 import torch.optim as optim
 import torch
-from tqdm import trange
 from sklearn.model_selection import KFold
 from scipy.spatial.distance import cdist, pdist
 import functools
 from ..eval import cluster
 from sklearn.mixture import GaussianMixture
+from pandas import crosstab
+from scipy.optimize import linear_sum_assignment
+import numpy.typing as npt
 
 
 def epoch_metric(func):
@@ -525,3 +527,29 @@ def shannon_entropy_torch(x, bins, range):
     hist = torch.histogram(x, bins=bins, range=range)[0]
     entropy = torch.nan_to_num(x * torch.log(1 / hist)).sum()
     return entropy
+
+def hungarian_match(x1: npt.ArrayLike, x2: npt.ArrayLike):
+    """Matches the categorical values between two sequences using the Hungarian matching algorithm.
+
+    Parameters
+    ----------
+    x1 : npt.ArrayLike
+        Sequence of categorical values.
+    x2 : npt.ArrayLike
+        Sequence of categorical values.
+
+    Returns
+    -------
+    mapped_x
+        Returns x1 sequence using the matched categorical labels of x2.
+    """
+
+    cost = np.array(crosstab(x1, x2))
+    row_ind, col_ind = linear_sum_assignment(cost, maximize=True)
+    row_k = np.unique(x1)[row_ind]
+    col_v = np.unique(x2)[col_ind]
+    idx = np.searchsorted(row_k, x1)
+    idx[idx == len(row_k)] = 0
+    mask = row_k[idx] == x1
+    mapped_x = np.where(mask, col_v[idx], x1)
+    return mapped_x

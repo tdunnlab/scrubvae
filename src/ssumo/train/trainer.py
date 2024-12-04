@@ -1,14 +1,12 @@
 import torch
 from ssumo.train.losses import get_batch_loss, balance_disentangle
 from ssumo.train.mutual_inf import MutInfoEstimator
-from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter
 from ssumo.plot.eval import loss as plt_loss
 from ssumo.eval import generative_restrictiveness
 from ssumo.eval import cluster
 import torch.optim as optim
 import tqdm
-import pickle
-import functools
+from ssumo.eval.metrics import hungarian_match
 import time
 import wandb
 from ssumo.eval.metrics import (
@@ -22,10 +20,6 @@ import torch.nn.functional as F
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score
 import numpy as np
-from pandas import crosstab
-from scipy.optimize import linear_sum_assignment
-import numpy.typing as npt
-# from torch.profiler import profile, record_function, ProfilerActivity
 from line_profiler import profile
 from pathlib import Path
 
@@ -177,11 +171,13 @@ def train_test_epoch(
                                     data[k].detach().clone(),
                                 )
 
+            #
             epoch_metrics = {
                 k: v + batch_loss[k].detach() for k, v in epoch_metrics.items()
             }
 
             if "mcmi" in config["loss"].keys():
+                ## Update the mutual information estimator
                 updated_data_o = model.encode(data)
 
                 model.mi_estimator = MutInfoEstimator(
@@ -320,7 +316,7 @@ def train_epoch(config, model, loader, optimizer, scheduler, device="cuda", epoc
     return epoch_metrics
 
 @profile
-def train(config, model, train_loader, test_loader, run=None):
+def train(config, model, train_loader, test_loader=None, run=None):
     torch.set_float32_matmul_precision("medium")
     torch.autograd.set_detect_anomaly(True)
     torch.backends.cudnn.benchmark = True
@@ -379,132 +375,115 @@ def train(config, model, train_loader, test_loader, run=None):
         metrics["time"] = time.time() - starttime
 
         if epoch % 5 == 0:
-            if epoch >= 50:
-                # rand_state = torch.random.get_rng_state()
-                # print(rand_state)
-                # torch.manual_seed(100)
-                test_metrics, z_test = test_epoch(
-                    config=config,
-                    model=model,
-                    loader=test_loader,
-                    device="cuda",
-                    epoch=epoch,
-                )
-                metrics.update(
-                    {"{}_test".format(k): v for k, v in test_metrics.items()}
-                )
-
-                for key in ["avg_speed_3d", "heading"]:
-                    y_true = test_loader.dataset[:][key].detach().cpu().numpy()
-                    r2_lin = linear_rand_cv(
-                        z_test,
-                        y_true,
-                        int(np.ceil(model.window / config["data"]["stride"])),
-                        5,
-                    )
-                    r2_mlp = mlp_rand_cv(
-                        z_test,
-                        y_true,
-                        int(np.ceil(model.window / config["data"]["stride"])),
-                        5,
-                    )
-                    metrics["r2_{}_lin_mean".format(key)] = np.mean(r2_lin)
-                    metrics["r2_{}_lin_std".format(key)] = np.std(r2_lin)
-                    metrics["r2_{}_mlp_mean".format(key)] = np.mean(r2_mlp)
-                    metrics["r2_{}_mlp_std".format(key)] = np.std(r2_mlp)
-
-                z_scaled = StandardScaler().fit_transform(z_train)
-                y_true = (
-                    train_loader.dataset[:]["ids"].detach().cpu().numpy().astype(np.int)
-                )
-                acc_log = log_class_rand_cv(
-                    z_scaled,
-                    y_true,
-                    int(np.ceil(model.window / config["data"]["stride"])),
-                    5,
-                )
-                acc_qda = qda_rand_cv(
-                    z_scaled,
-                    y_true,
-                    int(np.ceil(model.window / config["data"]["stride"])),
-                    5,
-                )
-                metrics["acc_ids_log_mean"] = np.mean(acc_log)
-                metrics["acc_ids_log_std"] = np.std(acc_log)
-                metrics["acc_ids_qda_mean"] = np.mean(acc_qda)
-                metrics["acc_ids_qda_std"] = np.std(acc_qda)
-
-                k_pred_e = cluster.gmm(
-                    latents=z_test,
-                    n_components=50,
-                    label="".format(epoch),
-                    covariance_type="diag" if config["model"]["diag"] else "full",
-                    path=None,
-                )[0]
-
-                walking_inds = np.in1d(
-                    test_loader.dataset.gmm_pred["midfwd_test"],
-                    test_loader.dataset.walking_clusters["midfwd_test"],
-                )
-                metrics["entropy_midfwd_test"] = shannon_entropy(k_pred_e[walking_inds])
-
-                for cluster_key in test_loader.dataset.gmm_pred.keys():
-                    mapped = hungarian_match(
-                        k_pred_e, test_loader.dataset.gmm_pred[cluster_key]
-                    )
-                    metrics["mof_gmm_{}".format(cluster_key)] = (
-                        (test_loader.dataset.gmm_pred[cluster_key] == mapped)
-                    ).sum() / len(k_pred_e)
-
-            # metrics.update({"{}_test".format(k):v for k,v in test_loss.items()})
-            # run = wandb.Api().run("joshuahwu/wandb_test/{}".format(wandb_run.))
-            # wandb_run.run.history().to_csv("metrics.csv")
-
             print("Saving model to folder: {}".format(config["out_path"]))
             torch.save(
                 {k: v.cpu() for k, v in model.state_dict().items()},
                 "{}/weights/epoch_{}.pth".format(config["out_path"], epoch),
             )
 
-            if epoch % 20 == 0:
+            if epoch % 5 == 0:
                 torch.save(
                     {"optimizer": optimizer.state_dict(), "lr_scheduler": scheduler},
                     "{}/checkpoints/epoch_{}.pth".format(config["out_path"], epoch),
                 )
 
+            if epoch >= 10:
+                # rand_state = torch.random.get_rng_state()
+                # print(rand_state)
+                # torch.manual_seed(100)
+                if test_loader is not None:
+                    test_metrics, z_test = test_epoch(
+                        config=config,
+                        model=model,
+                        loader=test_loader,
+                        device="cuda",
+                        epoch=epoch,
+                    )
+                    metrics.update(
+                        {"{}_test".format(k): v for k, v in test_metrics.items()}
+                    )
+
+                    for key in ["avg_speed_3d", "heading"]:
+                        y_true = test_loader.dataset[:][key].detach().cpu().numpy()
+                        r2_lin = linear_rand_cv(
+                            z_test,
+                            y_true,
+                            int(np.ceil(model.window / config["data"]["stride"])),
+                            5,
+                        )
+                        r2_mlp = mlp_rand_cv(
+                            z_test,
+                            y_true,
+                            int(np.ceil(model.window / config["data"]["stride"])),
+                            5,
+                        )
+                        metrics["r2_{}_lin_mean".format(key)] = np.mean(r2_lin)
+                        metrics["r2_{}_lin_std".format(key)] = np.std(r2_lin)
+                        metrics["r2_{}_mlp_mean".format(key)] = np.mean(r2_mlp)
+                        metrics["r2_{}_mlp_std".format(key)] = np.std(r2_mlp)
+
+                    y_true = (
+                        train_loader.dataset[:]["ids"].detach().cpu().numpy().astype(np.int)
+                    )
+                    acc_log = log_class_rand_cv(
+                        z_train,
+                        y_true,
+                        int(np.ceil(model.window / config["data"]["stride"])),
+                        5,
+                    )
+                    acc_qda = qda_rand_cv(
+                        z_train,
+                        y_true,
+                        int(np.ceil(model.window / config["data"]["stride"])),
+                        5,
+                    )
+                    metrics["acc_ids_log_mean"] = np.mean(acc_log)
+                    metrics["acc_ids_log_std"] = np.std(acc_log)
+                    metrics["acc_ids_qda_mean"] = np.mean(acc_qda)
+                    metrics["acc_ids_qda_std"] = np.std(acc_qda)
+
+                    k_pred_e = cluster.gmm(
+                        latents=z_test,
+                        n_components=50,
+                        label="".format(epoch),
+                        covariance_type="diag" if config["model"]["diag"] else "full",
+                        path=None,
+                    )[0]
+
+                    walking_inds = np.in1d(
+                        test_loader.dataset.gmm_pred["midfwd_test"],
+                        test_loader.dataset.walking_clusters["midfwd_test"],
+                    )
+                    metrics["entropy_midfwd_test"] = shannon_entropy(k_pred_e[walking_inds])
+
+                    for cluster_key in test_loader.dataset.gmm_pred.keys():
+                        mapped = hungarian_match(
+                            k_pred_e, test_loader.dataset.gmm_pred[cluster_key]
+                        )
+                        metrics["mof_gmm_{}".format(cluster_key)] = (
+                            (test_loader.dataset.gmm_pred[cluster_key] == mapped)
+                        ).sum() / len(k_pred_e)
+                else:
+                    y_true = (
+                        train_loader.dataset[:]["pd_label"].detach().cpu().numpy().astype(np.int)
+                    )
+                    acc_log = log_class_rand_cv(
+                        z_train,
+                        y_true,
+                        int(np.ceil(model.window / config["data"]["stride"])),
+                        5,
+                    )
+                    acc_qda = qda_rand_cv(
+                        z_train,
+                        y_true,
+                        int(np.ceil(model.window / config["data"]["stride"])),
+                        5,
+                    )
+
+            # metrics.update({"{}_test".format(k):v for k,v in test_loss.items()})
+            # run = wandb.Api().run("joshuahwu/wandb_test/{}".format(wandb_run.))
+            # wandb_run.run.history().to_csv("metrics.csv")
+
         wandb.log(metrics, epoch)
 
     return model
-
-
-import numpy as np
-from pandas import crosstab
-from scipy.optimize import linear_sum_assignment
-import numpy.typing as npt
-
-
-def hungarian_match(x1: npt.ArrayLike, x2: npt.ArrayLike):
-    """Matches the categorical values between two sequences using the Hungarian matching algorithm.
-
-    Parameters
-    ----------
-    x1 : npt.ArrayLike
-        Sequence of categorical values.
-    x2 : npt.ArrayLike
-        Sequence of categorical values.
-
-    Returns
-    -------
-    mapped_x
-        Returns x1 sequence using the matched categorical labels of x2.
-    """
-
-    cost = np.array(crosstab(x1, x2))
-    row_ind, col_ind = linear_sum_assignment(cost, maximize=True)
-    row_k = np.unique(x1)[row_ind]
-    col_v = np.unique(x2)[col_ind]
-    idx = np.searchsorted(row_k, x1)
-    idx[idx == len(row_k)] = 0
-    mask = row_k[idx] == x1
-    mapped_x = np.where(mask, col_v[idx], x1)
-    return mapped_x
