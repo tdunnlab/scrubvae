@@ -1,4 +1,4 @@
-import scrubbed_cvae
+import scrubvae
 from neuroposelib import read
 import torch
 from neuroposelib import visualization as vis
@@ -14,7 +14,7 @@ vis_path = RESULTS_PATH + analysis_key + "/vis_latents/"
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 dataset_label = "Train"
-loader = scrubbed_cvae.get.mouse_data(
+loader = scrubvae.get.mouse_data(
     data_config=config["data"],
     window=config["model"]["window"],
     train=dataset_label == "Train",
@@ -38,7 +38,7 @@ for key in ["heading"]:
 
     print(np.mean(z_cvar))
 
-    scrubbed_cvae.plot.feature_ridge(
+    scrubvae.plot.feature_ridge(
         feature=feat,
         labels=k_pred,
         xlabel=key,
@@ -49,7 +49,7 @@ for key in ["heading"]:
         path="{}{}_".format(vis_path, key),
     )
 
-    # scrubbed_cvae.plot.feature_ridge(
+    # scrubvae.plot.feature_ridge(
     #     feature=feat,
     #     labels=k_pred_null,
     #     xlabel=key,

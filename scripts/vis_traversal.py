@@ -1,13 +1,13 @@
 import numpy as np
 from neuroposelib import visualization as vis
-import scrubbed_cvae
+import scrubvae
 from base_path import RESULTS_PATH
 import sys
 from pathlib import Path
 from neuroposelib import read
 import torch
 from sklearn.linear_model import LinearRegression
-from scrubbed_cvae.data.dataset import get_angle2D
+from scrubvae.data.dataset import get_angle2D
 
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
@@ -20,7 +20,7 @@ Path(vis_decode_path).mkdir(parents=True, exist_ok=True)
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
 dataset_label = "Train"
 ### Load Datasets
-loader, model = scrubbed_cvae.get.data_and_model(
+loader, model = scrubvae.get.data_and_model(
     config,
     load_model=config["out_path"],
     epoch=sys.argv[2],
@@ -31,7 +31,7 @@ loader, model = scrubbed_cvae.get.data_and_model(
     verbose=0,
 )
 
-latents = scrubbed_cvae.get.latents(
+latents = scrubvae.get.latents(
     config=config,
     model=model,
     epoch=sys.argv[2],
@@ -64,7 +64,7 @@ for sample_i in sample_idx:
 
     data_o = model.decode(z_traverse, data)
     pose = (
-        scrubbed_cvae.data.dataset.fwd_kin_cont6d_torch(
+        scrubvae.data.dataset.fwd_kin_cont6d_torch(
             data_o["x6d"].reshape((-1,) + data_o["x6d"].shape[2:]),
             model.kinematic_tree,
             data["offsets"].reshape((-1,) + data["offsets"].shape[2:]),
@@ -107,7 +107,7 @@ for sample_i in sample_idx:
         SAVE_ROOT=vis_decode_path,
     )
 
-    # scrubbed_cvae.eval.traverse_latent(
+    # scrubvae.eval.traverse_latent(
     #     model,
     #     loader.dataset,
     #     latents,

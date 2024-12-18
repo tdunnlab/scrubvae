@@ -154,7 +154,7 @@ cython_debug/
 
 __pycache__/
 batch/
-src/scrubbed_cvae/*/__pycache__
+src/scrubvae/*/__pycache__
 configs/*.yaml
 !configs/mouse_skeleton.yaml
 base_path.py
