@@ -1,6 +1,6 @@
 from neuroposelib import read, preprocess
 import numpy as np
-import ssumo.data.quaternion as qtn
+import scrubbed_cvae.data.quaternion as qtn
 from typing import Optional, Type, Union, List
 from torch.utils.data import Dataset
 import torch

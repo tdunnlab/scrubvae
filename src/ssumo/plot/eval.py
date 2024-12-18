@@ -1,4 +1,4 @@
-from ssumo.plot.constants import PALETTE_DICT
+from scrubbed_cvae.plot.constants import PALETTE_DICT
 import matplotlib.pyplot as plt
 import numpy as np
 

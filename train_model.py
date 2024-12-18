@@ -1,5 +1,5 @@
-import ssumo
-from ssumo.params import read
+import scrubbed_cvae
+from scrubbed_cvae.params import read
 from scripts.base_path import RESULTS_PATH
 from pathlib import Path
 import wandb
@@ -35,7 +35,7 @@ print("WANDB directory: {}".format(run.dir))
 
 # Get DataLoaders and model
 if "immunostain" in config["data"]["data_path"]:
-    train_loader, model = ssumo.get.data_and_model(
+    train_loader, model = scrubbed_cvae.get.data_and_model(
         config,
         dataset_label="Train",
         data_keys=["x6d", "root", "offsets", "target_pose"]
@@ -44,7 +44,7 @@ if "immunostain" in config["data"]["data_path"]:
     )
     test_loader = None
 elif "ensemble_healthy" in config["data"]["data_path"]:
-    train_loader, test_loader, model = ssumo.get.data_and_model(
+    train_loader, test_loader, model = scrubbed_cvae.get.data_and_model(
         config,
         dataset_label="Both",
         data_keys=["x6d", "root", "offsets", "target_pose"]
@@ -53,6 +53,6 @@ elif "ensemble_healthy" in config["data"]["data_path"]:
     )
 
 # Train model
-model = ssumo.train.train(config, model, train_loader, test_loader, run)
+model = scrubbed_cvae.train.train(config, model, train_loader, test_loader, run)
 
 run.finish()

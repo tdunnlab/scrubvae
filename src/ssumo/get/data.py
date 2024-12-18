@@ -1,9 +1,9 @@
 from neuroposelib import read, preprocess
 import numpy as np
-import ssumo.data.quaternion as qtn
+import scrubbed_cvae.data.quaternion as qtn
 from typing import List
 import torch
-from ssumo.data.dataset import *
+from scrubbed_cvae.data.dataset import *
 from torch.utils.data import DataLoader
 from pathlib import Path
 
@@ -33,7 +33,7 @@ def get_babel(
         shuffle (bool, optional): Whether DataLoader shuffles. Defaults to False.
     """
     ## TODO: Before starting this, set up your new mouse skeleton config
-    # You can reference `ssumo/configs/mouse_skeleton.yaml``
+    # You can reference `scrubbed_cvae/configs/mouse_skeleton.yaml``
     # Crucial elements are to identify your kinematic tree and offsets
     # Offsets will just be unit vectors in principle directions based off of kinematic tree
     # May also need to reorder keypoints

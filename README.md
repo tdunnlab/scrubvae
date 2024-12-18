@@ -1,4 +1,4 @@
-# Semi-Supervised Motion (SSUMO) Latents
+# Semi-Supervised Motion (scrubbed_cvae) Latents
 
 Written by Joshua H. Wu (joshua.wu@duke.edu)
 

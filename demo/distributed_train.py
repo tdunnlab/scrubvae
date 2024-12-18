@@ -21,17 +21,17 @@ from torch.distributed.fsdp.wrap import (
     wrap,
 )
 
-import ssumo
-from ssumo.params import read
+import scrubbed_cvae
+from scrubbed_cvae.params import read
 import neuroposelib
 import sys
 from pathlib import Path
 import wandb
 import argparse
-from ssumo.train.trainer import predict_batch, get_optimizer_and_lr_scheduler
-from ssumo.train.losses import get_batch_loss
-from ssumo.get.data import calculate_mouse_kinematics
-from ssumo.data.dataset import MouseDataset
+from scrubbed_cvae.train.trainer import predict_batch, get_optimizer_and_lr_scheduler
+from scrubbed_cvae.train.losses import get_batch_loss
+from scrubbed_cvae.get.data import calculate_mouse_kinematics
+from scrubbed_cvae.data.dataset import MouseDataset
 
 
 RESULTS_PATH = "./"
@@ -89,7 +89,7 @@ def main(rank, world_size, config):
     init_start_event = torch.cuda.Event(enable_timing=True)
     init_end_event = torch.cuda.Event(enable_timing=True)
 
-    model = ssumo.get.model(
+    model = scrubbed_cvae.get.model(
         model_config=config["model"],
         load_model=None,
         epoch=0,

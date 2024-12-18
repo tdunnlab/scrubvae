@@ -1,16 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import ssumo
+import scrubbed_cvae
 from neuroposelib import read
 import torch
-from ssumo.data.dataset import get_angle2D, get_frame_yaw, fwd_kin_cont6d_torch, get_speed_parts
+from scrubbed_cvae.data.dataset import get_angle2D, get_frame_yaw, fwd_kin_cont6d_torch, get_speed_parts
 import tqdm
 from sklearn.metrics import r2_score
 from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
 import pickle
-palette = ssumo.plot.constants.PALETTE_2
+palette = scrubbed_cvae.plot.constants.PALETTE_2
 # models = {
 #     # "Vanilla VAE": ["vanilla/64", 300],
 #     # "Beta VAE": [],
@@ -45,7 +45,7 @@ for an_key in analysis_keys:
     if Path(pickle_path).is_file():
         metrics = pickle.load(open(pickle_path, "rb"))
         epochs_to_test = [
-            e for e in ssumo.get.all_saved_epochs(path) if (e not in metrics["epochs"]) and (e>100)
+            e for e in scrubbed_cvae.get.all_saved_epochs(path) if (e not in metrics["epochs"]) and (e>100)
         ]
         metrics["epochs"] = np.concatenate(
             [metrics["epochs"], epochs_to_test]
@@ -54,11 +54,11 @@ for an_key in analysis_keys:
         metrics = {"R2": []}
         if disentanglement_key == "heading":
             metrics["JPE"] = []
-        metrics["epochs"] = [e for e in ssumo.get.all_saved_epochs(path) if (e>100)]
+        metrics["epochs"] = [e for e in scrubbed_cvae.get.all_saved_epochs(path) if (e>100)]
         epochs_to_test = metrics["epochs"]
 
     if len(epochs_to_test) > 0:
-        loader = ssumo.get.mouse_data(
+        loader = scrubbed_cvae.get.mouse_data(
             data_config=config["data"],
             window=config["model"]["window"],
             train=True,
@@ -102,7 +102,7 @@ for an_key in analysis_keys:
         # avg_speed_3d_rand = torch.clamp(torch.randn_like(spd_true),-2, 2)
 
     for _, epoch in enumerate(epochs_to_test):
-        model = ssumo.get.model(
+        model = scrubbed_cvae.get.model(
             model_config=config["model"],
             load_model=config["out_path"],
             epoch=epoch,
@@ -117,7 +117,7 @@ for an_key in analysis_keys:
             verbose=-1,
         )
 
-        z = ssumo.get.latents(config, model, epoch, loader, "cuda", "Train")
+        z = scrubbed_cvae.get.latents(config, model, epoch, loader, "cuda", "Train")
         # torch.tensor(
         #     np.load(path + "latents/Train_{}.npy".format(epoch))
         # )

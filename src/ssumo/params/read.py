@@ -1,7 +1,7 @@
 import yaml
 from neuroposelib import read
 from pathlib import Path
-from ssumo.params import PARAM_KEYS
+from scrubbed_cvae.params import PARAM_KEYS
 from pathlib import Path
 
 

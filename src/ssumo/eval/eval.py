@@ -1,8 +1,8 @@
 import scipy.linalg as spl
-from ssumo.data.dataset import fwd_kin_cont6d_torch, get_speed_parts_torch
+from scrubbed_cvae.data.dataset import fwd_kin_cont6d_torch, get_speed_parts_torch
 import numpy as np
 import torch
-from ssumo.plot import trace, PLANE
+from scrubbed_cvae.plot import trace, PLANE
 from neuroposelib import visualization as vis
 import tqdm
 

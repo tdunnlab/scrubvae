@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 import torch
-from ssumo.data.rotation_conversion import rotation_6d_to_matrix
-from ssumo.data.dataset import fwd_kin_cont6d_torch
+from scrubbed_cvae.data.rotation_conversion import rotation_6d_to_matrix
+from scrubbed_cvae.data.dataset import fwd_kin_cont6d_torch
 import numpy as np
 import wandb
 

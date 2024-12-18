@@ -1,15 +1,15 @@
 import torch
-from ssumo.train.losses import get_batch_loss, balance_disentangle
-from ssumo.train.mutual_inf import MutInfoEstimator
-from ssumo.plot.eval import loss as plt_loss
-from ssumo.eval import generative_restrictiveness
-from ssumo.eval import cluster
+from scrubbed_cvae.train.losses import get_batch_loss, balance_disentangle
+from scrubbed_cvae.train.mutual_inf import MutInfoEstimator
+from scrubbed_cvae.plot.eval import loss as plt_loss
+from scrubbed_cvae.eval import generative_restrictiveness
+from scrubbed_cvae.eval import cluster
 import torch.optim as optim
 import tqdm
-from ssumo.eval.metrics import hungarian_match
+from scrubbed_cvae.eval.metrics import hungarian_match
 import time
 import wandb
-from ssumo.eval.metrics import (
+from scrubbed_cvae.eval.metrics import (
     linear_rand_cv,
     mlp_rand_cv,
     log_class_rand_cv,

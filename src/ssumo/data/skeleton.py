@@ -1,4 +1,4 @@
-from ssumo.data.quaternion import *
+from scrubbed_cvae.data.quaternion import *
 import scipy.ndimage.filters as filters
 
 class Skeleton(object):
