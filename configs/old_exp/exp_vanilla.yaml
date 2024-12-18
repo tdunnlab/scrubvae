@@ -1,0 +1,8 @@
+PATHS: 
+  - vanilla/8
+  - vanilla/16
+  - vanilla/32
+  - vanilla/64
+  - vanilla/128
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/vanilla/

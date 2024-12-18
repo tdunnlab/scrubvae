@@ -1,11 +1,12 @@
-from dappy import read, preprocess
+from neuroposelib import read, preprocess
 import numpy as np
-import ssumo.data.quaternion as qtn
+import scrubbed_cvae.data.quaternion as qtn
 from typing import Optional, Type, Union, List
 from torch.utils.data import Dataset
 import torch
 from numpy.lib.stride_tricks import sliding_window_view
 from tqdm import trange
+
 
 def inv_kin(
     pose: np.ndarray,
@@ -91,7 +92,7 @@ def fwd_kin_cont6d_torch(
     else:
         offsets = offset
 
-    pose = torch.zeros(continuous_6d.shape[:-1] + (3,),device=continuous_6d.device)
+    pose = torch.zeros(continuous_6d.shape[:-1] + (3,), device=continuous_6d.device)
     pose[..., 0, :] = root_pos
     for chain in kinematic_tree:
         if do_root_R:
@@ -114,7 +115,11 @@ def fwd_kin_cont6d_torch(
             )
     return pose
 
+
 def normalize_root(root, arena_size):
+    """
+    Normalize root Cartesian coordinates to be from (-1, 1) based on arena size
+    """
     norm_root = root - arena_size[0]
     norm_root = 2 * norm_root / (arena_size[1] - arena_size[0]) - 1
     return norm_root
@@ -125,11 +130,17 @@ def inv_normalize_root(norm_root, arena_size):
     root += arena_size[0]
     return root
 
+
 def get_speed_parts(pose, parts):
+    """
+    Get the (1) average root displacement, 
+    (2) average speed of the spine relative to the root,
+    and (3) average speed of the limbs relative to the spine
+    """
     print("Getting speed by body parts")
     root_spd = np.diff(pose[:, 0, :], n=1, axis=0, prepend=pose[0:1, 0, :]) ** 2
     dxyz = np.zeros((len(root_spd), len(parts) + 1))
-    dxyz[:, 0] = np.sqrt(root_spd).sum(axis=-1)
+    dxyz[:, 0] = np.sqrt(root_spd).sum(axis=-1)  # TODO: Put sum in sqrt
 
     centered_pose = preprocess.center_spine(pose, keypt_idx=0)
     # ego_pose = preprocess.rotate_spine(
@@ -157,23 +168,70 @@ def get_speed_parts(pose, parts):
     return dxyz
 
 
+def get_speed_parts_torch(pose, parts):
+    """
+    Pytorch version
+    Get the (1) average root displacement, 
+    (2) average speed of the spine relative to the root,
+    and (3) average speed of the limbs relative to the spine
+    """
+    print("Getting speed by body parts")
+    root_spd = (
+        torch.diff(pose[..., 0, :], n=1, dim=-3, prepend=pose[..., 0:1, 0, :]) ** 2
+    )
+    dxyz = torch.zeros((len(root_spd), len(parts) + 1), device=pose.device)
+    dxyz[:, 0] = torch.sqrt(root_spd.sum(dim=-1))
+
+    centered_pose = pose - pose[:, 0:1, :]
+    # ego_pose = preprocess.rotate_spine(
+    #     centered_pose,
+    #     keypt_idx=[0, 1],
+    #     lock_to_x=False,
+    # )
+
+    for i, part in enumerate(parts):
+        pose_part = centered_pose - centered_pose[:, part[0] : part[0] + 1, :]
+        relative_dxyz = (
+            torch.diff(
+                pose_part[:, part[1:], :],
+                n=1,
+                dim=0,
+                prepend=pose_part[0:1, part[1:], :],
+            )
+            ** 2
+        ).sum(dim=-1)
+        dxyz[:, i + 1] = torch.sqrt(relative_dxyz).mean(dim=-1)
+
+    return dxyz
+
+
 def get_window_indices(ids, stride, window):
+    """
+    Get full indices of an array broken up by sliding windows
+    """
     print("Calculating windowed indices ...")
     window_inds = []
     frame_idx = np.arange(len(ids), dtype=int)
     id_diff = np.diff(ids, prepend=ids[0])
     id_change = np.concatenate([[0], np.where(id_diff != 0)[0], [len(ids)]])
     for i in trange(0, len(id_change) - 1):
-        strided_data = sliding_window_view(
-            frame_idx[id_change[i] : id_change[i + 1], ...],
-            window_shape=window,
-            axis=0,
-        )[::stride, ...]
-        window_inds += [torch.squeeze(torch.tensor(strided_data, dtype=int))]
-        assert (
-            np.moveaxis(strided_data[1, ...], -1, 0)
-            - frame_idx[id_change[i] + stride : id_change[i] + window + stride, ...]
-        ).sum() == 0
+        if (id_change[i + 1] - id_change[i]) >= window:
+            strided_data = sliding_window_view(
+                frame_idx[id_change[i] : id_change[i + 1], ...],
+                window_shape=window,
+                axis=0,
+            )[::stride, ...]
+
+            window_inds += [torch.tensor(strided_data, dtype=int)]
+
+            if strided_data.shape[0] > 1:
+                assert (
+                    np.moveaxis(strided_data[1, ...], -1, 0)
+                    - frame_idx[id_change[i] + stride : id_change[i] + window + stride, ...]
+                ).sum() == 0
+        else:
+            print("ID {} length smaller than window size - skipping ...".format(ids[id_change[i]]))
+
 
     window_inds = torch.cat(window_inds, dim=0)
 
@@ -181,6 +239,9 @@ def get_window_indices(ids, stride, window):
 
 
 def get_frame_yaw(pose, root_i=0, front_i=1):
+    """
+    Get yaw of given segment in radians
+    """
     forward = pose[:, front_i, :] - pose[:, root_i, :]
     forward = forward / np.linalg.norm(forward, axis=-1)[..., None]
     yaw = -np.arctan2(forward[:, 1], forward[:, 0])
@@ -188,6 +249,12 @@ def get_frame_yaw(pose, root_i=0, front_i=1):
 
 
 def get_heading2D(pose, root_i=0, front_i=1):
+    """
+    NOT USED
+
+    Get yaw of given segment as [sin(angle), cos(angle)]
+    i.e., coordinates on a unit circle
+    """
     yaw = get_frame_yaw(pose, root_i, front_i)
     heading2D = get_angle2D(yaw[:, None])
     heading_change = np.diff(heading2D, n=1, axis=0, prepend=heading2D[0:1, :])
@@ -196,18 +263,28 @@ def get_heading2D(pose, root_i=0, front_i=1):
 
 
 def get_angle2D(angle):  # sin is first, then cos
+    """
+    Given angles in radians, return [sin(angle), cos(angle)]
+    i.e., coordinates on a unit circle
+    """
     angle2D = np.concatenate([np.sin(angle)[:, None], np.cos(angle)[:, None]], axis=-1)
     angle2D = angle2D.reshape(angle.shape[:-1] + (-1,))
     return angle2D
 
 
 def get_angle_from_2D(angle2D):
+    """
+    Given coordinates on a unit circle, return angle in radians
+    """
     angle2D = angle2D.reshape(angle2D.shape[0], -1, 2)
     angles = np.arctan2(angle2D[..., 0], angle2D[..., 1])
     return angles
 
 
 def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.ndarray):
+    """
+    Get length of all segments in a pose defined by a kinematic tree
+    """
     parents = [0] * len(offset)
     parents[0] = -1
     for chain in kinematic_tree:
@@ -223,19 +300,53 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
 
     return offsets
 
+
+def get_speed_outliers(pose, window_inds, threshold=2.25):
+    """
+    Find indices of frames in which the average speed is greater than the defined threshold
+    """
+    avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
+    avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
+    outlier_frames = np.where(
+        avg_spd[window_inds[:, 1:], ...].mean(
+            axis=tuple(range(1, len(avg_spd.shape) + 1))
+        )
+        > threshold
+    )[0]
+    outlier_frames = np.unique(outlier_frames)
+    print("Outlier frames above {}: {}".format(threshold, len(outlier_frames)))
+    return outlier_frames
+
+
 class MouseDataset(Dataset):
+    """
+    Dataset class for mouse dataset
+    """
     def __init__(
-        self, data, window_inds, arena_size=None, kinematic_tree=None, n_keypts=None, label="Train"
+        self,
+        data,
+        window_inds,
+        arena_size=None,
+        kinematic_tree=None,
+        n_keypts=None,
+        label="Train",
+        discrete_classes=None,
+        norm_params=None,
     ):
         self.data = data
         self.window_inds = window_inds
         self.n_keypts = n_keypts
+        self.discrete_classes = discrete_classes
+        self.norm_params = norm_params
+
         if arena_size is not None:
             self.arena_size = torch.tensor(arena_size)
         else:
             self.arena_size = None
 
         self.kinematic_tree = kinematic_tree
+
+        # List of items which have already been windowed
         self.ind_with_window_inds = [
             k for k, v in self.data.items() if v.shape[0] != len(self.window_inds)
         ]
@@ -245,10 +356,12 @@ class MouseDataset(Dataset):
         return len(self.window_inds)
 
     def __getitem__(self, idx):
+        # Use window indices to access arrays which have not been windowed
         query = {
             k: self.data[k][self.window_inds[idx]] for k in self.ind_with_window_inds
         }
 
+        # Query items which have already been windowed
         query.update(
             {
                 k: v[idx]

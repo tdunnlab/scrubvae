@@ -1,13 +1,12 @@
-from ssumo.data.dataset import fwd_kin_cont6d_torch
+from scrubbed_cvae.data.dataset import fwd_kin_cont6d_torch
 
 from torch.utils.data import DataLoader
-from dappy import read
+from neuroposelib import read
 import torch
-from dappy import vis
-import ssumo
+from neuroposelib import vis
+import scrubbed_cvae
 from base_path import RESULTS_PATH
 import sys
-
 
 def visualize_reconstruction(model, loader, label, connectivity):
     n_keypts = loader.dataset.n_keypts
@@ -17,7 +16,7 @@ def visualize_reconstruction(model, loader, label, connectivity):
         # Let's see how reconstruction looks on train data
         data = next(iter(loader))
         data = {k: v.to("cuda") for k, v in data.items()}
-        data_o = ssumo.train.predict_batch(
+        data_o = scrubbed_cvae.train.predict_batch(
             model, data, disentangle_keys=config["disentangle"]["features"]
         )
 
@@ -60,11 +59,11 @@ def visualize_reconstruction(model, loader, label, connectivity):
 analysis_key = sys.argv[1]
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["data"]["stride"] = 10
-config["data"]["batch_size"] = 5
+config["data"]["batch_size"] = 10
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
-
-for dataset_label in ["Train", "Test"]:
-    dataset, loader, model = ssumo.get.data_and_model(
+dataset_list = ["Train", "Test"]
+for dataset_label in dataset_list:
+    loader, model = scrubbed_cvae.get.data_and_model(
         config,
         load_model=config["out_path"],
         epoch=sys.argv[2],

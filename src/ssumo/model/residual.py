@@ -6,6 +6,7 @@ import torch
 def find_latent_dim(
     window_size: int, kernel: int, num_layers: int, dilation=torch.ones(4)
 ):
+    # Convolution math
     stride = 1 if any(dilation > 1) else 2
     layer_out = (
         lambda l_in, dil: (l_in + 2 * (kernel // 2) - dil * (kernel - 1) - 1) / stride
@@ -20,6 +21,7 @@ def find_latent_dim(
 
 
 def find_out_dim(latent_dim: int, kernel: int, num_layers: int, dilation=torch.ones(4)):
+    # Convolution math
     stride = 1 if any(dilation > 1) else 2
     layer_out = (
         lambda l_in, dil: (l_in - 1) * stride
@@ -68,7 +70,7 @@ class CholeskyL(nn.Module):
 
 class ResidualBlock(nn.Module):
     def __init__(
-        self, in_channels, out_channels, kernel=5, activation="prelu", dilation=1
+        self, in_channels, out_channels, kernel=3, activation="prelu", dilation=1
     ):
         stride = 1 if dilation > 1 else 2
 
@@ -122,7 +124,7 @@ class ResidualBlockTranspose(nn.Module):
         self,
         in_channels,
         out_channels,
-        kernel=5,
+        kernel=3,
         scale_factor=2,
         activation="prelu",
         dilation=1,
@@ -188,9 +190,11 @@ class ResidualEncoder(nn.Module):
         window=200,
         activation="prelu",
         is_diag=False,
+        prior="gaussian",
         init_dilation=None,
     ):
         super(ResidualEncoder, self).__init__()
+        self.prior = prior
         self.conv_in = nn.Conv1d(in_channels, ch[0], 7, 1, 3)
         self.activation = nn.Tanh() if activation == "tanh" else nn.PReLU()
 
@@ -209,19 +213,31 @@ class ResidualEncoder(nn.Module):
         self.flatten = nn.Flatten()
 
         flatten_dim = find_latent_dim(window, kernel, len(ch) - 1, dilation) * ch[-1]
-        self.fc_mu = nn.Linear(flatten_dim, z_dim)
-        sig_dim = z_dim if is_diag else z_dim * (z_dim + 1) // 2
-        self.fc_sigma = nn.Sequential(
-            nn.Linear(flatten_dim, sig_dim), CholeskyL(z_dim, is_diag)
-        )
+
+        if prior == "gaussian":
+            sig_dim = z_dim if is_diag else z_dim * (z_dim + 1) // 2
+            self.fc_mu = nn.Linear(flatten_dim, z_dim)
+            self.fc_sigma = nn.Sequential(
+                nn.Linear(flatten_dim, sig_dim), CholeskyL(z_dim, is_diag)
+            )
+        elif prior == "beta":
+            self.fc_alpha = nn.Linear(flatten_dim, z_dim)
+            self.fc_beta = nn.Linear(flatten_dim, z_dim)
 
     def forward(self, x):
         x = self.activation(self.conv_in(x))
         x = self.res_layers(x)
         x = self.flatten(x)
-        mu = self.fc_mu(x)
-        sigma = self.fc_sigma(x)
-        return mu, sigma
+        if self.prior == "gaussian":
+            mu = self.fc_mu(x)
+            sigma = self.fc_sigma(x)
+            return mu, sigma
+        elif self.prior == "beta":
+            # Making sure beta distribution has one mode
+            alpha = F.softplus(self.fc_alpha(x)) + 1
+            beta = F.softplus(self.fc_beta(x)) + 1
+            return alpha, beta
+        return 0
 
 
 class ResidualDecoder(nn.Module):
@@ -247,7 +263,6 @@ class ResidualDecoder(nn.Module):
         flatten_dim = find_latent_dim(window, kernel, len(ch) - 1, dilation) * ch[-1]
         self.fc_in = nn.Linear(z_dim + conditional_dim, flatten_dim)
         self.unflatten = nn.Unflatten(1, (ch[-1], -1))
-        # self.conv_in = nn.ConvTranspose1d(int(flatten_dim[0]), ch*16, 3, 1, 1)
 
         layers = []
         for i in range(1, len(ch)):
@@ -269,20 +284,24 @@ class ResidualDecoder(nn.Module):
         final_kernel = window - l_out + 7
         print("Final ConvOut Kernel: {}".format(final_kernel))
         self.conv_out = nn.ConvTranspose1d(ch[0], out_channels, final_kernel, 1, 3)
-        # self.activation = nn.Tanh()
 
     def forward(self, x):
         x = self.unflatten(self.fc_in(x))
-        # x = self.activation(self.conv_in(x))
         x = self.res_layers(x)
         x = torch.tanh(self.conv_out(x))
         return x
 
+
 class VAE(nn.Module):
-    def __init__(self):
+    def __init__(self, prior="gaussian"):
         super(VAE, self).__init__()
+        self.prior = prior
+        if prior == "gaussian":
+            self.dist_params = ["mu", "L"]
+        elif prior == "beta":
+            self.dist_params = ["alpha", "beta"]
         return self
-    
+
     def sampling(self, mu, L):
         """Reparameterization trick
 
@@ -295,17 +314,50 @@ class VAE(nn.Module):
         """
         eps = torch.randn_like(mu)
         return torch.matmul(L, eps[..., None]).squeeze().add_(mu)
-    
+
     def forward(self, data):
         data_o = self.encode(data)
-        z = self.sampling(data_o["mu"], data_o["L"]) if self.training else data_o["mu"]
 
-        # Running disentangle
-        data_o["disentangle"] = {
-            k: dis(data_o["mu"]) for k, dis in self.disentangle.items()
-        }
+        # Reparameterize
+        if self.prior == "gaussian":
+            z = (
+                self.sampling(data_o["mu"], data_o["L"])
+                if self.training
+                else data_o["mu"]
+            )
+        elif self.prior == "beta":
+            beta_dist = torch.distributions.Beta(data_o["alpha"], data_o["beta"])
+            data_o["beta_dist"] = beta_dist
+            z = beta_dist.rsample() * 2 - 1
+
+        data_o["z"] = z
 
         data_o.update(self.decode(z, data))
+
+        # Running disentangle
+        data_o["disentangle"] = {}
+        if "linear" in self.disentangle.keys():
+            data_o["disentangle"]["linear"] = {
+                k: model(data_o["mu"])
+                for k, model in self.disentangle["linear"].items()
+            }
+
+        # Forward pass through all scrubbers if necessary
+        for method, module_dict in self.disentangle.items():
+            if method == "linear":
+                ## Placeholder for if we reimplement in the future
+                continue
+            else:
+                data_o["disentangle"][method] = {}
+                for k, model in module_dict.items():
+                    if "linear" in self.disentangle.keys():
+                        latent = data_o["disentangle"]["linear"][k]["z_null"]
+                    else:
+                        latent = data_o["mu"]
+                    if method == "adversarial_net":
+                        data_o["disentangle"][method][k] = model(latent, data_o["var"])
+                    else:
+                        data_o["disentangle"][method][k] = model(latent)
 
         return data_o
 
@@ -326,8 +378,11 @@ class ResVAE(VAE):
         kinematic_tree=None,
         arena_size=None,
         disentangle_keys=None,
+        conditional_keys=None,
+        discrete_classes=None,
+        prior="gaussian",
     ):
-        super().__init__()
+        super().__init__(prior=prior)
         self.in_channels = in_channels
         self.ch = ch
         self.window = window
@@ -336,6 +391,8 @@ class ResVAE(VAE):
         self.kinematic_tree = kinematic_tree
         self.register_buffer("arena_size", arena_size)
         self.disentangle_keys = disentangle_keys
+        self.conditional_keys = conditional_keys
+        self.discrete_classes = discrete_classes
         self.encoder = ResidualEncoder(
             in_channels,
             ch=ch,
@@ -344,6 +401,7 @@ class ResVAE(VAE):
             window=window,
             activation=activation,
             is_diag=is_diag,
+            prior=prior,
             init_dilation=init_dilation,
         )
         self.decoder = ResidualDecoder(
@@ -356,10 +414,16 @@ class ResVAE(VAE):
             conditional_dim=conditional_dim,
             init_dilation=init_dilation,
         )
+
+        # Scrubbers
         if disentangle is not None:
-            self.disentangle = nn.ModuleDict(disentangle)
-        else:
             self.disentangle = nn.ModuleDict()
+            for k, v in disentangle.items():
+                self.disentangle[k] = nn.ModuleDict(v)
+        else:
+            self.disentangle = nn.ModuleDict(nn.ModuleDict())
+
+        self.mi_estimator = None
 
     def normalize_root(self, root):
         norm_root = root - self.arena_size[0]
@@ -382,16 +446,35 @@ class ResVAE(VAE):
             x_in = data["x6d"]
 
         data_o = {}
-        data_o["mu"], data_o["L"] = self.encoder(
+        data_o[self.dist_params[0]], data_o[self.dist_params[1]] = self.encoder(
             x_in.moveaxis(1, -1).view(-1, self.in_channels, self.window)
         )
+
+        if self.prior == "beta":
+            # Renormalizing to be between (-1, 1)
+            data_o["mu"] = (data_o["alpha"] - 1 + 1e-8) / (
+                data_o["alpha"] + data_o["beta"] - 2 + 2e-8
+            ) * 2 - 1
+
         return data_o
 
     def decode(self, z, data):
-        
         data_o = {}
         if self.conditional_dim > 0:
-            z = torch.cat([z] + [data[k] for k in self.disentangle_keys], dim=-1)
+            # Concatenating disentanglement variables together
+            data_o["var"] = [
+                (
+                    F.one_hot(data[k].ravel().long(), len(self.discrete_classes[k]))
+                    if k in self.discrete_classes.keys()
+                    else data[k]
+                )
+                for k in self.conditional_keys
+            ]
+            data_o["var"] = torch.cat(data_o["var"], dim=-1)
+            z = torch.cat(
+                [z, data_o["var"]],
+                dim=-1,
+            )
 
         x_hat = self.decoder(z).moveaxis(-1, 1)
 

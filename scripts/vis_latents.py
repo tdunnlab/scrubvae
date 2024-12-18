@@ -1,8 +1,9 @@
 import ssumo
 from torch.utils.data import DataLoader
-from dappy import read
+from neuroposelib import read
+import matplotlib.pyplot as plt
 import torch
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 import numpy as np
 from pathlib import Path
 import sys
@@ -17,24 +18,24 @@ vis_clusters = True
 analysis_key = sys.argv[1]
 vis_path = RESULTS_PATH + analysis_key + "/vis_latents/"
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
-k = 25  # Number of clusters
+k = 50  # Number of clusters
 Path(vis_path).mkdir(parents=True, exist_ok=True)
 
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
-dataset_label = "Train"
+dataset_label = "Test"
 ### Load Datasets
-dataset, _, model = ssumo.get.data_and_model(
+loader, model = ssumo.get.data_and_model(
     config,
     load_model=config["out_path"],
     epoch=sys.argv[2],
     dataset_label=dataset_label,
-    data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose"],
+    data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose"] + config["disentangle"]["features"],
     shuffle=False,
     verbose=0,
 )
 
 latents = ssumo.get.latents(
-    config, model, sys.argv[2], dataset, device="cuda", dataset_label=dataset_label
+    config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
 )
 
 if z_null is not None:
@@ -43,13 +44,25 @@ if z_null is not None:
         latents, model.disentangle[z_null].decoder.weight.cpu().detach().numpy()
     )[0]
 
+# if "avg_speed_3d" in config["disentangle"]["features"]:
+#     print("Found avg_speed_3d in disentanglement keys. Appending to latents.")
+#     latents = np.concatenate([latents, loader.dataset[:]["avg_speed_3d"].numpy()],axis=-1)
+
+if "mcmi" in config["disentangle"]["method"].keys():
+    from sklearn.decomposition import PCA
+    pca = PCA().fit(latents)
+    print(np.cumsum(pca.explained_variance_ratio_))
+    # import pdb; pdb.set_trace()
+#     exp_var_99 = np.where(np.cumsum(pca.explained_variance_ratio_)>0.95)[0][1]
+#     latents = pca.transform(latents)[:,:exp_var_99]
+
 ### Visualize clusters
 if vis_clusters:
     label = "z{}".format("" if z_null is None else "_" + z_null)
     k_pred, gmm = ssumo.eval.cluster.gmm(
         latents=latents,
         n_components=k,
-        label=label,
+        label=label + "_{}".format(sys.argv[2]),
         path=vis_path,
         covariance_type="diag",
     )
@@ -61,11 +74,18 @@ if vis_clusters:
     )
 
     ssumo.plot.sample_clusters(
-        dataset[:]["raw_pose"].detach().cpu().numpy(),
+        loader.dataset[:]["raw_pose"].detach().cpu().numpy(),
         k_pred,
         connectivity,
-        "{}/vis_clusters_{}/".format(vis_path, "" if z_null is None else z_null),
+        "{}/vis_clusters_{}{}/".format(vis_path, "" if z_null is None else z_null,sys.argv[2]),
     )
+
+    f = plt.figure(figsize=(10,5))
+    plt.hist(k_pred, bins=len(np.unique(k_pred)), range=(-0.5, k - 0.5))
+    plt.xlabel("GMM Cluster")
+    plt.ylabel("# Actions")
+    plt.savefig("{}/vis_clusters_{}/gmm_hist.png".format(vis_path, sys.argv[2]))
+    plt.close()
 
 
 # mean_offsets = dataset.data["offsets"].mean(axis=(0, -1)).cuda()
@@ -120,7 +140,6 @@ if vis_clusters:
 
 #     pdb.set_trace()
 
-
 # #### Generate actions modifying 1 latent dimension at a time
 # def adjust_single_dim(
 #     base_latent, latent_means, latent_std, model, window, mean_offsets, out_path
@@ -157,7 +176,6 @@ if vis_clusters:
 #             VID_NAME="latent_{}.mp4".format(i),
 #             SAVE_ROOT=out_path,
 #         )
-
 
 # if gen_actions:
 #     adjust_single_dim(

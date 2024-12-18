@@ -154,12 +154,14 @@ cython_debug/
 
 __pycache__/
 batch/
-src/ssumo/*/__pycache__
+src/scrubvae/*/__pycache__
 configs/*.yaml
 !configs/mouse_skeleton.yaml
 base_path.py
 *.mp4
 *.png
+wandb/
+demo/results/*
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

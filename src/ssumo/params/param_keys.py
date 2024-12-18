@@ -14,12 +14,9 @@ PARAM_KEYS = dict(
         "alpha",
         "balance_loss",
         "bandwidth",
-        "detach_gr",
         "features",
-        "gamma",
         "method",
-        "moving_avg_lsq",
-        "n_models",
+        "polynomial",
         "var_mode",
     ],
     model=[

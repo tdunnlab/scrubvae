@@ -1,5 +1,5 @@
 [project]
-name = "ssumo"
+name = "scrubvae"
 version = "0.1_dev"
 authors = [
   { name="Joshua H. Wu", email="joshua.wu@duke.edu" },
@@ -17,7 +17,7 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-"Homepage" = "https://github.com/joshuahwu/ssumo"
+"Homepage" = "https://github.com/joshuahwu/scrubvae"
 
 [build-system]
 requires = ["setuptools"]

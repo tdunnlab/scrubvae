@@ -1,9 +1,10 @@
 import scipy.linalg as spl
-from ssumo.data.dataset import fwd_kin_cont6d_torch
+from scrubbed_cvae.data.dataset import fwd_kin_cont6d_torch, get_speed_parts_torch
 import numpy as np
 import torch
-from ssumo.plot import trace, PLANE
-from dappy import visualization as vis
+from scrubbed_cvae.plot import trace, PLANE
+from neuroposelib import visualization as vis
+import tqdm
 
 
 def project_to_null(z, weight):
@@ -12,6 +13,74 @@ def project_to_null(z, weight):
     z_null = z @ u_orth
 
     return z_null, u_orth
+
+
+def generative_restrictiveness(model, z, data, key, kinematic_tree):
+    n_keypts = data["x6d"].shape[-2]
+    window = data["x6d"].shape[1]
+    batch_size = data["x6d"].shape[0]
+    if key == "heading":
+        data["heading"] = torch.rand(
+            data["heading"].shape, device=data["heading"].device
+        )
+        #     generator=torch.Generator(device=data["heading"].device).manual_seed(100),
+        # )
+        data["heading"] /= torch.linalg.norm(data["heading"], dim=-1, keepdim=True)
+    elif key == "avg_speed_3d":
+        data["avg_speed_3d"] = data["avg_speed_3d_rand"]
+
+    data_o = model.decode(z, data)
+
+    pose_batch = fwd_kin_cont6d_torch(
+        data_o["x6d"].reshape((-1, n_keypts, 6)),
+        kinematic_tree,
+        data["offsets"].reshape((-1,) + data["offsets"].shape[-2:]),
+        root_pos=torch.zeros(window * batch_size, 3),
+        # data_o["root"].reshape((-1, 3)),
+        do_root_R=True,
+        eps=1e-8,
+    ).reshape((-1, model.window, n_keypts, 3))
+
+    if key == "heading":
+        forward = pose_batch[:, window // 2, 1, :] - pose_batch[:, window // 2, 0, :]
+        forward = forward / torch.linalg.norm(forward, dim=-1)[..., None]
+        yaw = -torch.arctan2(forward[:, 1], forward[:, 0])[:, None]
+        pred = torch.cat([torch.sin(yaw), torch.cos(yaw)], dim=-1)
+        pred = pred.reshape(yaw.shape[:-1] + (-1,))
+    elif key == "avg_speed_3d":
+        root_spd = torch.sqrt(
+            (torch.diff(data_o["root"], n=1, dim=1) ** 2).sum(dim=-1)
+        ).mean(dim=1)
+        parts = [
+            [0, 1, 2, 3, 4, 5],  # spine and head
+            [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
+            [5, 12, 13, 14, 15, 16, 17],  # legs from back spine
+        ]
+        dxyz = torch.zeros((len(root_spd), 3), device=data_o["root"].device)
+        for i, part in enumerate(parts):
+            pose_part = (
+                pose_batch - pose_batch[:, window // 2, None, part[0] : part[0] + 1, :]
+            )
+            relative_dxyz = (
+                torch.diff(
+                    pose_part[:, :, part[1:], :],
+                    n=1,
+                    axis=1,
+                )
+                ** 2
+            ).sum(axis=-1)
+            dxyz[:, i] = torch.sqrt(relative_dxyz).mean(axis=(1, 2))
+
+        pred = torch.cat(
+            [
+                root_spd[:, None],  # root
+                dxyz[:, 0:1],  # spine and head
+                dxyz[:, 1:].mean(axis=-1, keepdims=True),  # limbs
+            ],
+            axis=-1,
+        )
+
+    return pred, data[key]
 
 
 def traverse_latent(
@@ -41,13 +110,15 @@ def traverse_latent(
 
         radius = torch.linalg.norm(z[index : index + 1] @ weight.T)
 
-        circ = circ*radius
+        circ = circ * radius
 
-        z_null_proj = weight.T @ torch.linalg.solve(weight @ weight.T, weight @ z[index: index+1].T)
+        z_null_proj = weight.T @ torch.linalg.solve(
+            weight @ weight.T, weight @ z[index : index + 1].T
+        )
         circle_z = circ @ weight.cuda()
-        circle_z = circle_z/torch.linalg.norm(circle_z,dim=-1)[:,None] * radius
+        circle_z = circle_z / torch.linalg.norm(circle_z, dim=-1)[:, None] * radius
 
-        sample_latent = z[index: index+1].cuda() - z_null_proj.T.cuda() + circle_z
+        sample_latent = z[index : index + 1].cuda() - z_null_proj.T.cuda() + circle_z
 
     else:
         graded_z_shift = (
@@ -58,7 +129,11 @@ def traverse_latent(
         print("Latent Norm: {}".format(torch.linalg.norm(sample_latent[0])))
         sample_latent += graded_z_shift
 
-    data_o = vae.decode(sample_latent)
+    data = {
+        k: v.cuda()
+        for k, v in dataset[1000 * torch.ones(n_shifts, dtype=torch.int64)].items()
+    }
+    data_o = vae.decode(z=sample_latent, data=data)
     offsets = dataset[index]["offsets"].cuda()
     pose = (
         fwd_kin_cont6d_torch(

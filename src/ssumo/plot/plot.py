@@ -1,9 +1,9 @@
 import numpy as np
-from dappy import DataStruct as ds
+from neuroposelib import DataStruct as ds
 from typing import Union, List
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 import matplotlib.pyplot as plt
-from ssumo.plot.constants import PLANE
+from scrubbed_cvae.plot.constants import PLANE
 from pathlib import Path
 from matplotlib.lines import Line2D
 from typing import Union, List, Optional, Dict, Tuple
@@ -40,7 +40,7 @@ import colorcet as cc
 #     return
 
 
-# from dappy import read, preprocess
+# from neuroposelib import read, preprocess
 
 # skeleton_config = read.config(
 #     "/mnt/home/jwu10/working/behavior_vae/configs/mouse_skeleton.yaml"

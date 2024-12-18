@@ -1,115 +1,125 @@
-from ssumo.data.dataset import fwd_kin_cont6d_torch
-from torch.utils.data import DataLoader
-import ssumo
-import torch
-from dappy import visualization as vis
 import numpy as np
+from neuroposelib import visualization as vis
+import scrubvae
+from base_path import RESULTS_PATH
+import sys
 from pathlib import Path
-import tqdm
-import matplotlib.pyplot as plt
-from dappy import read
-
-PARTS = ["Root", "Head + Spine", "L-Arm", "R-Arm", "L-Leg", "R-Leg"]
+from neuroposelib import read
+import torch
+from sklearn.linear_model import LinearRegression
+from scrubvae.data.dataset import get_angle2D
 
 ### Set/Load Parameters
-path = "bal_hc_sum"
-base_path = "/mnt/ceph/users/jwu10/results/vae/heading/"
-config = read.config(base_path + path + "/model_config.yaml")
+analysis_key = sys.argv[1]
+disentangle_key = "ids"
+out_path = RESULTS_PATH + analysis_key
+config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["model"]["load_model"] = config["out_path"]
-config["model"]["start_epoch"] = 260
 vis_decode_path = config["out_path"] + "/vis_decode/"
 Path(vis_decode_path).mkdir(parents=True, exist_ok=True)
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
-
 dataset_label = "Train"
-### Load Dataset
-dataset, loader = ssumo.data.get_mouse(
-    data_config=config["data"],
-    window=config["model"]["window"],
-    train=dataset_label == "Train",
-    data_keys=["x6d", "root", "offsets"] + config["disentangle"]["features"],
-    shuffle=False
+### Load Datasets
+loader, model = scrubvae.get.data_and_model(
+    config,
+    load_model=config["out_path"],
+    epoch=sys.argv[2],
+    dataset_label=dataset_label,
+    data_keys=["x6d", "root", "offsets", disentangle_key],
+    # normalize=["avg_speed_3d"],
+    shuffle=False,
+    verbose=0,
 )
-vae, device = ssumo.model.get(
-    model_config=config["model"],
-    disentangle_config=config["disentangle"],
-    n_keypts=dataset.n_keypts,
-    direction_process=config["data"]["direction_process"],
-    arena_size=dataset.arena_size,
-    kinematic_tree=dataset.kinematic_tree,
-    verbose=1,
+
+latents = scrubvae.get.latents(
+    config=config,
+    model=model,
+    epoch=sys.argv[2],
+    loader=loader,
+    device="cuda",
+    dataset_label=dataset_label,
 )
-kinematic_tree = dataset.kinematic_tree
-n_keypts = dataset.n_keypts
 
-latents = ssumo.eval.get.latents(vae, dataset, config, device, dataset_label)
+# dis_w = LinearRegression().fit(latents, loader.dataset[:][disentangle_key]).coef_
 
-for k in ["heading"]:  # vae.disentangle_keys:
-    save_path = vis_decode_path + "{}/".format(k)
-    Path(save_path).mkdir(parents=True, exist_ok=True)
-    dis_w = vae.disentangle[k].decoder.weight.cpu().detach()
-    pred_true = dataset[:][k]
+n_shifts = 2
+# sample_idx = [4000000, 2000000, 3000000, 60000, 1294585]
+sample_idx = [1000, 20000, 400000, 600000]
+# shift = torch.linspace(0, np.pi, n_shifts)[:, None]
+# shift = torch.from_numpy(get_angle2D(shift))
+# shift = torch.linspace(-2.5, 5, n_shifts)[:, None]
 
-    if dis_w.shape[0] != 1:
-        dis_w_unit = dis_w / torch.linalg.norm(dis_w, axis=-1, keepdim=True)
-        dis_w_corr = dis_w_unit @ dis_w_unit.T
-
-        pred_true_unit = pred_true / torch.linalg.norm(pred_true, axis=0, keepdim=True)
-        pred_true_corr = pred_true_unit.T @ pred_true_unit
-
-        f, ax_arr = plt.subplots(1, 2, figsize=(20, 10))
-        im = [ax_arr[0].imshow(dis_w_corr.cpu().detach().numpy())]
-        ax_arr[0].set_title("Decoder Weight Correlation")
-
-        im += [ax_arr[1].imshow(pred_true_corr.cpu().detach().numpy())]
-        ax_arr[1].set_title("True Label Correlation")
-
-        for i, ax in enumerate(ax_arr):
-            plt.colorbar(im[i], ax=ax)
-            # if config["speed_decoder"] == "part":
-            #     ax.set_xticks(ticks=range(6), labels=PARTS)
-            #     ax.set_yticks(ticks=range(6), labels=PARTS)
-
-        f.tight_layout()
-        plt.savefig(save_path + "spd_corr.png")
-        plt.close()
-
-    pred = latents @ dis_w.T
-    f, ax = plt.subplots(1, pred.shape[-1], figsize=(8 * pred.shape[-1], 10))
-    for i in tqdm.tqdm(range(pred.shape[-1])):
-        if pred.shape[-1] > 1:
-            ax_obj = ax[i]
-        else:
-            ax_obj = ax
-        ax_obj.scatter(pred_true[:, i], pred[:, i])
-        # if config["speed_decoder"] == "part":
-        ax_obj.set_title("Latent {} Dim {}".format(k, i))
-        ax_obj.set_xlabel("Target")
-        ax_obj.set_ylabel("Prediction")
-
-    f.tight_layout()
-    plt.savefig(save_path + "{}{}_scatter.png".format(dataset_label, k))
-    plt.close()
-
-    print("Min {}: {}".format(k, pred_true.min()))
-    print("Max {}: {}".format(k, pred_true.max()))
-
-    sample_idx = [2000, 200000, 400000, 600000]
-
-    for sample_i in sample_idx:
-        ssumo.eval.traverse_latent(
-            vae,
-            dataset,
-            latents,
-            dis_w,
-            sample_i,
-            connectivity,
-            label=k,
-            minmax=10,
-            n_shifts=15,
-            circle=True,
-            save_path=save_path,
+for sample_i in sample_idx:
+    data = loader.dataset[sample_i]
+    data = {
+        k: v.cuda()[None, ...].repeat(
+            (n_shifts + 1,) + tuple(np.ones(len(v.shape), dtype=int))
         )
+        for k, v in data.items()
+    }
+    z_traverse = latents[sample_i : sample_i + 1, :].repeat(n_shifts + 1, 1).cuda()
+    # data[disentangle_key][1:, :] += shift.cuda()
+    # import pdb; pdb.set_trace()
+    data["ids"] = torch.arange(3)[:,None].long()
+
+    data_o = model.decode(z_traverse, data)
+    pose = (
+        scrubvae.data.dataset.fwd_kin_cont6d_torch(
+            data_o["x6d"].reshape((-1,) + data_o["x6d"].shape[2:]),
+            model.kinematic_tree,
+            data["offsets"].reshape((-1,) + data["offsets"].shape[2:]),
+            root_pos=data_o["root"].reshape((-1, 3)),
+            do_root_R=True,
+        )
+        .detach()
+        .cpu()
+        .numpy()
+    )
+
+    # subtitles = [
+    #     "{:2f}".format(val)
+    #     for val in data["fluorescence"].detach().cpu().numpy().squeeze()
+    # ]
+
+    vis.pose.grid3D(
+        pose,
+        connectivity,
+        frames=np.arange(n_shifts + 1) * model.window,
+        centered=False,
+        subtitles=None,
+        title=dataset_label + " Data - {} Traversal".format(disentangle_key),
+        fps=20,
+        N_FRAMES=model.window,
+        VID_NAME=dataset_label + "grid{}_mod.mp4".format(sample_i),
+        SAVE_ROOT=vis_decode_path,
+    )
+
+    vis.pose.arena3D(
+        pose,
+        connectivity,
+        frames=np.arange(n_shifts + 1) * model.window,
+        centered=False,
+        # subtitles=None,
+        # title=dataset_label + " Data - {} Traversal".format(disentangle_key),
+        fps=20,
+        N_FRAMES=model.window,
+        VID_NAME=dataset_label + "arena{}_mod.mp4".format(sample_i),
+        SAVE_ROOT=vis_decode_path,
+    )
+
+    # scrubvae.eval.traverse_latent(
+    #     model,
+    #     loader.dataset,
+    #     latents,
+    #     torch.tensor(dis_w),
+    #     sample_i,
+    #     connectivity,
+    #     label=disentangle_key,
+    #     minmax=10,
+    #     n_shifts=15,
+    #     circle=False,
+    #     save_path=vis_decode_path + "{}/".format(disentangle_key),
+    # )
 
     # ## Latent Traversal
     # # norm_z_shift = dis_w / torch.linalg.vector_norm(dis_w,dim=0,keepdim=True)
