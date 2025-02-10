@@ -1,6 +1,6 @@
 from neuroposelib import read, preprocess
 import numpy as np
-import scrubbed_cvae.data.quaternion as qtn
+import scrubvae.data.quaternion as qtn
 from typing import Optional, Type, Union, List
 from torch.utils.data import Dataset
 import torch
@@ -133,37 +133,32 @@ def inv_normalize_root(norm_root, arena_size):
 
 def get_speed_parts(pose, parts):
     """
-    Get the (1) average root displacement, 
+    Get the (1) average root displacement,
     (2) average speed of the spine relative to the root,
     and (3) average speed of the limbs relative to the spine
     """
     print("Getting speed by body parts")
-    root_spd = np.diff(pose[:, 0, :], n=1, axis=0, prepend=pose[0:1, 0, :]) ** 2
+    root_spd = np.diff(pose[:, :, 0, :], n=1, axis=-2) ** 2  # (n_samples, window, 3)
+    root_spd = np.sqrt(root_spd.sum(-1)).mean(-1)
     dxyz = np.zeros((len(root_spd), len(parts) + 1))
-    dxyz[:, 0] = np.sqrt(root_spd).sum(axis=-1)  # TODO: Put sum in sqrt
+    dxyz[:, 0] = root_spd  # TODO: Put sum in sqrt
 
-    centered_pose = preprocess.center_spine(pose, keypt_idx=0)
-    # ego_pose = preprocess.rotate_spine(
-    #     centered_pose,
-    #     keypt_idx=[0, 1],
-    #     lock_to_x=False,
-    # )
-
+    centered_pose = pose - pose[..., 0:1, :]
     for i, part in enumerate(parts):
         if part[0] == 0:
             pose_part = centered_pose
         else:
             pose_part = centered_pose - centered_pose[:, part[0] : part[0] + 1, :]
+
         relative_dxyz = (
             np.diff(
-                pose_part[:, part[1:], :],
+                pose_part[..., part[1:], :],
                 n=1,
-                axis=0,
-                prepend=pose_part[0:1, part[1:], :],
+                axis=-3,
             )
             ** 2
-        ).sum(axis=-1)
-        dxyz[:, i + 1] = np.sqrt(relative_dxyz).mean(axis=-1)
+        ).sum(-1)
+        dxyz[:, i + 1] = np.sqrt(relative_dxyz).mean(axis=(-1, -2))
 
     return dxyz
 
@@ -171,7 +166,7 @@ def get_speed_parts(pose, parts):
 def get_speed_parts_torch(pose, parts):
     """
     Pytorch version
-    Get the (1) average root displacement, 
+    Get the (1) average root displacement,
     (2) average speed of the spine relative to the root,
     and (3) average speed of the limbs relative to the spine
     """
@@ -227,11 +222,16 @@ def get_window_indices(ids, stride, window):
             if strided_data.shape[0] > 1:
                 assert (
                     np.moveaxis(strided_data[1, ...], -1, 0)
-                    - frame_idx[id_change[i] + stride : id_change[i] + window + stride, ...]
+                    - frame_idx[
+                        id_change[i] + stride : id_change[i] + window + stride, ...
+                    ]
                 ).sum() == 0
         else:
-            print("ID {} length smaller than window size - skipping ...".format(ids[id_change[i]]))
-
+            print(
+                "ID {} length smaller than window size - skipping ...".format(
+                    ids[id_change[i]]
+                )
+            )
 
     window_inds = torch.cat(window_inds, dim=0)
 
@@ -301,19 +301,15 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
     return offsets
 
 
-def get_speed_outliers(pose, window_inds, threshold=2.25):
+def get_speed_outliers(pose, threshold=2.25):
     """
     Find indices of frames in which the average speed is greater than the defined threshold
     """
-    avg_spd = np.diff(pose, n=1, axis=0, prepend=pose[0:1])
-    avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=-1, keepdims=True)
-    outlier_frames = np.where(
-        avg_spd[window_inds[:, 1:], ...].mean(
-            axis=tuple(range(1, len(avg_spd.shape) + 1))
-        )
-        > threshold
-    )[0]
-    outlier_frames = np.unique(outlier_frames)
+    inds = np.arange(len(pose))
+
+    avg_spd = np.diff(pose, n=1, axis=-3)
+    avg_spd = np.sqrt((avg_spd**2).sum(axis=-1)).mean(axis=(-1, -2))
+    outlier_frames = np.where(avg_spd > threshold)[0]
     print("Outlier frames above {}: {}".format(threshold, len(outlier_frames)))
     return outlier_frames
 
@@ -322,10 +318,10 @@ class MouseDataset(Dataset):
     """
     Dataset class for mouse dataset
     """
+
     def __init__(
         self,
         data,
-        window_inds,
         arena_size=None,
         kinematic_tree=None,
         n_keypts=None,
@@ -333,8 +329,8 @@ class MouseDataset(Dataset):
         discrete_classes=None,
         norm_params=None,
     ):
+        self.data_keys = list(data.keys())
         self.data = data
-        self.window_inds = window_inds
         self.n_keypts = n_keypts
         self.discrete_classes = discrete_classes
         self.norm_params = norm_params
@@ -347,26 +343,22 @@ class MouseDataset(Dataset):
         self.kinematic_tree = kinematic_tree
 
         # List of items which have already been windowed
-        self.ind_with_window_inds = [
-            k for k, v in self.data.items() if v.shape[0] != len(self.window_inds)
-        ]
+        # self.ind_with_window_inds = [
+        #     k for k, v in self.data.items() if v.shape[0] != len(self.window_inds)
+        # ]
         self.label = label
 
     def __len__(self):
-        return len(self.window_inds)
+        return len(self.data[self.data_keys[0]])
 
     def __getitem__(self, idx):
         # Use window indices to access arrays which have not been windowed
-        query = {
-            k: self.data[k][self.window_inds[idx]] for k in self.ind_with_window_inds
-        }
+        # query = {
+        #     k: self.data[k][self.window_inds[idx]] for k in self.ind_with_window_inds
+        # }
 
         # Query items which have already been windowed
-        query.update(
-            {
-                k: v[idx]
-                for k, v in self.data.items()
-                if k not in self.ind_with_window_inds
-            }
-        )
+        query = {k: v[idx] for k, v in self.data.items()}
+        # if k not in self.ind_with_window_inds
+        # }
         return query

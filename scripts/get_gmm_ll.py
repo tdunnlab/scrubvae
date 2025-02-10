@@ -1,4 +1,4 @@
-import scrubbed_cvae
+import scrubvae
 import numpy as np
 import torch
 from pathlib import Path
@@ -7,7 +7,7 @@ import tqdm
 from sklearn.decomposition import PCA
 import scipy.linalg as spl
 import sys
-from scrubbed_cvae.eval.metrics import custom_cv_5folds
+from scrubvae.eval.metrics import custom_cv_5folds
 
 RESULTS_PATH = "/mnt/ceph/users/jwu10/results/vae/"
 
@@ -32,7 +32,7 @@ config = read.config(
     RESULTS_PATH + analysis_key + "/model_config.yaml"
 )
 
-loader = scrubbed_cvae.get.mouse_data(
+loader = scrubvae.get.mouse_data(
             data_config=config["data"],
             window=config["model"]["window"],
             train=True,
@@ -55,7 +55,7 @@ for i in tqdm.trange(len(k)):
     for j in tqdm.trange(n_splits):
         idx_train, idx_test = custom_cv_5folds(j, ids)
 
-        _, gmm = scrubbed_cvae.eval.cluster.gmm(
+        _, gmm = scrubvae.eval.cluster.gmm(
             latents=z[idx_train,:],
             n_components=k[i],
             label="gmm_k{}_cv{}".format(k[i], j),

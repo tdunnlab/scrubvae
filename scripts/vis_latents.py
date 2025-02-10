@@ -1,4 +1,4 @@
-import ssumo
+import scrubvae
 from torch.utils.data import DataLoader
 from neuroposelib import read
 import matplotlib.pyplot as plt
@@ -24,7 +24,7 @@ Path(vis_path).mkdir(parents=True, exist_ok=True)
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
 dataset_label = "Test"
 ### Load Datasets
-loader, model = ssumo.get.data_and_model(
+loader, model = scrubvae.get.data_and_model(
     config,
     load_model=config["out_path"],
     epoch=sys.argv[2],
@@ -34,13 +34,13 @@ loader, model = ssumo.get.data_and_model(
     verbose=0,
 )
 
-latents = ssumo.get.latents(
+latents = scrubvae.get.latents(
     config, model, sys.argv[2], loader, device="cuda", dataset_label=dataset_label
 )
 
 if z_null is not None:
     print("Projecting latents to decoder null space")
-    latents = ssumo.eval.project_to_null(
+    latents = scrubvae.eval.project_to_null(
         latents, model.disentangle[z_null].decoder.weight.cpu().detach().numpy()
     )[0]
 
@@ -59,7 +59,7 @@ if "mcmi" in config["disentangle"]["method"].keys():
 ### Visualize clusters
 if vis_clusters:
     label = "z{}".format("" if z_null is None else "_" + z_null)
-    k_pred, gmm = ssumo.eval.cluster.gmm(
+    k_pred, gmm = scrubvae.eval.cluster.gmm(
         latents=latents,
         n_components=k,
         label=label + "_{}".format(sys.argv[2]),
@@ -73,7 +73,7 @@ if vis_clusters:
         )[0]
     )
 
-    ssumo.plot.sample_clusters(
+    scrubvae.plot.sample_clusters(
         loader.dataset[:]["raw_pose"].detach().cpu().numpy(),
         k_pred,
         connectivity,

@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import ssumo
+import scrubvae
 from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
@@ -19,7 +19,7 @@ regression_methods = [
     "mlp_cv",
 ]
 
-palette = ssumo.plot.constants.PALETTE_2
+palette = scrubvae.plot.constants.PALETTE_2
 experiment_folder = sys.argv[1]
 method = sys.argv[2]
 task_id = sys.argv[3] if len(sys.argv) > 3 else ""
@@ -50,7 +50,7 @@ if method in regression_methods:
     for an_key in analysis_keys:
         folder = "{}/{}/".format(RESULTS_PATH, an_key)
         print("Reading in folder: {}".format(folder))
-        metrics[an_key] = ssumo.eval.metrics.epoch_regression(
+        metrics[an_key] = scrubvae.eval.metrics.epoch_regression(
             folder,
             method,
             dataset_label,
@@ -116,7 +116,7 @@ elif method == "gmm_entropy":
     for an_key in analysis_keys:
         folder = "{}/{}/".format(RESULTS_PATH, an_key)
         print("Reading in folder: {}".format(folder))
-        metrics[an_key] = ssumo.eval.metrics.epoch_cluster_entropy(
+        metrics[an_key] = scrubvae.eval.metrics.epoch_cluster_entropy(
             path=folder,
             method=method,
             dataset_label=dataset_label,

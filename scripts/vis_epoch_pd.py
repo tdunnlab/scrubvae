@@ -1,15 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import scrubbed_cvae
+import scrubvae
 from base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
 from neuroposelib import read
 import pickle
-from scrubbed_cvae.eval.metrics import custom_cv_5folds
+from scrubvae.eval.metrics import custom_cv_5folds
 from sklearn.linear_model import LogisticRegression
 
-palette = scrubbed_cvae.plot.constants.PALETTE_2
+palette = scrubvae.plot.constants.PALETTE_2
 experiment_folder = sys.argv[1]
 task_id = sys.argv[2] if len(sys.argv) > 2 else ""
 
@@ -26,7 +26,7 @@ if task_id.isdigit():
     analysis_keys = [analysis_keys[int(task_id)]]
 
 config = read.config(RESULTS_PATH + analysis_keys[0] + "/model_config.yaml")
-loader = scrubbed_cvae.get.mouse_data(
+loader = scrubvae.get.mouse_data(
     data_config=config["data"],
     window=config["model"]["window"],
     train=True,
@@ -53,19 +53,19 @@ for an_key in analysis_keys:
     if Path(pickle_path).is_file():
         metrics = pickle.load(open(pickle_path, "rb"))
         epochs_to_test = [
-            e for e in scrubbed_cvae.get.all_saved_epochs(path) if e not in metrics["epochs"]
+            e for e in scrubvae.get.all_saved_epochs(path) if e not in metrics["epochs"]
         ]
         metrics["epochs"] = np.concatenate(
             [metrics["epochs"], epochs_to_test]
         ).astype(int)
     else:
         metrics = {k: [] for k in ["Latents", "Both"]}
-        metrics["epochs"] = scrubbed_cvae.get.all_saved_epochs(path)
+        metrics["epochs"] = scrubvae.get.all_saved_epochs(path)
         epochs_to_test = metrics["epochs"]
 
     for _, epoch in enumerate(epochs_to_test):
 
-        model = scrubbed_cvae.get.model(
+        model = scrubvae.get.model(
             model_config=config["model"],
             load_model=config["out_path"],
             epoch=epoch,
@@ -80,7 +80,7 @@ for an_key in analysis_keys:
             verbose=-1,
         )
 
-        z = scrubbed_cvae.get.latents(config, model, epoch, loader, "cuda", "Train")
+        z = scrubvae.get.latents(config, model, epoch, loader, "cuda", "Train")
         clf = LogisticRegression(solver="sag", max_iter=200)
         metrics["Latents"] += [cross_val_score(clf, z, pd_label).mean()]
         # metrics["Both"] += [cross_val_score(clf, np.concatenate([z, speed], axis=-1), pd_label).mean()]

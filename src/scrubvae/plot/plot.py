@@ -3,7 +3,7 @@ from neuroposelib import DataStruct as ds
 from typing import Union, List
 from neuroposelib import visualization as vis
 import matplotlib.pyplot as plt
-from scrubbed_cvae.plot.constants import PLANE
+from scrubvae.plot.constants import PLANE
 from pathlib import Path
 from matplotlib.lines import Line2D
 from typing import Union, List, Optional, Dict, Tuple

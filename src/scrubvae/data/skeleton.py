@@ -1,4 +1,4 @@
-from scrubbed_cvae.data.quaternion import *
+from scrubvae.data.quaternion import *
 import scipy.ndimage.filters as filters
 
 class Skeleton(object):

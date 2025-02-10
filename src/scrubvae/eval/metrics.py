@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 from neuroposelib import read
-from ssumo import get
+from scrubvae import get
 from . import project_to_null
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression, LogisticRegression

@@ -34,25 +34,15 @@ run = wandb.init(
 print("WANDB directory: {}".format(run.dir))
 
 # Get DataLoaders and model
-if "immunostain" in config["data"]["data_path"]:
-    train_loader, model = scrubvae.get.data_and_model(
-        config,
-        dataset_label="Train",
-        data_keys=["x6d", "root", "offsets", "target_pose"]
-        + config["disentangle"]["features"],
-        shuffle=True,
-    )
-    test_loader = None
-elif "ensemble_healthy" in config["data"]["data_path"]:
-    train_loader, test_loader, model = scrubvae.get.data_and_model(
-        config,
-        dataset_label="Both",
-        data_keys=["x6d", "root", "offsets", "target_pose"]
-        + config["disentangle"]["features"],
-        shuffle=True,
-    )
+loader_dict, model = scrubvae.get.data_and_model(
+    config,
+    train_val_test=["train","val"],
+    data_keys=["x6d", "root", "offsets", "target_pose", "ids"]
+    + config["disentangle"]["features"],
+    shuffle=[True,False],
+)
 
 # Train model
-model = scrubvae.train.train(config, model, train_loader, test_loader, run)
+model = scrubvae.train.train(config, model, loader_dict, run)
 
 run.finish()

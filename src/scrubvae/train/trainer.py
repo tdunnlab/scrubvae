@@ -1,15 +1,15 @@
 import torch
-from scrubbed_cvae.train.losses import get_batch_loss, balance_disentangle
-from scrubbed_cvae.train.mutual_inf import MutInfoEstimator
-from scrubbed_cvae.plot.eval import loss as plt_loss
-from scrubbed_cvae.eval import generative_restrictiveness
-from scrubbed_cvae.eval import cluster
+from scrubvae.train.losses import get_batch_loss, balance_disentangle
+from scrubvae.train.mutual_inf import MutInfoEstimator
+from scrubvae.plot.eval import loss as plt_loss
+from scrubvae.eval import generative_restrictiveness
+from scrubvae.eval import cluster
 import torch.optim as optim
 import tqdm
-from scrubbed_cvae.eval.metrics import hungarian_match
+from scrubvae.eval.metrics import hungarian_match
 import time
 import wandb
-from scrubbed_cvae.eval.metrics import (
+from scrubvae.eval.metrics import (
     linear_rand_cv,
     mlp_rand_cv,
     log_class_rand_cv,
@@ -108,7 +108,7 @@ def train_test_epoch(
     optimizer=None,
     scheduler=None,
     mode="train",
-    get_z=False,
+    # get_z=False,
 ):
     if mode == "train":
         model.train()
@@ -120,7 +120,7 @@ def train_test_epoch(
         raise ValueError("This mode is not recognized.")
     
     with grad_env():
-        z = []
+        # z = []
         model.mi_estimator = None
         epoch_metrics = {k: 0 for k in ["total"] + list(config["loss"].keys())}
         for batch_idx, data in enumerate(loader):
@@ -144,8 +144,8 @@ def train_test_epoch(
                                     config["disentangle"]["n_iter"],
                                 )
 
-            if get_z:
-                z += [data_o["mu"].clone().detach()]
+            # if get_z:
+            #     z += [data_o["mu"].clone().detach()]
 
             batch_loss = get_batch_loss(
                 model,
@@ -206,10 +206,10 @@ def train_test_epoch(
                 )
             )
 
-    if get_z:
-        return epoch_metrics, torch.cat(z, dim=0).cpu()
-    else:
-        return epoch_metrics, 0
+    # if get_z:
+    #     return epoch_metrics, torch.cat(z, dim=0).cpu()
+    # else:
+    return epoch_metrics
 
 
 def test_epoch(config, model, loader, device="cuda", epoch=0):
@@ -319,17 +319,17 @@ def train_epoch(config, model, loader, optimizer, scheduler, device="cuda", epoc
         device=device,
         epoch=epoch,
         mode="train",
-        get_z=epoch % 5 == 0,
+        # get_z=False,
     )
 
     return epoch_metrics
 
 @profile
-def train(config, model, train_loader, test_loader=None, run=None):
+def train(config, model, loader_dict, run=None):
     torch.set_float32_matmul_precision("medium")
     torch.autograd.set_detect_anomaly(True)
     torch.backends.cudnn.benchmark = True
-    # config = balance_disentangle(config, train_loader.dataset)
+    # config = balance_disentangle(config, loader_dict["train"].dataset)
 
     optimizer, scheduler = get_optimizer_and_lr_scheduler(
         model,
@@ -358,10 +358,10 @@ def train(config, model, train_loader, test_loader=None, run=None):
 
         starttime = time.time()
         # Train for an epoch
-        train_metrics, z_train = train_epoch(
+        train_metrics = train_epoch(
             config=config,
             model=model,
-            loader=train_loader,
+            loader=loader_dict["train"],
             optimizer=optimizer,
             scheduler=scheduler,
             device="cuda",
@@ -409,11 +409,11 @@ def train(config, model, train_loader, test_loader=None, run=None):
                 # rand_state = torch.random.get_rng_state()
                 # print(rand_state)
                 # torch.manual_seed(100)
-                if test_loader is not None:
+                if config["data"]["dataset"] == "4_mice":#"val" in loader_dict.keys():
                     test_metrics, z_test = test_epoch(
                         config=config,
                         model=model,
-                        loader=test_loader,
+                        loader=loader_dict["val"],
                         device="cuda",
                         epoch=epoch,
                     )
@@ -423,18 +423,18 @@ def train(config, model, train_loader, test_loader=None, run=None):
 
                     # Calculate decodability of specified variables
                     for key in ["avg_speed_3d", "heading"]:
-                        y_true = test_loader.dataset[:][key].detach().cpu().numpy()
+                        y_true = loader_dict["val"].dataset[:][key].detach().cpu().numpy()
                         r2_lin = linear_rand_cv(
-                            z_test,
-                            y_true,
-                            int(np.ceil(model.window / config["data"]["stride"])),
-                            5,
+                            z=z_test,
+                            y_true=y_true,
+                            window=model.window,
+                            folds=5,
                         )
                         r2_mlp = mlp_rand_cv(
-                            z_test,
-                            y_true,
-                            int(np.ceil(model.window / config["data"]["stride"])),
-                            5,
+                            z=z_test,
+                            y_true=y_true,
+                            window=model.window,
+                            folds=5,
                         )
                         metrics["r2_{}_lin_mean".format(key)] = np.mean(r2_lin)
                         metrics["r2_{}_lin_std".format(key)] = np.std(r2_lin)
@@ -443,19 +443,19 @@ def train(config, model, train_loader, test_loader=None, run=None):
 
                     # Calculate decodability of identity
                     y_true = (
-                        train_loader.dataset[:]["ids"].detach().cpu().numpy().astype(np.int)
+                        loader_dict["val"].dataset[:]["ids"].detach().cpu().numpy().astype(int)
                     )
                     acc_log = log_class_rand_cv(
-                        z_train,
-                        y_true,
-                        int(np.ceil(model.window / config["data"]["stride"])),
-                        5,
+                        z=z_test,
+                        y_true=y_true,
+                        window=model.window,
+                        folds=5,
                     )
                     acc_qda = qda_rand_cv(
-                        z_train,
-                        y_true,
-                        int(np.ceil(model.window / config["data"]["stride"])),
-                        5,
+                        z=z_test,
+                        y_true=y_true,
+                        window=model.window,
+                        folds=5,
                     )
                     metrics["acc_ids_log_mean"] = np.mean(acc_log)
                     metrics["acc_ids_log_std"] = np.std(acc_log)
@@ -463,47 +463,54 @@ def train(config, model, train_loader, test_loader=None, run=None):
                     metrics["acc_ids_qda_std"] = np.std(acc_qda)
 
                     # GMM Cluster latents
-                    k_pred_e = cluster.gmm(
-                        latents=z_test,
-                        n_components=50,
-                        label="".format(epoch),
-                        covariance_type="diag" if config["model"]["diag"] else "full",
-                        path=None,
-                    )[0]
+                    # k_pred_e = cluster.gmm(
+                    #     latents=z_test,
+                    #     n_components=50,
+                    #     label="".format(epoch),
+                    #     covariance_type="diag" if config["model"]["diag"] else "full",
+                    #     path=None,
+                    # )[0]
 
                     # Extract walking indices
-                    walking_inds = np.in1d(
-                        test_loader.dataset.gmm_pred["midfwd_test"],
-                        test_loader.dataset.walking_clusters["midfwd_test"],
-                    )
+                    # walking_inds = np.in1d(
+                    #     loader_dict["val"].dataset.gmm_pred["midfwd_test"],
+                    #     loader_dict["val"].dataset.walking_clusters["midfwd_test"],
+                    # )
 
                     # Shannon entropy of walking clusters
-                    metrics["entropy_midfwd_test"] = shannon_entropy(k_pred_e[walking_inds])
+                    # metrics["entropy_midfwd_test"] = shannon_entropy(k_pred_e[walking_inds])
 
                     # Matching clusters to those from the latents of another vanilla model
-                    for cluster_key in test_loader.dataset.gmm_pred.keys():
-                        mapped = hungarian_match(
-                            k_pred_e, test_loader.dataset.gmm_pred[cluster_key]
+                    # for cluster_key in loader_dict["val"].dataset.gmm_pred.keys():
+                    #     mapped = hungarian_match(
+                    #         k_pred_e, loader_dict["val"].dataset.gmm_pred[cluster_key]
+                    #     )
+                    #     metrics["mof_gmm_{}".format(cluster_key)] = (
+                    #         (loader_dict["val"].dataset.gmm_pred[cluster_key] == mapped)
+                    #     ).sum() / len(k_pred_e)
+                elif config["data"]["dataset"] == "parkinson":
+                    for key in ["ids", "pd_label"]:
+                        y_true = (
+                            loader_dict["val"].dataset[:][key].detach().cpu().numpy().astype(int)
                         )
-                        metrics["mof_gmm_{}".format(cluster_key)] = (
-                            (test_loader.dataset.gmm_pred[cluster_key] == mapped)
-                        ).sum() / len(k_pred_e)
-                else:
-                    y_true = (
-                        train_loader.dataset[:]["pd_label"].detach().cpu().numpy().astype(np.int)
-                    )
-                    acc_log = log_class_rand_cv(
-                        z_train,
-                        y_true,
-                        int(np.ceil(model.window / config["data"]["stride"])),
-                        5,
-                    )
-                    acc_qda = qda_rand_cv(
-                        z_train,
-                        y_true,
-                        int(np.ceil(model.window / config["data"]["stride"])),
-                        5,
-                    )
+                        acc_log = log_class_rand_cv(
+                            z_test,
+                            y_true,
+                            model.window, ## TODO: change this to reflect the stride of the 
+                            5,
+                        )
+                        acc_qda = qda_rand_cv(
+                            z_test,
+                            y_true,
+                            model.window,
+                            5,
+                        )
+                        metrics["acc_{}_log_mean".format(key)] = np.mean(acc_log)
+                        metrics["acc_{}_log_std".format(key)] = np.std(acc_log)
+                        metrics["acc_{}_qda_mean".format(key)] = np.mean(acc_qda)
+                        metrics["acc_{}_qda_std".format(key)] = np.std(acc_qda)
+
+
 
             # metrics.update({"{}_test".format(k):v for k,v in test_loss.items()})
             # run = wandb.Api().run("joshuahwu/wandb_test/{}".format(wandb_run.))

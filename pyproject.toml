@@ -12,7 +12,7 @@ classifiers = [
     "Development Status :: 1 - Planning",
     "Intended Audience :: Science/Research",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
 ]
 dependencies = []
 
@@ -22,6 +22,11 @@ dependencies = []
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "src/scrubvae/version.py"
+version_scheme = 'python-simplified-semver'
+local_scheme = 'no-local-version'
 
 # [project.optional-dependencies]
 # docs = [

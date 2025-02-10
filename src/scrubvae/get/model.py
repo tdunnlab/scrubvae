@@ -38,7 +38,7 @@ def model(
     disentangle = {}
     # Linear Projection model for each disentanglement feature
     if "linear" in methods.keys():  # len(methods["linear"]) > 0:
-        from scrubbed_cvae.model.disentangle import LinearProjection
+        from scrubvae.model.disentangle import LinearProjection
 
         disentangle["linear"] = {}
         for feat in methods["linear"]:
@@ -58,7 +58,7 @@ def model(
 
     # Gradient reversal scrubbing for each disentanglement feature
     if "grad_reversal" in methods.keys():  # len(methods["grad_reversal"]) > 0:
-        from scrubbed_cvae.model.disentangle import GRScrubber
+        from scrubvae.model.disentangle import GRScrubber
 
         disentangle["grad_reversal"] = {}
         for feat in methods["grad_reversal"]:
@@ -71,7 +71,7 @@ def model(
 
     # Moving Average Least Squares Filter with n-order polynomical features
     if "moving_avg_lsq" in methods.keys():  # len(methods["moving_avg_lsq"]) > 0:
-        from scrubbed_cvae.model.disentangle import MovingAvgLeastSquares
+        from scrubvae.model.disentangle import MovingAvgLeastSquares
 
         disentangle["moving_avg_lsq"] = {}
         for feat in methods["moving_avg_lsq"]:
@@ -85,7 +85,7 @@ def model(
 
     # Quadratic Discriminant Filter for class scrubbing
     if "qda" in methods.keys():  # len(methods["qda"]) > 0:
-        from scrubbed_cvae.model.disentangle import QuadraticDiscriminantFilter
+        from scrubvae.model.disentangle import QuadraticDiscriminantFilter
 
         disentangle["qda"] = {}
         for feat in methods["qda"]:
@@ -95,7 +95,7 @@ def model(
 
     # Moving Average Filter for class scrubbing
     if "moving_avg" in methods.keys():  # len(methods["moving_avg"]) > 0:
-        from scrubbed_cvae.model.disentangle import MovingAverageFilter
+        from scrubvae.model.disentangle import MovingAverageFilter
 
         disentangle["moving_avg"] = {}
         for feat in methods["moving_avg"]:
@@ -104,7 +104,7 @@ def model(
             )
 
     if "adversarial_net" in methods.keys():
-        from scrubbed_cvae.model.disentangle import AdvNetScrubber
+        from scrubvae.model.disentangle import AdvNetScrubber
 
         disentangle["adversarial_net"] = {}
         for feat in methods["adversarial_net"]:
@@ -114,7 +114,7 @@ def model(
 
     ### Initialize/load model
     if model_config["type"] == "rcnn":
-        from scrubbed_cvae.model.residual import ResVAE
+        from scrubvae.model.residual import ResVAE
 
         vae = ResVAE(
             in_channels=in_channels,

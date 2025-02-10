@@ -1,4 +1,4 @@
-from scrubbed_cvae.plot.constants import PALETTE_DICT
+from scrubvae.plot.constants import PALETTE_DICT
 import matplotlib.pyplot as plt
 import numpy as np
 
