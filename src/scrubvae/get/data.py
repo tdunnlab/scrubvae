@@ -168,36 +168,31 @@ def mouse_data(
     #     if (key not in ["heading", "ids", "fluorescence", "pd_label"]) and (
     #         key in data_keys
     #     ):
-            # if data_config["normalize"] == "bounded":
-            #     print(
-            #         "Rescaling decoding variable, {}, to be between -1 and 1".format(
-            #             key
-            #         )
-            #     )
-            #     if key not in norm_params.keys():
-            #         norm_params[key] = {}
-            #         norm_params[key]["min"] = data[key].min(dim=0)[0] * 0.9
-            #         norm_params[key]["max"] = data[key].max(dim=0)[0] * 1.1
-            #     data[key] -= norm_params[key]["min"]
-            #     data[key] = 2 * data[key] / norm_params[key]["max"] - 1
-            #     assert data[key].max() < 1
-            #     assert data[key].min() > -1
-            # elif data_config["normalize"] == "z_score":
+    # if data_config["normalize"] == "bounded":
+    #     print(
+    #         "Rescaling decoding variable, {}, to be between -1 and 1".format(
+    #             key
+    #         )
+    #     )
+    #     if key not in norm_params.keys():
+    #         norm_params[key] = {}
+    #         norm_params[key]["min"] = data[key].min(dim=0)[0] * 0.9
+    #         norm_params[key]["max"] = data[key].max(dim=0)[0] * 1.1
+    #     data[key] -= norm_params[key]["min"]
+    #     data[key] = 2 * data[key] / norm_params[key]["max"] - 1
+    #     assert data[key].max() < 1
+    #     assert data[key].min() > -1
+    # elif data_config["normalize"] == "z_score":
+
+    norm_params = {
+        "avg_speed_3d": {
+            "mean": torch.tensor([0.4993, 0.7112, 0.6663], dtype=torch.float32),
+            "std": torch.tensor([0.4038, 0.3586, 0.4169], dtype=torch.float32),
+        }
+    }
     if "avg_speed_3d" in data_keys:
         key = "avg_speed_3d"
-        norm_params = {
-            "avg_speed_3d": {
-                "mean": torch.tensor(
-                    [0.4993, 0.7112, 0.6663], dtype=torch.float32
-                ),
-                "std": torch.tensor(
-                    [0.4038, 0.3586, 0.4169], dtype=torch.float32
-                ),
-            }
-        }
-        print(
-            "Mean centering and unit standard deviation-scaling {}".format(key)
-        )
+        print("Mean centering and unit standard deviation-scaling {}".format(key))
         # if key not in norm_params.keys():
         #     norm_params[key] = {}
         #     norm_params[key]["mean"] = data[key].mean(axis=0)
