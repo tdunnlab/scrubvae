@@ -11,28 +11,32 @@ def data_and_model(
     train_val_test=["train", "val", "test"],
     data_keys=["x6d", "root", "offsets"],
     shuffle=False,
+    use_default_val_keys=True,
     verbose=1,
 ):
-    if config["data"]["dataset"] == "4_mice":
-        val_data_keys = [
-            "ids",
-            "x6d",
-            "root",
-            "offsets",
-            "target_pose",
-            "avg_speed_3d",
-            "heading",
-        ]
+    if use_default_val_keys:
+        if config["data"]["dataset"] == "4_mice":
+            val_data_keys = [
+                "ids",
+                "x6d",
+                "root",
+                "offsets",
+                "target_pose",
+                "avg_speed_3d",
+                "heading",
+            ]
+        else:
+            val_data_keys = [
+                "ids",
+                "x6d",
+                "root",
+                "offsets",
+                "target_pose",
+                "fluorescence",
+                "pd_label",
+            ]
     else:
-        val_data_keys = [
-            "ids",
-            "x6d",
-            "root",
-            "offsets",
-            "target_pose",
-            "fluorescence",
-            "pd_label",
-        ]
+        val_data_keys = data_keys
 
     if epoch is None:
         epoch = config["model"]["start_epoch"]
@@ -44,15 +48,17 @@ def data_and_model(
     # if train_val_test == "all":
     loader_dict = {}
     for is_shuffle, dataset_label in zip(shuffle, train_val_test):
-        curr_data_key = val_data_keys if dataset_label == "val" else data_keys
+        curr_data_keys = val_data_keys if dataset_label == "val" else data_keys
         loader_dict[dataset_label] = scrubvae.get.mouse_data(
             data_config=config["data"],
             train_val_test=dataset_label,
-            data_keys=curr_data_key,
+            data_keys=curr_data_keys,
             shuffle=is_shuffle,
-            normalize=config["disentangle"]["features"],
-            norm_params=None,
+            # normalize=["avg_speed_3d"] if "avg_speed_3d" in curr_data_keys else None,
+            # norm_params=None,
         )
+        
+        # import pdb; pdb.set_trace()
         # loader2 = scrubvae.get.mouse_data(
         #     data_config=test_config,
         #     window=config["model"]["window"],

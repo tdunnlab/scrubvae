@@ -19,7 +19,7 @@ def visualize_reconstruction(model, loader, label, connectivity):
         data_o = scrubvae.train.predict_batch(
             model, data, disentangle_keys=config["disentangle"]["features"]
         )
-
+        # import pdb; pdb.set_trace()
         pose_hat = fwd_kin_cont6d_torch(
             data_o["x6d"].reshape(-1, n_keypts, 6),
             kinematic_tree,
@@ -28,10 +28,18 @@ def visualize_reconstruction(model, loader, label, connectivity):
             do_root_R=True,
         )
 
+        target_pose = fwd_kin_cont6d_torch(
+            data["x6d"].reshape(-1, n_keypts, 6),
+            kinematic_tree,
+            data["offsets"].view(-1, n_keypts, 3),
+            data["root"].reshape(-1, 3),
+            do_root_R=True,
+        )
+
         pose_array = torch.cat(
             [
                 data["raw_pose"].reshape(-1, n_keypts, 3),
-                data["target_pose"].reshape(-1, n_keypts, 3),
+                target_pose.reshape(-1, n_keypts, 3),
                 pose_hat,
             ],
             axis=0,
@@ -55,23 +63,22 @@ def visualize_reconstruction(model, loader, label, connectivity):
             SAVE_ROOT=config["out_path"],
         )
 
-
 analysis_key = sys.argv[1]
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
-config["data"]["stride"] = 10
 config["data"]["batch_size"] = 10
-connectivity = read.connectivity_config(config["data"]["skeleton_path"])
-dataset_list = ["Train", "Test"]
+connectivity = read.connectivity_config(config["data"]["data_path"] + "/mouse_skeleton.yaml")
+dataset_list = ["val", "test"]
 for dataset_label in dataset_list:
-    loader, model = scrubvae.get.data_and_model(
+    loader_dict, model = scrubvae.get.data_and_model(
         config,
         load_model=config["out_path"],
         epoch=sys.argv[2],
-        dataset_label="Train",
-        data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose"]
+        train_val_test=[dataset_label],
+        data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose", "ids"]
         + config["disentangle"]["features"],
-        shuffle=True,
+        shuffle=[True],
+        use_default_val_keys = False,
         verbose=0,
     )
 
-    visualize_reconstruction(model, loader, dataset_label, connectivity)
+    visualize_reconstruction(model, loader_dict[dataset_label], dataset_label, connectivity)

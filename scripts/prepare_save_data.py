@@ -5,6 +5,8 @@ from typing import List
 import torch
 from scrubvae.data.dataset import *
 import h5py
+from neuroposelib import vis
+
 
 def calculate_mouse_kinematics(
     data_path: dict,
@@ -17,22 +19,16 @@ def calculate_mouse_kinematics(
     direction_process: str = "midfwd",
 ):
     print("Calculating dataset: {} {}".format(dataset, train_val_test))
-    pose = np.load(
-        "{}{}/{}/pose.npy".format(
-            data_path, dataset, train_val_test
-        )
-    )
+    pose = np.load("{}{}/{}/pose.npy".format(data_path, dataset, train_val_test))
     ids = np.repeat(np.arange(4, dtype=int), pose.shape[0] // 4)
 
     # Filter out bad tracking using speed threshold
     if remove_speed_outliers is not None:
-        outlier_frames = get_speed_outliers(
-            pose, remove_speed_outliers
-        )
+        outlier_frames = get_speed_outliers(pose, remove_speed_outliers)
         pose = np.delete(pose, outlier_frames, 0)
         ids = np.delete(ids, outlier_frames, 0)
 
-    data = {"raw_pose": pose} if "raw_pose" in data_keys else {}
+    data = {"raw_pose": pose}
     # speed_keys = [key for key in data_keys if "speed" in key]
     # assert len(speed_keys) < 2
     # Calculate different speed representations
@@ -53,22 +49,24 @@ def calculate_mouse_kinematics(
         #     speed = np.sqrt((speed**2).sum(axis=-1)).mean(axis=(-1, -2))
 
     # Get yaw of mid-spine -> fwd-spine segment for central frame in all windows
-    yaw = get_frame_yaw(pose[:, window//2, ...], 0, 1)[..., None]
+    yaw = get_frame_yaw(pose[:, window // 2, ...], 0, 1)[..., None]
 
-    # if "heading" in data_keys:
-    data["heading"] = get_angle2D(yaw)
+    if "heading" in data_keys:
+        data["heading"] = get_angle2D(yaw)
 
     # # Get yaw of center frame in a window
     # if direction_process in ["midfwd", "x360"]:
     #     yaw = yaw[window_inds][:, window // 2]
 
     if ("root" or "x6d") in data_keys:
-        root = pose[..., 0, :] # (n_samples, window, 3)
+        root = pose[..., 0, :].copy()  # (n_samples, window, 3)
         if direction_process in ["midfwd", "x360"]:
             # Centering root of middle frame
             # root = pose[..., 0, :][window_inds]
-            root_center = np.zeros(root.shape) # (n_samples, window, 3)
-            root_center[..., [0, 1]] = root[:, window // 2, [0, 1]][:, None, :] # (n_samples, 1, 2)
+            root_center = np.zeros(root.shape)  # (n_samples, window, 3)
+            root_center[..., [0, 1]] = root[:, window // 2, [0, 1]][
+                :, None, :
+            ]  # (n_samples, 1, 2)
 
             root -= root_center
         # elif direction_process == "fwd":
@@ -87,7 +85,7 @@ def calculate_mouse_kinematics(
 
         if direction_process == "midfwd":
             # if "mid" in direction_process:
-                ## Center frame of a window is translated to center and rotated to x+
+            ## Center frame of a window is translated to center and rotated to x+
             fwd_qtn = np.zeros((len(yaw), 4))
             fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
             # local_qtn = local_qtn[window_inds]
@@ -125,7 +123,8 @@ def calculate_mouse_kinematics(
     data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
 
     # Get animal IDs
-    data["ids"] = torch.tensor(ids, dtype=torch.int16)
+    if "ids" in data_keys:
+        data["ids"] = torch.tensor(ids, dtype=torch.int16)
 
     # if "fluorescence" in data_keys:
     #     # Read in integrated fluorescence for PD dataset
@@ -137,13 +136,41 @@ def calculate_mouse_kinematics(
     #     fluorescence = meta_by_frame["Fluorescence"].to_numpy()
     #     data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
 
+    sample_ind = [105000, 1000, 2000, 200000]
+    test_pose = fwd_kin_cont6d_torch(
+        data["x6d"][sample_ind].reshape(-1, 18, 6),
+        skeleton_config["KINEMATIC_TREE"],
+        data["offsets"][sample_ind].reshape(-1, 18, 3),
+        root_pos=data["root"][sample_ind].reshape(-1, 3),
+        do_root_R=True,
+        eps=1e-8,
+    )
+
+    test_pose = np.concatenate([data["raw_pose"][sample_ind].reshape(-1, 18, 3),test_pose], axis=0)
+
+    connectivity = read.connectivity_config(data_path + "/mouse_skeleton.yaml")
+    vis.pose.grid3D(
+        test_pose,
+        connectivity,
+        frames=np.arange(2)*51*len(sample_ind),
+        centered=False,
+        subtitles=["Raw", "Target"],
+        title=label + " Data",
+        fps=45,
+        figsize=(36, 12),
+        N_FRAMES= window*len(sample_ind),
+        VID_NAME="{}_{}.mp4".format(direction_process, train_val_test),
+        SAVE_ROOT="./",
+    )
+
+    # import pdb; pdb.set_trace()
+
     if "target_pose" in data_keys:
         # Target pose root does not move
         reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
         # if direction_process == "midfwd":
-        offsets = data["offsets"].reshape(
-            reshaped_x6d.shape[:2] + (-1,)
-        )
+        offsets = data["offsets"].reshape(reshaped_x6d.shape[:2] + (-1,))
+
         # else:
         #     offsets = data["offsets"]
 
@@ -157,10 +184,8 @@ def calculate_mouse_kinematics(
         ).reshape(data["x6d"].shape[:-1] + (3,))
 
     for k, v in data.items():
-        full_path = "{}{}/{}/{}".format(
-            data_path, dataset, train_val_test, k
-        )
-        if k in ["ids", "heading", "avg_speed_3d", "offsets"]:
+        full_path = "{}{}/{}/{}".format(data_path, dataset, train_val_test, k)
+        if k in ["ids", "heading", "avg_speed_3d", "offsets", "raw_pose"]:
             full_path += ".h5"
         else:
             full_path += "_{}.h5".format(direction_process)
@@ -176,7 +201,7 @@ def calculate_mouse_kinematics(
 
 
 data_path = "/mnt/home/jwu10/working/ceph/data/wu_iclr25/"
-data_keys = ["x6d", "root", "offsets", "target_pose", "avg_speed_3d", "heading", "ids"]
+data_keys = ["raw_pose", "x6d", "root", "offsets", "target_pose", "avg_speed_3d", "heading", "ids"]
 skeleton_config = read.config(data_path + "mouse_skeleton.yaml")
 
 for label in ["train", "val", "test"]:
