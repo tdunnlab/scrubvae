@@ -1,8 +1,0 @@
-PATHS:
-  - cvae/cvae_8
-  - cvae/cvae_16
-  - cvae/cvae_32
-  - cvae/cvae_64
-  - cvae/cvae_128
-
-OUT: /mnt/home/jwu10/working/ceph/results/vae/cvae/

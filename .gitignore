@@ -162,6 +162,7 @@ base_path.py
 *.png
 wandb/
 demo/results/*
+configs/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
