@@ -191,18 +191,17 @@ def mouse_data(
         }
     }
     if "avg_speed_3d" in data_keys:
-        key = "avg_speed_3d"
         print("Mean centering and unit standard deviation-scaling {}".format(key))
         # if key not in norm_params.keys():
         #     norm_params[key] = {}
         #     norm_params[key]["mean"] = data[key].mean(axis=0)
         #     norm_params[key]["std"] = data[key].std(axis=0)
-        data[key] -= norm_params[key]["mean"]
-        data[key] /= norm_params[key]["std"]
+        data["avg_speed_3d"] -= norm_params["avg_speed_3d"]["mean"]
+        data["avg_speed_3d"] /= norm_params["avg_speed_3d"]["std"]
 
         print("Speed Mins and Maxes:")
-        print(data[key].min(dim=0)[0])
-        print(data[key].max(dim=0)[0])
+        print(data["avg_speed_3d"].min(dim=0)[0])
+        print(data["avg_speed_3d"].max(dim=0)[0])
 
     discrete_classes = {}
     if data_config["dataset"] == "parkinson":
