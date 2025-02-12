@@ -1,0 +1,10 @@
+PATHS:
+  - mi_64_bw/reduce_round
+  - heading_err/1d_spd
+  - heading_err/mals
+  - heading_err/spd_later
+  - heading_err/mals_b_p3
+  - vanilla_64/1
+  - cvae_64/1
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/heading_err/

@@ -216,20 +216,14 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
     print("Running test epoch")
 
     ##TODO: Test and implement generator consistency code
-    # loader.dataset.data["avg_speed_3d_rand"] = loader.dataset[:]["avg_speed_3d"][
-    #     torch.randperm(
-    #         len(loader.dataset), generator=torch.Generator().manual_seed(100)
-    #     )
-    # ]
-
     model.eval()
     with torch.no_grad():
         z = []
         epoch_metrics = {k: 0 for k in ["total"] + list(config["loss"].keys())}
-        # gen_res = {
-        #     k1: {k2: [] for k2 in ["pred", "target"]}
-        #     for k1 in ["heading", "avg_speed_3d"]
-        # }
+        gen_res = {
+            k1: {k2: [] for k2 in ["pred", "target"]}
+            for k1 in model.disentangle_keys if k1 != "ids"
+        }
 
         if "mcmi" in config["loss"].keys():
             # Update mi_estimator
@@ -271,24 +265,24 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
                 config["disentangle"],
             )
 
-            # for key in gen_res.keys():
-            #     key_pred, key_target = generative_restrictiveness(
-            #         model, data_o["mu"], data, key, loader.dataset.kinematic_tree
-            #     )
-            #     if "speed" in key:
-            #         norm_params = {
-            #             k: v.to(key_pred.device)
-            #             for k, v in loader.dataset.norm_params[key].items()
-            #         }
-            #         if "mean" in norm_params.keys():
-            #             key_pred -= norm_params["mean"]
-            #             key_pred /= norm_params["std"]
-            #         elif "min" in norm_params.keys():
-            #             key_pred -= norm_params["min"]
-            #             key_pred = 2 * key_pred / norm_params["max"] - 1
+            for key in gen_res.keys():
+                key_pred, key_target = generative_restrictiveness(
+                    model, data_o["mu"], data, key, loader.dataset.kinematic_tree
+                )
+                # if "speed" in key:
+                #     norm_params = {
+                #         k: v.to(key_pred.device)
+                #         for k, v in loader.dataset.norm_params[key].items()
+                #     }
+                #     if "mean" in norm_params.keys():
+                #         key_pred -= norm_params["mean"]
+                #         key_pred /= norm_params["std"]
+                #     elif "min" in norm_params.keys():
+                #         key_pred -= norm_params["min"]
+                #         key_pred = 2 * key_pred / norm_params["max"] - 1
 
-            #     gen_res[key]["pred"] += [key_pred.detach().cpu()]
-            #     gen_res[key]["target"] += [key_target.detach().cpu()]
+                gen_res[key]["pred"] += [key_pred.detach().cpu()]
+                gen_res[key]["target"] += [key_target.detach().cpu()]
 
             epoch_metrics = {
                 k: v + batch_metrics[k].detach() for k, v in epoch_metrics.items()
@@ -300,11 +294,11 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
             "====> Epoch: {} Average {} loss: {:.4f}".format(epoch, k, epoch_metrics[k])
         )
 
-    # for key in gen_res.keys():
-    #     epoch_metrics["r2_gen_restrict_{}".format(key)] = r2_score(
-    #         torch.cat(gen_res[key]["target"], dim=0),
-    #         torch.cat(gen_res[key]["pred"], dim=0),
-    #     )
+    for key in gen_res.keys():
+        epoch_metrics["r2_gen_restrict_{}".format(key)] = r2_score(
+            torch.cat(gen_res[key]["target"], dim=0),
+            torch.cat(gen_res[key]["pred"], dim=0),
+        )
 
     return epoch_metrics, torch.cat(z, dim=0).cpu()
 

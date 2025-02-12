@@ -1,0 +1,13 @@
+PATHS:
+  - beta_prior/cvae_b
+  - beta_prior/vanilla
+  - mals_updated/p2_20_b
+  - mals_updated/p2_20_g
+  - mals_updated/p2_20_l201
+  - mals_updated/p2_20_l205
+  - mals_updated/p2_50_b
+  - mals_updated/p2_50_g
+  - mals_updated/p3_20_b
+  - mals_updated/p3_20_l205
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/mals_updated/

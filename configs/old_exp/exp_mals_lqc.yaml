@@ -1,0 +1,11 @@
+PATHS:
+  - mals_lqc/cub_10
+  - mals_lqc/quad_10
+  - mals_lqc/quad_20
+  - mals_lqc/lin_20
+  - mals_updated/p2_20_b
+  - mals_updated/p2_50_b
+  - mals_updated/p3_20_b
+  - vanilla/32
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/mals_lqc/

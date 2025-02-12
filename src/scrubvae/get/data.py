@@ -17,96 +17,96 @@ TRAIN_IDS = {
 }
 
 
-def mouse_pd_data(
-    data_config: dict,
-    window: int = 51,
-    data_keys: List[str] = ["x6d", "root", "offsets"],
-):
-    REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
-    if (
-        (data_config["remove_speed_outliers"] is not None)
-        or ("ids" in data_keys)
-        or ("raw_pose" in data_keys)
-    ):
-        pose, ids = read.pose_h5(data_config["data_path"], dtype=np.float64)
-        pose = pose[..., REORDER, :]
+# def mouse_pd_data(
+#     data_config: dict,
+#     window: int = 51,
+#     data_keys: List[str] = ["x6d", "root", "offsets"],
+# ):
+#     REORDER = [4, 3, 2, 1, 0, 5, 11, 10, 9, 8, 7, 6, 17, 16, 15, 14, 13, 12]
+#     if (
+#         (data_config["remove_speed_outliers"] is not None)
+#         or ("ids" in data_keys)
+#         or ("raw_pose" in data_keys)
+#     ):
+#         pose, ids = read.pose_h5(data_config["data_path"], dtype=np.float64)
+#         pose = pose[..., REORDER, :]
 
-    parent_path = str(Path(data_config["data_path"]).parents[0])
-    subfolders = ["/6ohda/", "/healthy/"]
+#     parent_path = str(Path(data_config["data_path"]).parents[0])
+#     subfolders = ["/6ohda/", "/healthy/"]
 
-    # Get windows
-    window_inds = get_window_indices(ids, data_config["stride"], window)
+#     # Get windows
+#     window_inds = get_window_indices(ids, data_config["stride"], window)
 
-    # Remove windows with high speed to remove bad tracking
-    if data_config["remove_speed_outliers"] is not None:
-        outlier_frames = get_speed_outliers(
-            pose, window_inds, data_config["remove_speed_outliers"]
-        )
-        kept_frames = np.arange(len(window_inds), dtype=np.int)
-        kept_frames = np.delete(kept_frames, outlier_frames, 0)
-        window_inds = window_inds[kept_frames]
-        print("Window Inds: {}".format(window_inds.shape))
+#     # Remove windows with high speed to remove bad tracking
+#     if data_config["remove_speed_outliers"] is not None:
+#         outlier_frames = get_speed_outliers(
+#             pose, window_inds, data_config["remove_speed_outliers"]
+#         )
+#         kept_frames = np.arange(len(window_inds), dtype=np.int)
+#         kept_frames = np.delete(kept_frames, outlier_frames, 0)
+#         window_inds = window_inds[kept_frames]
+#         print("Window Inds: {}".format(window_inds.shape))
 
-    # Reading in precalculated and processed data
-    saved_tensors = ["avg_speed_3d", "offsets", "root", "target_pose", "x6d"]
-    data = {k: [] for k in data_keys if k in saved_tensors}
-    for key in data.keys():
-        print("Loading in {} data".format(key))
-        for subfolder in subfolders:
-            if key == "avg_speed_3d":
-                npy_path = "{}{}speed_3d".format(parent_path, subfolder)
-                data[key] += [np.load(npy_path + ".npy")]
-            elif key != "offsets":
-                npy_path = "{}{}{}_{}_s{}".format(
-                    parent_path,
-                    subfolder,
-                    key,
-                    data_config["direction_process"],
-                    data_config["stride"],
-                )
-                data[key] += [np.load(npy_path + ".npy")]
-            else:
-                npy_path = "{}{}{}".format(parent_path, subfolder, key)
-                data[key] += [np.load(npy_path + ".npy")]
+#     # Reading in precalculated and processed data
+#     saved_tensors = ["avg_speed_3d", "offsets", "root", "target_pose", "x6d"]
+#     data = {k: [] for k in data_keys if k in saved_tensors}
+#     for key in data.keys():
+#         print("Loading in {} data".format(key))
+#         for subfolder in subfolders:
+#             if key == "avg_speed_3d":
+#                 npy_path = "{}{}speed_3d".format(parent_path, subfolder)
+#                 data[key] += [np.load(npy_path + ".npy")]
+#             elif key != "offsets":
+#                 npy_path = "{}{}{}_{}_s{}".format(
+#                     parent_path,
+#                     subfolder,
+#                     key,
+#                     data_config["direction_process"],
+#                     data_config["stride"],
+#                 )
+#                 data[key] += [np.load(npy_path + ".npy")]
+#             else:
+#                 npy_path = "{}{}{}".format(parent_path, subfolder, key)
+#                 data[key] += [np.load(npy_path + ".npy")]
 
-        data[key] = np.concatenate(data[key], axis=0)
-        data[key] = torch.tensor(data[key], dtype=torch.float32)
+#         data[key] = np.concatenate(data[key], axis=0)
+#         data[key] = torch.tensor(data[key], dtype=torch.float32)
 
-        if key == "avg_speed_3d":
-            data[key] = data[key][window_inds[:, 1:]].mean(axis=1)
+#         if key == "avg_speed_3d":
+#             data[key] = data[key][window_inds[:, 1:]].mean(axis=1)
 
-        if (data[key].shape[1] == window) and (
-            data_config["remove_speed_outliers"] is not None
-        ):
-            data[key] = data[key][kept_frames]
+#         if (data[key].shape[1] == window) and (
+#             data_config["remove_speed_outliers"] is not None
+#         ):
+#             data[key] = data[key][kept_frames]
 
-    if "raw_pose" in data_keys:
-        data["raw_pose"] = torch.tensor(pose, dtype=torch.float32)
+#     if "raw_pose" in data_keys:
+#         data["raw_pose"] = torch.tensor(pose, dtype=torch.float32)
 
-    if "fluorescence" in data_keys:
-        # Read in integrated fluorescence values representing the level of
-        # dopamine denervation
-        import pandas as pd
+#     if "fluorescence" in data_keys:
+#         # Read in integrated fluorescence values representing the level of
+#         # dopamine denervation
+#         import pandas as pd
 
-        meta = pd.read_csv(parent_path + "/metadata.csv")
-        meta_by_frame = meta.iloc[ids]
-        fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
-        data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
+#         meta = pd.read_csv(parent_path + "/metadata.csv")
+#         meta_by_frame = meta.iloc[ids]
+#         fluorescence = meta_by_frame["Fluorescence"].to_numpy()[window_inds[:, 0:1]]
+#         data["fluorescence"] = torch.tensor(fluorescence, dtype=torch.float32)
 
-    if "pd_label" in data_keys:
-        data["pd_label"] = torch.zeros((len(window_inds), 1)).long()
-        data["pd_label"][ids[window_inds[:, 0:1]] >= 37] = 1
-        print("pd_label shape: {}".format(data["pd_label"].shape))
+#     if "pd_label" in data_keys:
+#         data["pd_label"] = torch.zeros((len(window_inds), 1)).long()
+#         data["pd_label"][ids[window_inds[:, 0:1]] >= 37] = 1
+#         print("pd_label shape: {}".format(data["pd_label"].shape))
 
-    # Each animal has two sessions
-    ids[ids >= 37] -= 37
-    data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
-    print("ids shape: {}".format(data["ids"].shape))
+#     # Each animal has two sessions
+#     ids[ids >= 37] -= 37
+#     data["ids"] = torch.tensor(ids[window_inds[:, 0:1]], dtype=torch.int16)
+#     print("ids shape: {}".format(data["ids"].shape))
 
-    for k, v in data.items():
-        print("{}: {}".format(k, v.shape))
+#     for k, v in data.items():
+#         print("{}: {}".format(k, v.shape))
 
-    return data, window_inds
+#     return data, window_inds
 
 
 def mouse_data(
@@ -147,7 +147,7 @@ def mouse_data(
         data_config["data_path"], data_config["dataset"], train_val_test
     )
     data = {}
-    for key in data_keys:
+    for key in data_keys + ["ids"]:
         if key in ["ids", "heading", "avg_speed_3d", "offsets", "raw_pose"]:
             file_path = "{}{}.h5".format(data_path, key)
         else:
@@ -199,6 +199,10 @@ def mouse_data(
         #     norm_params[key]["std"] = data[key].std(axis=0)
         data[key] -= norm_params[key]["mean"]
         data[key] /= norm_params[key]["std"]
+
+        print("Speed Mins and Maxes:")
+        print(data[key].min(dim=0)[0])
+        print(data[key].max(dim=0)[0])
 
     discrete_classes = {}
     if data_config["dataset"] == "parkinson":

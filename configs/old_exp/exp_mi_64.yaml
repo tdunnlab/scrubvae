@@ -1,0 +1,10 @@
+PATHS:
+  # - vanilla/64
+  - mi_64/bw50_500
+  - mi_64/bw50_750
+  - mi_64/bw75_500
+  - mi_64/bw100_500
+  - mi_64/bw100_750
+  - mals_64/cvae_64
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/mi_64/

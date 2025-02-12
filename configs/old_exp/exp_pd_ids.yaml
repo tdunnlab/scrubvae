@@ -1,0 +1,11 @@
+PATHS:
+  - pd_ids/cvae_ids
+  - immunostain/vanilla_mf
+  # - pd_ids/qda_20
+  # - pd_ids/qda_50
+  - pd_ids/qda_10
+  - pd_ids/qda_5
+  - pd_ids/gr_50
+  - pd_ids/gr_100
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/pd_ids/

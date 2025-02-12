@@ -1,0 +1,14 @@
+PATHS:
+  - vanilla/64
+  - ids_64/cvae_ids
+  - ids_64/qda_10
+  - ids_64/qda_20
+  # - ids_64/qda_50
+  # - ids_64/qda_100
+  # - ids_64/qda_100_20
+  - ids_64/gr_50
+  - ids_64/gr_100
+  - ids_64/no_c_gr_100
+  - ids_64/no_c_qda_20
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/ids_64/

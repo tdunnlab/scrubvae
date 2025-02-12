@@ -1,0 +1,201 @@
+heading_gaussian:
+  - - "VAE"
+    - "vanilla/64"
+    - 300
+  - - "beta-VAE"
+    - "beta/van_b5"
+    - 380
+  - - "C-VAE"
+    - "beta_prior/cvae_g"
+    - 285
+    # - 400
+  - - "SC-VAE-GR"
+    - "b_heading/gr_50_g"
+    - 465
+  - - "SC-VAE-ND"
+    # - "an_heading/heading_50i_10"
+    # - 400
+    - "an_heading/heading_10i_10"
+    - 400
+    # - "b_heading/gr_10_g"
+    # - 325
+  - - "SC-VAE-MALS"
+    - "b_heading/p1_20_g"
+    - 300
+  - - "SC-VAE-MAQS"
+    - "b_heading/p2_10_l205_g"
+    - 570
+  - - "SC-VAE-MI"
+    - "beta_prior/mi_500_50_g"
+    - 300
+
+heading_beta:
+  - - "VAE"
+    - "beta_prior/vanilla"
+    - 300
+  # - - "beta-VAE"
+  #   - "beta/van_b5"
+  #   - 380
+  - - "C-VAE"
+    - "beta_prior/cvae_b"
+    - 300
+  # - - "SC-VAE-GR"
+  #   - "gr_64/50"
+  #   - 490
+  - - "SC-VAE-MAQS"
+    - "mals_updated/p2_20_b"
+    - 565
+  - - "SC-VAE-MACS"
+    - "mals_updated/p3_20_b"
+    - 585
+  - - "SC-VAE-MI"
+    - "beta_prior/mi_500_50_b"
+    - 495
+
+avg_speed_3d_gaussian:
+  - - "VAE"
+    - "vanilla_64/1"
+    - 300
+  - - "beta-VAE"
+    - "beta_mf/van_b10"
+    - 360
+  - - "C-VAE"
+    - "cvae_64/1"
+    - 275
+  - - "SC-VAE-GR"
+    - "gr_64_mf/20_mf"
+    - 320
+  - - "SC-VAE-ND"
+    # - "an_spd/spd_10i_100"
+    # - 390
+    - "an_spd/spd_50i_10"
+    - 400
+  - - "SC-VAE-MALS"
+    # - "mals_64_mf/mals_p1_50"
+    # - 550
+    - "mals_q_mf/mals_p1_20"
+    - 350
+  - - "SC-VAE-MAQS"
+    - "mals_q_mf/mals_p5_2_l50_le5"
+    - 390
+    # - "mals_q_mf/mals_p2_2_l75"
+    # - 325
+    # - "mals_q_mf/mals_p2_5_l75_le5"
+    # - 395
+  - - "SC-VAE-MI"
+    - "mi_64_mf/bw50_500"
+    - 270
+    # - 240
+
+avg_speed_3d_beta:
+  # - - "VAE"
+  #   - "vanilla_64/1"
+  #   - 300
+  # - - "beta-VAE"
+  #   - "beta_mf/van_b10"
+  #   - 360
+  - - "C-VAE"
+    - "b_spd/cvae_b"
+    - 300
+  # - - "SC-VAE-GR"
+  #   - "gr_64/20_mf"
+  #   - 320
+  - - "SC-VAE-MI"
+    - "b_spd/mi_250_25"
+    - 390
+
+both:
+# heading_gaussian:
+  - - "VAE"
+    - "vanilla/64"
+    - 300
+  - - "beta-VAE"
+    - "beta/van_b5"
+    - 380
+  - - "C-VAE"
+    - "mals_64/cvae_64"
+    - 280
+  - - "SC-VAE-GR"
+    - "gr_64/50"
+    - 485
+  - - "SC-VAE-MALS"
+    - "mals_64/mals_p1_20"
+    - 350
+  - - "SC-VAE-MI"
+    - "mi_64/bw50_500"
+    - 320 # 305
+
+ids_gaussian:
+  - - "VAE"
+    - "vanilla/64"
+    - 500
+  - - "beta-VAE"
+    - "beta/van_b5"
+    - 380
+  - - "C-VAE"
+    - "ids_64/cvae_ids"
+    - 120
+    # - "ids_64/cvae_ids"
+    # - 120
+  - - "VAE-GR"
+    - "ids_64/no_c_gr_100"
+    - 480
+  - - "SC-VAE-GR"
+    - "ids_64/gr_100"
+    - 480
+  - - "SC-VAE-ND"
+    - "an_id/id_10i_10"
+    - 390
+  - - "VAE-QD"
+    - "ids_64/no_c_qda_20"
+    - 485
+  - - "SC-VAE-QD"
+    - "ids_64/qda_20"
+    - 600
+
+pd_ids:
+  - - "VAE"
+    - "immunostain/vanilla_mf"
+    - 216
+  - - "C-VAE"
+    - "pd_ids/cvae_ids"
+    - 200
+  - - "SC-VAE-GR"
+    - "pd_ids/gr_50"
+    - 410
+  - - "SC-VAE-QD"
+    - "pd_ids/qda_10"
+    - 290
+  - - "Reverse Control"
+    - "pd_label/qda_5"
+    - 245
+
+pd_speed:
+  - - "VAE"
+    - "immunostain/vanilla_mf"
+    - 216
+  - - "C-VAE"
+    - "immunostain/cvae_mf"
+    - 214
+  - - "SC-VAE-MALS"
+    - "pd_mals/mals_p1_20"
+    - 400
+  - - "SC-VAE-MI"
+    - "pd_speed/mi_500"
+    - 216
+
+heading_32:
+  - - "VAE"
+    - "vanilla/32"
+    - 380
+  - - "SC-VAE-MALS"
+    - "mals_lqc/lin_20"
+    - 380
+  - - "SC-VAE-MAQS"
+    - "mals_lqc/quad_10"
+    - 380
+  - - "SC-VAE-MACS"
+    - "mals_lqc/cub_10"
+    - 380
+
+OUT: /mnt/home/jwu10/working/SC-VAE/test_code/results/

@@ -1,0 +1,13 @@
+PATHS:
+  - b_spd_1d/cvae_b
+  - b_spd_1d/cvae_g
+  - b_spd_1d/mi_500_50_g
+  - b_spd_1d/mi_500_75_g
+  - b_spd_1d/mi_100_10
+  - b_spd_1d/mi_100_20
+  - b_spd_1d/mi_250_25
+  - b_spd_1d/mi_250_50
+  - b_spd_1d/mi_500_50
+  - b_spd_1d/mi_500_75
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/b_spd_1d/

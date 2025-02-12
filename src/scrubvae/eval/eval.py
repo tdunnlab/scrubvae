@@ -1,5 +1,9 @@
 import scipy.linalg as spl
-from scrubvae.data.dataset import fwd_kin_cont6d_torch, get_speed_parts_torch
+from scrubvae.data.dataset import (
+    fwd_kin_cont6d_torch,
+    get_speed_parts_torch,
+    get_angle2D,
+)
 import numpy as np
 import torch
 from scrubvae.plot import trace, PLANE
@@ -19,15 +23,32 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
     n_keypts = data["x6d"].shape[-2]
     window = data["x6d"].shape[1]
     batch_size = data["x6d"].shape[0]
+    var_true = data[key]
     if key == "heading":
-        data["heading"] = torch.rand(
-            data["heading"].shape, device=data["heading"].device
-        )
-        #     generator=torch.Generator(device=data["heading"].device).manual_seed(100),
+        rand_yaw = (
+            torch.rand(batch_size, dtype=torch.float32, device=z.device) * 2 - 1
+        )[:, None] * np.pi
+        rand_angle2D = torch.cat([torch.sin(rand_yaw), torch.cos(rand_yaw)], axis=-1)
+        data["heading"] = rand_angle2D.reshape(rand_yaw.shape[:-1] + (-1,))
+
+        # torch.rand(
+        #     data["heading"].shape, device=data["heading"].device
         # )
-        data["heading"] /= torch.linalg.norm(data["heading"], dim=-1, keepdim=True)
+        # #     generator=torch.Generator(device=data["heading"].device).manual_seed(100),
+        # # )
+        # data["heading"] /= torch.linalg.norm(data["heading"], dim=-1, keepdim=True)
     elif key == "avg_speed_3d":
-        data["avg_speed_3d"] = data["avg_speed_3d_rand"]
+        spd_std = torch.tensor(
+            [0.4038, 0.3586, 0.4169], dtype=torch.float32, device=z.device
+        )
+        rand_jitter = torch.randn((batch_size, 1), dtype=torch.float32, device=z.device) * spd_std * 1.5 + 0.5
+        mins = torch.tensor(
+            [-1.2323, -1.9734, -1.5858], dtype=torch.float32, device=z.device
+        )
+        maxes = torch.tensor(
+            [4.6167, 4.6437, 4.2551], dtype=torch.float32, device=z.device
+        )
+        data["avg_speed_3d"] = torch.clamp(var_true + rand_jitter, min=mins, max=maxes)
 
     data_o = model.decode(z, data)
 
@@ -48,28 +69,27 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
         pred = torch.cat([torch.sin(yaw), torch.cos(yaw)], dim=-1)
         pred = pred.reshape(yaw.shape[:-1] + (-1,))
     elif key == "avg_speed_3d":
-        root_spd = torch.sqrt(
-            (torch.diff(data_o["root"], n=1, dim=1) ** 2).sum(dim=-1)
-        ).mean(dim=1)
+        root_spd = torch.diff(pose_batch[:, :, 0, :], n=1, dim=-2) ** 2
+        root_spd = torch.sqrt(root_spd.sum(dim=-1)).mean(dim=-1)
         parts = [
             [0, 1, 2, 3, 4, 5],  # spine and head
             [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
             [5, 12, 13, 14, 15, 16, 17],  # legs from back spine
         ]
-        dxyz = torch.zeros((len(root_spd), 3), device=data_o["root"].device)
+        dxyz = torch.zeros((len(root_spd), 3), dtype=torch.float32, device=data_o["root"].device)
         for i, part in enumerate(parts):
             pose_part = (
                 pose_batch - pose_batch[:, window // 2, None, part[0] : part[0] + 1, :]
             )
             relative_dxyz = (
                 torch.diff(
-                    pose_part[:, :, part[1:], :],
+                    pose_part[..., part[1:], :],
                     n=1,
-                    axis=1,
+                    axis=-3,
                 )
                 ** 2
             ).sum(axis=-1)
-            dxyz[:, i] = torch.sqrt(relative_dxyz).mean(axis=(1, 2))
+            dxyz[:, i] = torch.sqrt(relative_dxyz).mean(axis=(-1, -2))
 
         pred = torch.cat(
             [
@@ -79,6 +99,13 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
             ],
             axis=-1,
         )
+        norm_params = {
+            "mean": torch.tensor([0.4993, 0.7112, 0.6663], dtype=torch.float32, device=z.device),
+            "std": torch.tensor([0.4038, 0.3586, 0.4169], dtype=torch.float32, device=z.device),
+        }
+
+        pred -= norm_params["mean"]
+        pred /= norm_params["std"]
 
     return pred, data[key]
 

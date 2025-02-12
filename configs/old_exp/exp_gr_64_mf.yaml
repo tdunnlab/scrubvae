@@ -1,0 +1,8 @@
+PATHS:
+  # - vanilla_64/1
+  - gr_64/20_mf
+  # - gr_64/50_mf
+  # - gr_64/100_mf
+  - cvae_64/1
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/gr_64_mf/

@@ -1,0 +1,11 @@
+PATHS:
+  # - vanilla/64
+  - mals_64/cvae_64
+  - mals_64/mals_p1_10
+  - mals_64/mals_p1_20
+  # - mals_64/mals_p1_50
+  # - mals_64/mals_p2_10
+  # - mals_64/mals_p2_20
+  # - mals_64/mals_p2_50
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/mals_64/

@@ -1,0 +1,7 @@
+PATHS:
+  - an_id/id_10i_10
+  - an_id/id_10i_100
+  - an_id/id_50i_10
+  - an_id/id_100i_10
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/an_id/

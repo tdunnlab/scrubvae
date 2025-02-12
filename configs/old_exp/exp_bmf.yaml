@@ -1,0 +1,11 @@
+PATHS:
+  - beta_mf/cvae_b2
+  - beta_mf/cvae_b5
+  - beta_mf/cvae_b10
+  - beta_mf/van_b2
+  - beta_mf/van_b5
+  - beta_mf/van_b10
+  - cvae_64/1
+  - vanilla_64/1
+
+OUT: /mnt/home/jwu10/working/ceph/results/vae/beta_mf/

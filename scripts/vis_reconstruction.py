@@ -8,6 +8,7 @@ import scrubvae
 from base_path import RESULTS_PATH
 import sys
 
+
 def visualize_reconstruction(model, loader, label, connectivity):
     n_keypts = loader.dataset.n_keypts
     kinematic_tree = loader.dataset.kinematic_tree
@@ -39,7 +40,9 @@ def visualize_reconstruction(model, loader, label, connectivity):
         pose_array = torch.cat(
             [
                 data["raw_pose"].reshape(-1, n_keypts, 3),
-                target_pose.reshape(-1, n_keypts, 3),
+                data["target_pose"].reshape(
+                    -1, n_keypts, 3
+                ),  # target_pose.reshape(-1, n_keypts, 3),
                 pose_hat,
             ],
             axis=0,
@@ -63,22 +66,27 @@ def visualize_reconstruction(model, loader, label, connectivity):
             SAVE_ROOT=config["out_path"],
         )
 
+
 analysis_key = sys.argv[1]
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["data"]["batch_size"] = 10
-connectivity = read.connectivity_config(config["data"]["data_path"] + "/mouse_skeleton.yaml")
-dataset_list = ["val", "test"]
+connectivity = read.connectivity_config(
+    config["data"]["data_path"] + "/mouse_skeleton.yaml"
+)
+dataset_list = ["train", "val", "test"]
 for dataset_label in dataset_list:
     loader_dict, model = scrubvae.get.data_and_model(
         config,
         load_model=config["out_path"],
         epoch=sys.argv[2],
         train_val_test=[dataset_label],
-        data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose", "ids"]
+        data_keys=["x6d", "root", "offsets", "raw_pose", "target_pose", "ids", "avg_speed_3d"]
         + config["disentangle"]["features"],
         shuffle=[True],
-        use_default_val_keys = False,
+        use_default_val_keys=False,
         verbose=0,
     )
 
-    visualize_reconstruction(model, loader_dict[dataset_label], dataset_label, connectivity)
+    visualize_reconstruction(
+        model, loader_dict[dataset_label], dataset_label, connectivity
+    )

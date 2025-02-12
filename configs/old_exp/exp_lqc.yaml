@@ -1,0 +1,16 @@
+heading:
+  - - "VAE"
+    - "vanilla/32"
+    - 380
+  - - "SC-VAE-GR"
+    - "gr_64/50"
+    - 490
+  - - "SC-VAE-MALS"
+    - "mals_lqc/lin_20"
+    - 380
+  - - "SC-VAE-MAQS"
+    - "mals_lqc/quad_10"
+    - 380
+  - - "SC-VAE-MACS"
+    - "mals_lqc/cub_10"
+    - 380

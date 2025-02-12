@@ -11,42 +11,44 @@ from scrubvae.data.dataset import get_angle2D
 
 ### Set/Load Parameters
 analysis_key = sys.argv[1]
-disentangle_key = "ids"
+disentangle_key = "heading"
 out_path = RESULTS_PATH + analysis_key
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["model"]["load_model"] = config["out_path"]
 vis_decode_path = config["out_path"] + "/vis_decode/"
 Path(vis_decode_path).mkdir(parents=True, exist_ok=True)
-connectivity = read.connectivity_config(config["data"]["skeleton_path"])
-dataset_label = "Train"
+connectivity = read.connectivity_config(config["data"]["data_path"] + "/mouse_skeleton.yaml")
+dataset_label = "val"
 ### Load Datasets
-loader, model = scrubvae.get.data_and_model(
+loader_dict, model = scrubvae.get.data_and_model(
     config,
     load_model=config["out_path"],
     epoch=sys.argv[2],
-    dataset_label=dataset_label,
+    train_val_test = [dataset_label],
     data_keys=["x6d", "root", "offsets", disentangle_key],
     # normalize=["avg_speed_3d"],
-    shuffle=False,
+    use_default_val_keys = False,
+    shuffle=[False],
     verbose=0,
 )
+loader = loader_dict[dataset_label]
 
 latents = scrubvae.get.latents(
     config=config,
     model=model,
     epoch=sys.argv[2],
-    loader=loader,
+    loader=loader_dict[dataset_label],
     device="cuda",
     dataset_label=dataset_label,
 )
 
 # dis_w = LinearRegression().fit(latents, loader.dataset[:][disentangle_key]).coef_
 
-n_shifts = 2
+n_shifts = 5
 # sample_idx = [4000000, 2000000, 3000000, 60000, 1294585]
-sample_idx = [1000, 20000, 400000, 600000]
-# shift = torch.linspace(0, np.pi, n_shifts)[:, None]
-# shift = torch.from_numpy(get_angle2D(shift))
+sample_idx = [1000, 20000, 200000, 300000]
+shift = torch.linspace(-np.pi, np.pi, n_shifts+1)[:, None]
+shift = torch.from_numpy(get_angle2D(shift))
 # shift = torch.linspace(-2.5, 5, n_shifts)[:, None]
 
 for sample_i in sample_idx:
@@ -60,7 +62,8 @@ for sample_i in sample_idx:
     z_traverse = latents[sample_i : sample_i + 1, :].repeat(n_shifts + 1, 1).cuda()
     # data[disentangle_key][1:, :] += shift.cuda()
     # import pdb; pdb.set_trace()
-    data["ids"] = torch.arange(3)[:,None].long()
+    data[disentangle_key] = shift.cuda()
+    # data["ids"] = torch.arange(3)[:,None].long()
 
     data_o = model.decode(z_traverse, data)
     pose = (
