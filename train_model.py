@@ -14,10 +14,9 @@ args = parser.parse_args()
 
 ### Set/Load Parameters
 wandb.login()
-
 if args.job_id is not None:
     z_path = Path(RESULTS_PATH + args.project)
-    folders = [str(f.parts[-1]) for f in z_path.iterdir() if f.is_dir()]
+    folders = sorted([str(f.parts[-1]) for f in z_path.iterdir() if f.is_dir()])
     name = folders[args.job_id]
     # analysis_key = "{}/{}/".format(args.project, name)
 else:
