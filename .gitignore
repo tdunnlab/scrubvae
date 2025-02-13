@@ -160,6 +160,7 @@ configs/*.yaml
 base_path.py
 *.mp4
 *.png
+!docs/**/*.png
 wandb/
 demo/results/*
 
