@@ -1,7 +1,7 @@
 import ssumo
 from ssumo.params import read
 import sys
-from base_path import RESULTS_PATH
+from scripts.base_path import RESULTS_PATH
 from pathlib import Path
 
 ### Set/Load Parameters

@@ -1,4 +1,4 @@
-from dappy import read, preprocess
+from neuroposelib import read, preprocess
 import numpy as np
 import ssumo.data.quaternion as qtn
 from typing import List
@@ -534,6 +534,9 @@ def get_projected_2D_kinematics(
             device=device,
         )
         data["offsets"] = torch.reshape(segment_lens, pose.shape)
+        data["segment_lens"] = torch.reshape(
+            torch.sum(torch.abs(segment_lens), axis=-1), pose.shape[:-1]
+        )  # calculates length of each segment at each frame
 
     if "root" in data_keys:
         root = pose[..., 0, :2]

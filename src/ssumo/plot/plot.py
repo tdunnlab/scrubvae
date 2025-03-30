@@ -1,7 +1,7 @@
 import numpy as np
-from dappy import DataStruct as ds
+from neuroposelib import DataStruct as ds
 from typing import Union, List
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 import matplotlib.pyplot as plt
 from ssumo.plot.constants import PLANE
 from pathlib import Path

@@ -39,6 +39,8 @@ def model(
         in_channels = n_keypts * 2
         if direction_process in ["x360", "midfwd", None]:
             in_channels += 2
+        if config["data"].get("segment_lens"):
+            in_channels += n_keypts
 
     methods = disentangle_config["method"]
     disentangle = {}

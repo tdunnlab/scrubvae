@@ -1,6 +1,6 @@
 import numpy as np
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 from ssumo import get
 from . import project_to_null
 from sklearn.metrics import r2_score

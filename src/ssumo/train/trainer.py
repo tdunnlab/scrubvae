@@ -1,5 +1,5 @@
 import torch
-from dappy import read
+from neuroposelib import read
 from ssumo.train.losses import get_batch_loss, balance_disentangle
 from ssumo.train.mutual_inf import MutInfoEstimator
 from ssumo.model.disentangle import MovingAvgLeastSquares, QuadraticDiscriminantFilter

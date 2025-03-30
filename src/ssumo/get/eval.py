@@ -4,7 +4,7 @@ import tqdm
 import torch
 import numpy as np
 import random
-from dappy import read
+from neuroposelib import read
 from ssumo.data.dataset import *
 
 
