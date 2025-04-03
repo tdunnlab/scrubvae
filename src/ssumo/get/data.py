@@ -324,7 +324,8 @@ def mouse_data(
 
 
 def get_random_axis(length: int = 1):
-    axis = torch.rand(length) * pi / 2  # right side to under 90d
+    axis = -pi / 2 + torch.rand(length) * pi  # full 180d from top to bottom
+    # axis = torch.rand(length) * pi / 2  # right side to under 90d
     # axis = torch.rand(length) * pi / 18  # right side to under 10d
     axis = torch.cat(
         [
@@ -452,6 +453,34 @@ def get_projected_2D_kinematics(
     if len(axis.shape) > 1:
         assert len(axis) == len(pose)
     device = pose.device
+    flat_pose = pose.reshape((-1,) + pose.shape[-2:])
+
+    ax = torch.rand(len(data["raw_pose"])) * 2 * pi
+    x_rot = torch.cat(
+        [
+            -torch.cos(ax)[:, None],
+            -torch.sin(ax)[:, None],
+            torch.zeros(len(data["raw_pose"]))[:, None],
+        ],
+        dim=1,
+    ).to(device)
+    z_rot = torch.tensor([0.0, 0.0, -1.0]).to(device)[None, :].repeat(len(x_rot), 1)
+    y_rot = torch.linalg.cross(
+        x_rot,
+        z_rot,
+    )
+
+    rot_matrices = torch.cat(
+        [x_rot[..., None, :], y_rot[..., None, :], -z_rot[..., None, :]], axis=-2
+    ).transpose(-1, -2)
+
+    rot_matrices = torch.repeat_interleave(
+        rot_matrices,
+        int(len(flat_pose) / len(rot_matrices)),
+        dim=0,
+    )
+
+    flat_pose = torch.bmm(flat_pose, rot_matrices)
 
     proj_x = torch.zeros_like(axis)
     proj_x[..., 0] = 1
@@ -478,7 +507,6 @@ def get_projected_2D_kinematics(
     proj_x[proj_y[..., 2] < 0] = -proj_x[proj_y[..., 2] < 0]
     proj_y[proj_y[..., 2] < 0] = -proj_y[proj_y[..., 2] < 0]
 
-    flat_pose = pose.reshape((-1,) + pose.shape[-2:])
     proj_matrices = torch.cat(
         [proj_x[..., None, :], proj_y[..., None, :]], axis=-2
     ).transpose(-1, -2)
@@ -533,10 +561,23 @@ def get_projected_2D_kinematics(
             torch.tensor(skeleton_config["OFFSET"]).type(torch.float32),
             device=device,
         )
+        segment_lens_3d = get_segment_len_torch(
+            data["raw_pose"].reshape((-1,) + data["raw_pose"].shape[-2:]),
+            skeleton_config["KINEMATIC_TREE"],
+            torch.tensor(skeleton_config["OFFSET"]).type(torch.float32),
+            device=device,
+        )
         data["offsets"] = torch.reshape(segment_lens, pose.shape)
-        data["segment_lens"] = torch.reshape(
+        segment_lens_norm = torch.reshape(
             torch.sum(torch.abs(segment_lens), axis=-1), pose.shape[:-1]
+        )
+        segment_lens_norm = torch.nan_to_num(
+            segment_lens_norm
+            / torch.reshape(
+                torch.sum(torch.abs(segment_lens_3d), axis=-1), pose.shape[:-1]
+            )
         )  # calculates length of each segment at each frame
+        data["segment_lens"] = segment_lens_norm
 
     if "root" in data_keys:
         root = pose[..., 0, :2]

@@ -364,6 +364,7 @@ class ResVAE(VAE):
         self.discrete_classes = discrete_classes
         self.is_2D = False
         if config != None:
+            self.config = config
             self.is_2D = config["data"].get("is_2D")
         self.encoder = ResidualEncoder(
             in_channels,
@@ -411,6 +412,14 @@ class ResVAE(VAE):
             )
         else:
             x_in = data["x6d"]
+            if self.config["data"].get("segment_lens"):
+                x_in = torch.cat(
+                    (
+                        data["x6d"].reshape(data["x6d"].shape[:2] + (-1,)),
+                        data["segment_lens"],
+                    ),
+                    axis=-1,
+                )
 
         data_o = {}
         data_o["mu"], data_o["L"] = self.encoder(
@@ -438,14 +447,19 @@ class ResVAE(VAE):
 
         if self.arena_size is None:
             x6d = x_hat
+            if self.config["data"].get("segment_lens"):
+                n_keypts = max([max(k) for k in self.kinematic_tree]) + 1
+                x6d = x_hat[..., :-n_keypts]
+                data_o["segment_lens"] = x_hat[..., -n_keypts:]
         else:
             x6d = x_hat[..., :-3]
             data_o["root"] = self.inv_normalize_root(x_hat[..., -3:]).reshape(
                 z.shape[0], self.window, 3
             )
 
-        data_o["x6d"] = x6d.reshape(z.shape[0], self.window, -1, 6)
         if self.is_2D:
             data_o["x6d"] = x6d.reshape(z.shape[0], self.window, -1, 2)
+        else:
+            data_o["x6d"] = x6d.reshape(z.shape[0], self.window, -1, 6)
 
         return data_o

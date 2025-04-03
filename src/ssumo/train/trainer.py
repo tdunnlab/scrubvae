@@ -210,7 +210,13 @@ def train_epoch_2D_view(
                 skeleton_config,
             )["target_pose"]
         data = {k: v.to(device) for k, v in data.items()}
-        data_o = predict_batch(model, data, model.disentangle_keys)
+
+        data_o = predict_batch(
+            model,
+            data,
+            model.disentangle_keys
+            + ["segment_lens" for i in [1] if config["data"].get("segment_lens")],
+        )
 
         batch_loss = get_batch_loss(
             model,
@@ -281,7 +287,12 @@ def train_epoch_mcmi_2D_view(
                 skeleton_config,
             )["target_pose"]
         data = {k: v.to(device) for k, v in data.items()}
-        data_o = predict_batch(model, data, model.disentangle_keys)
+        data_o = predict_batch(
+            model,
+            data,
+            model.disentangle_keys
+            + ["segment_lens" for i in [1] if config["data"].get("segment_lens")],
+        )
 
         variables = torch.cat([data[k] for k in model.disentangle_keys], dim=-1)
         batch_loss = get_batch_loss(

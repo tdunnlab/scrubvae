@@ -221,11 +221,15 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
             batch_loss["prior"] = prior_loss(data_o["mu"], data_o["L"])
 
     if "jpe" in loss_scale.keys():
+        offsets = data["offsets"]
+        if "segment_lens" in data_o.keys():
+            offsets = torch.nan_to_num(data["offsets"] / abs(data["offsets"]))
+            offsets = offsets * data_o["segment_lens"][..., None].repeat(1, 1, 1, 3)
         batch_loss["jpe"] = mpjpe_loss(
             data["target_pose"],  # data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data_o["x6d"],
             model.kinematic_tree,
-            data["offsets"],
+            offsets,
         )
 
     if "root" in loss_scale.keys():
