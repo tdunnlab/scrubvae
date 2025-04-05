@@ -161,6 +161,7 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
     # )
     # pose = x
     root_reshaped = root_hat.reshape((-1, 3))
+    x6d_in = x_hat.reshape((-1,) + x_hat.shape[-2:])
     if is_2D:
         local_ang = x_hat.reshape((-1,) + x_hat.shape[-2:])
         reshaped_x6d = torch.concatenate(
@@ -174,8 +175,9 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root=None, root_hat=None):
         root_reshaped = torch.concatenate(
             [root_reshaped, torch.zeros_like(root_reshaped[..., 0, None])], axis=-1
         )
+        x6d_in = reshaped_x6d
     pose_hat = fwd_kin_cont6d_torch(
-        reshaped_x6d,
+        x6d_in,
         kinematic_tree,
         offsets.reshape((-1,) + offsets.shape[-2:]),
         root_pos=root_reshaped,
@@ -223,7 +225,6 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
     if "jpe" in loss_scale.keys():
         offsets = data["offsets"]
         if "segment_lens" in data_o.keys():
-            offsets = torch.nan_to_num(data["offsets"] / abs(data["offsets"]))
             offsets = offsets * data_o["segment_lens"][..., None].repeat(1, 1, 1, 3)
         batch_loss["jpe"] = mpjpe_loss(
             data["target_pose"],  # data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),

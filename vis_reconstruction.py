@@ -1,11 +1,11 @@
 from ssumo.data.dataset import fwd_kin_cont6d_torch
 from ssumo.get.data import get_projected_2D_kinematics, get_random_axis
 from torch.utils.data import DataLoader
-from dappy import read
+from neuroposelib import read
 import torch
-from dappy import vis
+from neuroposelib import vis
 import ssumo
-from base_path import RESULTS_PATH
+from scripts.base_path import RESULTS_PATH
 import sys
 from math import pi
 
@@ -35,7 +35,10 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
         )
         data = {k: v.to("cuda") for k, v in data.items()}
         data_o = ssumo.train.predict_batch(
-            model, data, disentangle_keys=config["disentangle"]["features"]
+            model,
+            data,
+            disentangle_keys=config["disentangle"]["features"]
+            + ["segment_lens" for i in [1] if config["data"].get("segment_lens")],
         )
         x_hat = data_o["x6d"]
         local_ang = x_hat.reshape((-1,) + x_hat.shape[-2:])
@@ -145,7 +148,7 @@ for dataset_label in dataset_list:
         dataset_label="Train",
         data_keys=[
             "x6d",
-            "root",
+            # "root",
             "offsets",
             "raw_pose",
             "target_pose",

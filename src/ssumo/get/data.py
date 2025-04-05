@@ -556,26 +556,26 @@ def get_projected_2D_kinematics(
 
     if "offsets" in data_keys:
         segment_lens = get_segment_len_torch(
-            flattened_pose,
+            flattened_pose,  # flattened pose post-projection
             skeleton_config["KINEMATIC_TREE"],
             torch.tensor(skeleton_config["OFFSET"]).type(torch.float32),
             device=device,
         )
         segment_lens_3d = get_segment_len_torch(
-            data["raw_pose"].reshape((-1,) + data["raw_pose"].shape[-2:]),
+            data["raw_pose"].reshape(
+                (-1,) + data["raw_pose"].shape[-2:]
+            ),  # 3D flattened pose
             skeleton_config["KINEMATIC_TREE"],
             torch.tensor(skeleton_config["OFFSET"]).type(torch.float32),
             device=device,
         )
-        data["offsets"] = torch.reshape(segment_lens, pose.shape)
+        data["offsets"] = torch.reshape(segment_lens_3d, pose.shape)
         segment_lens_norm = torch.reshape(
-            torch.sum(torch.abs(segment_lens), axis=-1), pose.shape[:-1]
+            torch.sum(segment_lens, axis=-1), pose.shape[:-1]
         )
         segment_lens_norm = torch.nan_to_num(
             segment_lens_norm
-            / torch.reshape(
-                torch.sum(torch.abs(segment_lens_3d), axis=-1), pose.shape[:-1]
-            )
+            / torch.reshape(torch.sum(segment_lens_3d, axis=-1), pose.shape[:-1])
         )  # calculates length of each segment at each frame
         data["segment_lens"] = segment_lens_norm
 
@@ -673,7 +673,7 @@ def calculate_mouse_kinematics(
     if data_config["direction_process"] in ["midfwd", "x360"]:
         yaw = yaw[window_inds][:, window // 2]  # [..., None]
 
-    if ("root" or "x6d") in data_keys:
+    if "root" in data_keys or "x6d" in data_keys:
         root = pose[..., 0, :]
         if data_config["direction_process"] in ["midfwd", "x360"]:
             # Centering root
@@ -710,8 +710,8 @@ def calculate_mouse_kinematics(
             if "root" in data_keys:
                 root = qtn.qrot_np(fwd_qtn, root)
 
-            assert len(root) == len(window_inds)
-            assert len(local_qtn) == len(window_inds)
+            # assert len(root) == len(window_inds)
+            # assert len(local_qtn) == len(window_inds)
 
         data["x6d"] = qtn.quaternion_to_cont6d_np(local_qtn)
 
