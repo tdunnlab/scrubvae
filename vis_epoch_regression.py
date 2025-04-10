@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import ssumo
-from base_path import RESULTS_PATH, CODE_PATH
+from scripts.base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
 from dappy import read

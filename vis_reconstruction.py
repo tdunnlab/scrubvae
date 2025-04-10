@@ -50,10 +50,15 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
         )
         reshaped_x6d[..., 3] *= -1
 
+        if "segment_lens" in data_o.keys():
+            offsets = data["offsets"] * data_o["segment_lens"][..., None].repeat(
+                1, 1, 1, 3
+            )
+
         pose_hat = fwd_kin_cont6d_torch(
             reshaped_x6d,
             kinematic_tree,
-            data["offsets"].view(-1, n_keypts, 3),
+            offsets.reshape((-1,) + offsets.shape[-2:]),
             torch.zeros(reshaped_x6d.shape[:-2] + (3,)),
             do_root_R=True,
         ).reshape(-1, n_keypts, 3)

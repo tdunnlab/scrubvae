@@ -52,7 +52,15 @@ def latents(
         with torch.no_grad():
             for _, data in enumerate(tqdm.tqdm(loader)):
                 data = {
-                    k: v.to(device) for k, v in data.items() if k in ["x6d", "root"]
+                    k: v.to(device)
+                    for k, v in data.items()
+                    if k
+                    in ["x6d", "root"]
+                    + [
+                        "segment_lens"
+                        for i in [1]
+                        if config["data"].get("segment_lens")
+                    ]
                 }
                 latents += [model.encode(data)["mu"].detach().cpu()]
 
