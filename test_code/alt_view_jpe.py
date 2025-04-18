@@ -13,9 +13,10 @@ import gc
 # from base_path import RESULTS_PATH
 
 RESULTS_PATH = "/mnt/ceph/users/hkoneru/results/vae/"
-stride = 20
-angles = 9
-redo_latent = True
+maxlabels = 19
+stride = 10
+angles = 19
+redo_latent = False
 
 analysis_key = sys.argv[1]
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
@@ -102,12 +103,24 @@ with torch.no_grad():
 
 print(jpe_grid)
 
+feat = [
+    np.round(np.abs(np.arctan2(all_angles[i][1], all_angles[i][2])), 2)
+    for i in range(len(all_angles))
+]
+
+stepsize = int(np.ceil(angles / maxlabels))
+
 plt.imshow(jpe_grid)
 ax = plt.gca()
 # plt.xticks(np.arange(len(axes)))
 # plt.yticks(np.arange(len(axes)))
 # ax.set_xticklabels(feat)
 # ax.set_yticklabels(feat)
+plt.xticks(np.arange(angles))
+plt.xticks(rotation=90)
+plt.yticks(np.arange(angles))
+ax.set_xticklabels([f if f in feat[::stepsize] + [feat[-1]] else "" for f in feat])
+ax.set_yticklabels([f if f in feat[::stepsize] + [feat[-1]] else "" for f in feat])
 plt.colorbar()
 plt.savefig("{}alt_view_jpe.png".format(config["out_path"]), dpi=400)
 plt.close()

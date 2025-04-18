@@ -28,6 +28,7 @@ def epoch_regression(
     config = read.config(path + "/model_config.yaml")
     config["model"]["load_model"] = config["out_path"]
     config["data"]["project_axis"] = 1
+    # config["data"]["stride"] = 50
 
     pickle_path = "{}/{}_{}.p".format(config["out_path"], label, dataset_label)
     if Path(pickle_path).is_file() and save_load:
@@ -51,6 +52,7 @@ def epoch_regression(
         epochs_to_test = metrics["epochs"]
 
     data_keys = ["x6d", "root"]
+    data_keys += ["offsets"] if config["data"].get("segment_lens") else []
     # data_keys = []
     # data_keys += ["ids"] if "_cv" in method else []
 
@@ -80,7 +82,9 @@ def epoch_regression(
             verbose=-1,
         )
 
-        z = get.latents(config, model, epoch, loader, "cuda", dataset_label)
+        z = get.latents(
+            config, model, epoch, loader, "cuda", dataset_label, recompute=False
+        )
 
         for key in disentangle_keys:
             print("Decoding Feature: {}".format(key))

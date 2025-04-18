@@ -1,19 +1,32 @@
-from dappy.embed import Embed
+from neuroposelib.embed import Embed
 import ssumo
-from dappy import read
+from neuroposelib import read
 from torch.utils.data import DataLoader
 import numpy as np
 import scipy.linalg as spl
-from base_path import RESULTS_PATH
+from scripts.base_path import RESULTS_PATH
 import matplotlib.pyplot as plt
-from cmocean.cm import phase
 import colorcet as cc
 from ssumo.plot import scatter_cmap
 import sys
 from pathlib import Path
 
 analysis_key = sys.argv[1]
+
+if len(sys.argv) > 3:
+    z_path = Path(RESULTS_PATH + analysis_key)
+    folders = [str(f.parts[-1]) for f in z_path.iterdir() if f.is_dir()]
+    job_id = sys.argv[3]
+    analysis_key = "{}/{}/".format(analysis_key, folders[int(job_id)])
+
+angles = 19
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
+config["data"]["stride"] = 10
+axes = [
+    np.round(np.array([0, -np.sin(i), -np.cos(i)]), 10)
+    for i in np.linspace(0, np.pi, angles)
+]
+config["data"]["project_axis"] = axes
 
 dataset_label = "Train"
 ### Load Datasets
@@ -23,7 +36,7 @@ loader, model = ssumo.get.data_and_model(
     epoch=sys.argv[2],
     dataset_label=dataset_label,
     # data_keys=["x6d", "root", "heading"],
-    data_keys=["x6d", "root", "view_axis"],
+    data_keys=["x6d", "root", "view_axis", "offsets"],
     shuffle=False,
     verbose=0,
 )

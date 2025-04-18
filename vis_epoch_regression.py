@@ -4,7 +4,7 @@ import ssumo
 from scripts.base_path import RESULTS_PATH, CODE_PATH
 import sys
 from pathlib import Path
-from dappy import read
+from neuroposelib import read
 
 palette = ssumo.plot.constants.PALETTE_2
 experiment_folder = sys.argv[1]

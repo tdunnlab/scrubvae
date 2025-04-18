@@ -224,6 +224,7 @@ def train_epoch_2D_view(
             data_o,
             loss_config,
             disentangle_config,
+            config["data"].get("coords"),
         )
 
         if mode == "train":
@@ -296,7 +297,12 @@ def train_epoch_mcmi_2D_view(
 
         variables = torch.cat([data[k] for k in model.disentangle_keys], dim=-1)
         batch_loss = get_batch_loss(
-            model, data, data_o, loss_config, disentangle_config
+            model,
+            data,
+            data_o,
+            loss_config,
+            disentangle_config,
+            config["data"].get("coords"),
         )
         if batch_idx > 0:
             batch_loss["mcmi"] = mi_estimator(data_o["mu"], variables)

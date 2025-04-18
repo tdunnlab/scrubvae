@@ -406,6 +406,7 @@ def calculate_2D_mouse_kinematics(
             {k: v for k, v in data.items()},
             axis,
             skeleton_config,
+            config["data"].get("coords"),
         )
 
         data["view_axis"] = axis
@@ -434,6 +435,7 @@ def calculate_2D_mouse_kinematics(
         data,
         project_axis,
         skeleton_config,
+        config["data"].get("coords"),
     )
     data["raw_pose"] = data["raw_pose"][: int(len(project_axis) / len_proj)]
     data["view_axis"] = project_axis
@@ -447,6 +449,7 @@ def get_projected_2D_kinematics(
     data: dict,
     axis: torch.tensor,
     skeleton_config: dict,
+    coords: bool = False,
 ):
     data_keys = list(data.keys())
     pose = data["raw_pose"]
@@ -523,6 +526,19 @@ def get_projected_2D_kinematics(
         data["raw_pose"].shape[:-1] + (2,)
     )
 
+    if False:
+        mirror_inds = (
+            pose[:, int(pose.shape[1] / 2), 1, 0]
+            - pose[:, int(pose.shape[1] / 2), 0, 0]
+        ) < 0
+        pose = (
+            (
+                (mirror_inds * -1)[:, None, None, None].repeat((1,) + pose.shape[1:])
+                + 0.5
+            )
+            * 2
+            * pose
+        )
     # # rotate to +x on 2d axis
     # rotv = pose[:, 1] - pose[:, 0]
     # rotv = rotv / np.linalg.norm(rotv)
@@ -535,24 +551,29 @@ def get_projected_2D_kinematics(
     pose = torch.concatenate([pose, torch.zeros_like(pose[..., 0, None])], axis=-1)
 
     if "x6d" in data_keys:
-        flattened_pose = torch.reshape(pose, (-1,) + pose.shape[-2:])
-        local_qtn = inv_kin_torch(
-            flattened_pose,
-            skeleton_config["KINEMATIC_TREE"],
-            torch.tensor(skeleton_config["OFFSET"]).type(torch.FloatTensor).to(device),
-            forward_indices=[1, 0],
-            device=device,
-        )
+        if coords:
+            data["x6d"] = pose[..., :2]
+        else:
+            flattened_pose = torch.reshape(pose, (-1,) + pose.shape[-2:])
+            local_qtn = inv_kin_torch(
+                flattened_pose,
+                skeleton_config["KINEMATIC_TREE"],
+                torch.tensor(skeleton_config["OFFSET"])
+                .type(torch.FloatTensor)
+                .to(device),
+                forward_indices=[1, 0],
+                device=device,
+            )
 
-        local_ang = local_qtn[..., [-1, 0]]
-        local_ang[..., [0]] = (
-            local_qtn[..., [-1]] * local_qtn[..., [0]] * 2
-        )  # double angle
-        local_ang[..., [1]] = (
-            torch.ones_like(local_qtn[..., [-1]]) - 2 * local_qtn[..., [-1]] ** 2
-        )
-        local_ang = torch.clip(local_ang, torch.tensor(-1), torch.tensor(1))
-        data["x6d"] = torch.reshape(local_ang, pose.shape[:-1] + (2,))
+            local_ang = local_qtn[..., [-1, 0]]
+            local_ang[..., [0]] = (
+                local_qtn[..., [-1]] * local_qtn[..., [0]] * 2
+            )  # double angle
+            local_ang[..., [1]] = (
+                torch.ones_like(local_qtn[..., [-1]]) - 2 * local_qtn[..., [-1]] ** 2
+            )
+            local_ang = torch.clip(local_ang, torch.tensor(-1), torch.tensor(1))
+            data["x6d"] = torch.reshape(local_ang, pose.shape[:-1] + (2,))
 
     if "offsets" in data_keys:
         segment_lens = get_segment_len_torch(

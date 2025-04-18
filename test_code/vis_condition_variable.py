@@ -2,9 +2,9 @@ from ssumo.data.dataset import fwd_kin_cont6d_torch
 from ssumo.get.data import get_projected_2D_kinematics
 
 from torch.utils.data import DataLoader
-from dappy import read
+from neuroposelib import read
 import torch
-from dappy import vis
+from neuroposelib import vis
 import ssumo
 
 # from base_path import RESULTS_PATH
@@ -23,18 +23,17 @@ def visualize_conditional_variable_2D(model, loader, label, connectivity, config
         # Let's see how reconstruction looks on train data
         data = next(iter(loader))
         data = {k: v.to("cuda") for k, v in data.items()}
-        angles = np.linspace(0, np.pi / 2, config["model"]["window"])
+        angles = np.linspace(0, np.pi, config["model"]["window"])
         # angles = np.full(config["model"]["window"], np.pi / 4)
         axis = np.swapaxes(
-            np.array([np.zeros_like(angles), -np.cos(angles), -np.sin(angles)]), 0, 1
+            np.array([np.zeros_like(angles), -np.sin(angles), -np.cos(angles)]), 0, 1
         )
         axis = np.tile(axis, (config["data"]["batch_size"], 1))
         skeleton_config = read.config(config["data"]["skeleton_path"])
         data = get_projected_2D_kinematics(
             data,
-            torch.tensor([0, -np.sqrt(2) / 2, -np.sqrt(2) / 2])
-            .type(torch.FloatTensor)
-            .to("cuda"),
+            # torch.tensor([0, -np.sqrt(2) / 2, -np.sqrt(2) / 2])
+            torch.tensor([0, -1, 0]).type(torch.FloatTensor).to("cuda"),
             # [0, -1, 0], # these give terrible results
             # [0, 0, -1],
             skeleton_config,

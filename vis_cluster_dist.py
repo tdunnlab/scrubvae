@@ -1,17 +1,24 @@
 import ssumo
-from dappy import read
+from neuroposelib import read
 import torch
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 import numpy as np
 from pathlib import Path
 from scipy.stats import circvar
 import sys
 
-from base_path import RESULTS_PATH
+from scripts.base_path import RESULTS_PATH
 
 analysis_key = sys.argv[1]
 vis_path = RESULTS_PATH + analysis_key + "/vis_latents/"
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
+angles = 19
+config["data"]["stride"] = 10
+axes = [
+    np.round(np.array([0, -np.sin(i), -np.cos(i)]), 10)
+    for i in np.linspace(0, np.pi, angles)
+]
+config["data"]["project_axis"] = axes
 
 dataset_label = "Train"
 loader = ssumo.get.mouse_data(
@@ -60,7 +67,7 @@ for key in keylist:
         xlabel=key,
         ylabel="Cluster",
         x_lim=(feat.min() - 0.1, feat.max() + 0.1),
-        n_bins=5,
+        n_bins=angles,
         binrange=(feat.min(), feat.max()),
         path="{}{}_".format(vis_path, key),
     )

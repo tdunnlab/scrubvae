@@ -4,17 +4,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 from scipy.spatial import procrustes
+from pathlib import Path
 
-# from base_path import RESULTS_PATH
-
+# from scripts.base_path import RESULTS_PATH
 RESULTS_PATH = "/mnt/ceph/users/hkoneru/results/vae/"
-stride = 20
-angles = 25
-analysis_key_3d = "180d_old/3d_vanilla"
-epoch_3d = 80
-redo_latent = True
 
+analysis_key_3d = "180d_view/3d_vanilla"
 analysis_key = sys.argv[1]
+
+if len(sys.argv) > 3:
+    z_path = Path(RESULTS_PATH + analysis_key)
+    folders = [str(f.parts[-1]) for f in z_path.iterdir() if f.is_dir()]
+    job_id = sys.argv[3]
+    analysis_key = "{}/{}/".format(analysis_key, folders[int(job_id)])
+
+stride = 10
+angles = 19
+epoch_3d = 300
+redo_latent = False
+
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 
 config["data"]["project_axis"] = [

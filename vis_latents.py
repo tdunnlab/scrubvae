@@ -1,12 +1,12 @@
 import ssumo
 from torch.utils.data import DataLoader
-from dappy import read
+from neuroposelib import read
 import torch
-from dappy import visualization as vis
+from neuroposelib import visualization as vis
 import numpy as np
 from pathlib import Path
 import sys
-from base_path import RESULTS_PATH
+from scripts.base_path import RESULTS_PATH
 
 z_null = None
 gen_means_cluster = False
@@ -19,6 +19,13 @@ vis_path = RESULTS_PATH + analysis_key + "/vis_latents/"
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 k = 25  # Number of clusters
 Path(vis_path).mkdir(parents=True, exist_ok=True)
+angles = 19
+config["data"]["stride"] = 10
+axes = [
+    np.round(np.array([0, -np.sin(i), -np.cos(i)]), 10)
+    for i in np.linspace(0, np.pi, angles)
+]
+config["data"]["project_axis"] = axes
 
 connectivity = read.connectivity_config(config["data"]["skeleton_path"])
 dataset_label = "Train"
@@ -28,7 +35,13 @@ loader, model = ssumo.get.data_and_model(
     load_model=config["out_path"],
     epoch=sys.argv[2],
     dataset_label=dataset_label,
-    data_keys=["x6d", "offsets", "raw_pose", "projected_pose"],
+    data_keys=[
+        "x6d",
+        "offsets",
+        "raw_pose",
+        "projected_pose",
+        "offsets",
+    ],
     shuffle=False,
     verbose=0,
 )

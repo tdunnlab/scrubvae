@@ -8,6 +8,7 @@ import ssumo
 from scripts.base_path import RESULTS_PATH
 import sys
 from math import pi
+from pathlib import Path
 
 
 def visualize_2D_reconstruction(model, loader, label, connectivity, config):
@@ -50,6 +51,7 @@ def visualize_2D_reconstruction(model, loader, label, connectivity, config):
         )
         reshaped_x6d[..., 3] *= -1
 
+        offsets = data["offsets"]
         if "segment_lens" in data_o.keys():
             offsets = data["offsets"] * data_o["segment_lens"][..., None].repeat(
                 1, 1, 1, 3
@@ -140,6 +142,11 @@ def visualize_reconstruction(model, loader, label, connectivity):
 
 
 analysis_key = sys.argv[1]
+if len(sys.argv) > 3:
+    z_path = Path(RESULTS_PATH + analysis_key)
+    folders = [str(f.parts[-1]) for f in z_path.iterdir() if f.is_dir()]
+    job_id = sys.argv[3]
+    analysis_key = "{}/{}/".format(analysis_key, folders[int(job_id)])
 config = read.config(RESULTS_PATH + analysis_key + "/model_config.yaml")
 config["data"]["stride"] = 10
 config["data"]["batch_size"] = 5
