@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title>Scrubbed C-VAE: ICLR 2025</title>
+        <meta name="description" content="Page-specific description">
+        <meta name="keywords" content="Page-specific keywords">
+        <link rel="shortcut icon" href="static/images/mouselogo.png"
+            type="image/x-icon">
+        <link href="https://fonts.googleapis.com/css?family=Lato:400,300,700"
+            rel="stylesheet" type="text/css">
+        <link rel="stylesheet"
+            href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css">
+        <link rel="stylesheet" href="static/css/screen.min.css">
+        <link rel="stylesheet" href="static/css/custom.min.css">
+    </head>
+
+    <body>
+        <!-- $Page header-->
+        <header class="page-header js-header">
+            <div class="page-header__inner">
+                <div class="page-header__logo">
+                    <h1>Scrubbed C-VAE</h1>&nbsp;<span>ICLR 2025 Poster</span>
+                </div>
+                <nav class="page-header__nav js-nav">
+                    <ul>
+                        <li><a
+                                class="page-header__nav-link js-anchor js-link is-active"
+                                href="#home">Home</a></li>
+                        <li><a class="page-header__nav-link js-anchor js-link"
+                                href="#abstract">Abstract</a></li>
+                        <li><a class="page-header__nav-link js-anchor js-link"
+                                href="#figure">Poster</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </header><!-- $Promo section-->
+        <div class="main-content">
+            <section class="promo js-jumbo" id="home">
+                <h2 class="promo__title">Disentangling 3d Pose Dynamics With
+                    Scrubbed Conditional Latent Variables</h2>
+                <p class="promo__descr">Joshua H Wu, Hari Koneru, J
+                    Russell
+                    Ravenel, Anshuman Sabath, James M Roach, Shaun
+                    SX
+                    Lim, Michael R Tadross, Alex H Williams, Timothy W Dunn</p>
+                <a href="https://github.com/tdunnlab/scrubvae"
+                    class="promo__btn"
+                    style="display: inline-flex; align-items: center; text-decoration: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="40"
+                        height="40"
+                        fill="currentColor" class="bi bi-github"
+                        viewBox="0 0 16 16"
+                        style="margin-right: 8px;">
+                        <path
+                            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8" />
+                    </svg>
+                    GitHub
+                </a>
+                <a
+                    class="promo__go-next js-anchor"
+                    href="#abstract">Scroll
+                    down</a>
+            </section>
+
+            <!-- $Abstract section -->
+            <section class="abstract js-jumbo" id="abstract">
+                <h2 class="abstract__title">Abstract</h2>
+                <p class="abstract__descr">Methods for tracking lab animal
+                    movements
+                    in unconstrained environments have become increasingly
+                    common
+                    and powerful tools for neuroscience. The prevailing
+                    hypothesis
+                    is that animal behavior in these environments comprises
+                    sequences of discrete stereotyped body movements ("motifs"
+                    or
+                    "actions"). However, the same action can occur at different
+                    speeds or heading directions, and the same action may
+                    manifest
+                    slightly differently across subjects due to, for example,
+                    variation in body size. These and other forms of nuisance
+                    variability complicate attempts to quantify animal behavior
+                    in
+                    terms of discrete action sequences and draw meaningful
+                    comparisons across individual subjects. To address this, we
+                    present a framework for motion analysis that uses
+                    conditional
+                    variational autoencoders in conjunction with adversarial
+                    learning paradigms to disentangle behavioral factors. We
+                    demonstrate the utility of this approach in downstream tasks
+                    such as clustering, decodability, and motion synthesis.
+                    Further,
+                    we apply our technique to improve disease detection in a
+                    Parkinsonian mouse model.</p>
+            </section>
+
+            <!-- $Figure section -->
+            <section class="abstract js-jumbo" id="figure">
+                <h2 class="abstract__title">Poster</h2>
+                <div
+                    style="display: flex; justify-content: center; align-items: center;">
+                    <embed src="./static/images/JHWu_Poster_COSYNE25.pdf"
+                        width="1000"
+                        height="550"
+                        type="application/pdf">
+                </div>
+                <!-- <p class="figure__descr">Graphical Abstract: Overview of SC-VAE.
+                    (a)
+                    We seek to
+                    learn
+                    representations in which disentanglement variables are
+                    unable to
+                    be explained by specified linear or
+                    nonlinear functions. (b) SC-VAE encourages disentangled
+                    representations by directly concatenating
+                    known factors to latent variables in a conditional VAE
+                    set-up. A
+                    "scrubber" removes information
+                    about these factors from the latent variables. (c) With
+                    SC-VAE,
+                    behaviors can be generated with
+                    granular control over disentanglement variables without
+                    changing
+                    the underlying behavioral label.</p> -->
+            </section>
+
+            <!-- $Links section -->
+
+            <!-- $Page footer-->
+            <footer class="page-footer" id="links">
+                <div class="page-footer__inner"><span
+                        class="page-footer__copyright">&copy; 2025 t.Dunn
+                        Lab</span>
+                    <div class="page-footer__image">
+                        <img
+                            src="static/images/Duke_University_logo.png"
+                            alt="Duke Logo" style="width: 70%; height: auto;">
+                    </div>
+                    <div class="page-footer__image">
+                        <img
+                            src="static/images/CCN_Logo.png"
+                            alt="CCN Logo" style="width: 60%; height: auto;">
+                    </div>
+                    <a
+                        class="page-footer__gotop js-anchor" href="#home"
+                        style="float:right;">Go to
+                        top</a></div>
+            </footer>
+        </div>
+        <script src="static/js/body.min.js"></script>
+    </body>
+
+</html>
