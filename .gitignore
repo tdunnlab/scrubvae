@@ -162,7 +162,9 @@ base_path.py
 *.png
 wandb/
 demo/results/*
-configs/
+configs/*
+!configs/mouse_skeleton.yaml
+scripts/*
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

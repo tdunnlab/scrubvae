@@ -1,4 +1,4 @@
-from neuroposelib import read, preprocess
+from neuroposelib import read
 import numpy as np
 import scrubvae.data.quaternion as qtn
 from typing import Optional, Type, Union, List
@@ -178,11 +178,6 @@ def get_speed_parts_torch(pose, parts):
     dxyz[:, 0] = torch.sqrt(root_spd.sum(dim=-1))
 
     centered_pose = pose - pose[:, 0:1, :]
-    # ego_pose = preprocess.rotate_spine(
-    #     centered_pose,
-    #     keypt_idx=[0, 1],
-    #     lock_to_x=False,
-    # )
 
     for i, part in enumerate(parts):
         pose_part = centered_pose - centered_pose[:, part[0] : part[0] + 1, :]
@@ -314,9 +309,153 @@ def get_speed_outliers(pose, threshold=2.25):
     return outlier_frames
 
 
+
+def preprocess_save_data(
+    data_path: str,
+    skeleton_config: dict,
+    dataset: str,
+    window: int,
+    stride: int = 2,
+    data_keys: List[str] = ["x6d", "root", "offsets"],
+    speed_threshold: Optional[float] = 2.25,
+    direction_process: str = "midfwd",
+):
+    """Prepare and save all data preprocessing for SC-VAE model training, validation, and testing
+
+    Parameters
+    ----------
+    data_path : str
+        Path to folder with datasets
+    skeleton_config : dict
+        Configuration file denoting the structure of the skeleton
+    dataset : str
+        Which dataset to prepare (i.e., "4_mice", "parkinsons")
+    data_keys : List[str], optional
+        Keys of data to save, by default ["x6d", "root", "offsets"]
+    speed_threshold : Optional[float], optional
+        Action segments with greater average speed will be filtered out, by default 2.25
+    direction_process : str, optional
+        Preprocess pose sequences such that the animals pass through the origin at the middle frame from
+        any direction ("x360") or only in the x+ direction ("midfwd"), by default "midfwd"
+
+    Returns
+    -------
+    data
+        Dictionary with key-value pairs associated with `data_keys`
+    """
+    n_ids = 72 if dataset == "parkinsons" else 4
+    print("Calculating dataset: {}".format(dataset))
+    pose, ids = read.pose_h5("{}{}/pose.h5".format(data_path, dataset))
+    window_inds = get_window_indices(ids, stride, window)
+    pose = pose[window_inds]
+    ids = ids[window_inds][:, window//2]
+
+    # Filter out bad tracking using speed threshold
+    if speed_threshold is not None:
+        outlier_frames = get_speed_outliers(pose, speed_threshold)
+        pose = np.delete(pose, outlier_frames, 0)
+        ids = np.delete(ids, outlier_frames, 0)
+
+    data_len = len(pose)
+    data = {"raw_pose": pose}
+    # Calculate the speed representation
+    if "avg_speed_3d" in data_keys:
+        speed = get_speed_parts(
+            pose=pose,
+            parts=[
+                [0, 1, 2, 3, 4, 5],  # spine and head
+                [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
+                [5, 12, 13, 14, 15, 16, 17],  # left legs from back spine
+            ],
+        )
+
+        data["avg_speed_3d"] = np.concatenate(
+            [speed[:, :2], speed[:, 2:].mean(axis=-1, keepdims=True)], axis=-1
+        )
+
+    # Get yaw of mid-spine -> fwd-spine segment for central frame in all windows
+    yaw = get_frame_yaw(pose[:, window // 2, ...], 0, 1)[..., None]
+
+    # Convert to a 2D representation using the sin and cos of the yaw
+    if "heading" in data_keys:
+        data["heading"] = get_angle2D(yaw)
+
+    if ("root" or "x6d") in data_keys:
+        root = pose[..., 0, :].copy()  # (n_samples, window, 3)
+        if direction_process in ["midfwd", "x360"]:
+            # Centering root of middle frame
+            root_center = np.zeros(root.shape)  # (n_samples, window, 3)
+            root_center[..., [0, 1]] = root[:, window // 2, [0, 1]][
+                :, None, :
+            ]  # (n_samples, 1, 2)
+
+            root -= root_center
+
+    # Applying inverse kinematics to get local quaternions
+    # That representation is then converted to a continuous 6D rotation
+    if "x6d" in data_keys:
+        print("Applying inverse kinematics ...")
+        local_qtn = inv_kin(
+            pose.reshape((-1,) + pose.shape[-2:]),
+            skeleton_config["KINEMATIC_TREE"],
+            np.array(skeleton_config["OFFSET"]),
+            forward_indices=[1, 0],
+        ).reshape(pose.shape[:-1] + (-1,))
+
+        if direction_process == "midfwd":
+            ## Center frame of a window is translated to center and rotated to x+
+            fwd_qtn = np.zeros((len(yaw), 4))
+            fwd_qtn[:, [-1, 0]] = get_angle2D(yaw / 2)
+            fwd_qtn = np.repeat(fwd_qtn[:, None, :], window, axis=1)
+            local_qtn[..., 0, :] = qtn.qmul_np(fwd_qtn, local_qtn[..., 0, :])
+
+            if "root" in data_keys:
+                root = qtn.qrot_np(fwd_qtn, root)
+
+        data["x6d"] = qtn.quaternion_to_cont6d_np(local_qtn)
+
+    # Get offsets scaled by segment lengths
+    if "offsets" in data_keys:
+        data["offsets"] = get_segment_len(
+            pose.reshape((-1,) + pose.shape[-2:]),
+            skeleton_config["KINEMATIC_TREE"],
+            np.array(skeleton_config["OFFSET"]),
+        ).reshape(pose.shape)
+
+    # Get root positions
+    if "root" in data_keys:
+        data["root"] = root
+        frame_dim_inds = tuple(range(len(root.shape) - 1))
+        print("Root Maxes: {}".format(root.max(axis=frame_dim_inds)))
+        print("Root Mins: {}".format(root.min(axis=frame_dim_inds)))
+
+    data = {k: torch.tensor(v, dtype=torch.float32) for k, v in data.items()}
+
+    # Get animal IDs
+    if "ids" in data_keys:
+        data["ids"] = torch.tensor(ids, dtype=torch.int16)
+
+    if "target_pose" in data_keys:
+        # Target pose root does not move
+        reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
+        offsets = data["offsets"].reshape(reshaped_x6d.shape[:2] + (-1,))
+        data["target_pose"] = fwd_kin_cont6d_torch(
+            reshaped_x6d,
+            skeleton_config["KINEMATIC_TREE"],
+            offsets,
+            root_pos=torch.zeros(reshaped_x6d.shape[0], 3),
+            do_root_R=True,
+            eps=1e-8,
+        ).reshape(data["x6d"].shape[:-1] + (3,))
+
+    for k, v in data.items():
+        assert len(v) == data_len
+
+    return data
+
 class MouseDataset(Dataset):
     """
-    Dataset class for mouse dataset
+    Dataset class for Mouse dataset
     """
 
     def __init__(
@@ -325,7 +464,7 @@ class MouseDataset(Dataset):
         arena_size=None,
         kinematic_tree=None,
         n_keypts=None,
-        label="Train",
+        label="train",
         discrete_classes=None,
         norm_params=None,
     ):
@@ -342,7 +481,7 @@ class MouseDataset(Dataset):
 
         self.kinematic_tree = kinematic_tree
 
-        # List of items which have already been windowed
+        # # List of items which have already been windowed
         # self.ind_with_window_inds = [
         #     k for k, v in self.data.items() if v.shape[0] != len(self.window_inds)
         # ]
@@ -358,7 +497,9 @@ class MouseDataset(Dataset):
         # }
 
         # Query items which have already been windowed
-        query = {k: v[idx] for k, v in self.data.items()}
-        # if k not in self.ind_with_window_inds
-        # }
+        query = {
+            k: v[idx]
+            for k, v in self.data.items()
+            # if k not in self.ind_with_window_inds
+        }
         return query

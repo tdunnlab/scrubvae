@@ -1,6 +1,6 @@
 import torch
 from scrubvae.train.losses import get_batch_loss, balance_disentangle
-from scrubvae.train.mutual_inf import MutInfoEstimator
+from scrubvae.model.disentangle import MutInfoEstimator
 from scrubvae.plot.eval import loss as plt_loss
 from scrubvae.eval import generative_restrictiveness
 from scrubvae.eval import cluster
