@@ -249,7 +249,7 @@ body {
 
 .page-header__nav-link:hover,
 .page-header__nav-link.is-active {
-	background-color: #1bbc9b;
+	background-color: #fff;
 	color: #fff;
 }
 
@@ -257,7 +257,7 @@ body {
 	width: 100%;
 	min-height: 85px;
 	padding-bottom: 30px;
-	background-color: #1bbc9b;
+	background-color: #ffffff;
 }
 
 .page-footer__inner {
@@ -333,7 +333,7 @@ body {
 	width: 100%;
 	min-height: 455px;
 	padding: 70px 0;
-	background: #054c97 center 0 no-repeat;
+	background: #fff center 0 no-repeat;
 	background-attachment: fixed;
 	background-size: cover;
 	text-align: center;
