@@ -84,7 +84,6 @@ def data_and_model(
     #         shuffle=shuffle,
     #         normalize=config["disentangle"]["features"],
     #     )
-
     model = scrubvae.get.model(
         model_config=config["model"],
         load_model=load_model,

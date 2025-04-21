@@ -138,7 +138,7 @@ def get_speed_parts(pose, parts):
     and (3) average speed of the limbs relative to the spine
     """
     print("Getting speed by body parts")
-    root_spd = np.diff(pose[:, :, 0, :], n=1, axis=-2) ** 2  # (n_samples, window, 3)
+    root_spd = np.diff(pose[..., 0, :], n=1, axis=-2) ** 2  # (n_samples, window, 3)
     root_spd = np.sqrt(root_spd.sum(-1)).mean(-1)
     dxyz = np.zeros((len(root_spd), len(parts) + 1))
     dxyz[:, 0] = root_spd  # TODO: Put sum in sqrt

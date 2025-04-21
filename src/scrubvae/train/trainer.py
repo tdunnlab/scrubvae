@@ -253,7 +253,7 @@ def test_epoch(config, model, loader, device="cuda", epoch=0):
 
         for batch_idx, data in enumerate(loader):
             data = {k: v.to(device) for k, v in data.items()}
-            data["ids"] = torch.zeros_like(data["ids"])
+            # data["ids"] = torch.zeros_like(data["ids"])
             data_o = predict_batch(model, data, model.disentangle_keys)
 
             z += [data_o["mu"].clone().detach()]
@@ -403,18 +403,19 @@ def train(config, model, loader_dict, run=None):
                 # rand_state = torch.random.get_rng_state()
                 # print(rand_state)
                 # torch.manual_seed(100)
-                if config["data"]["dataset"] == "4_mice":#"val" in loader_dict.keys():
-                    test_metrics, z_test = test_epoch(
-                        config=config,
-                        model=model,
-                        loader=loader_dict["val"],
-                        device="cuda",
-                        epoch=epoch,
-                    )
-                    metrics.update(
-                        {"{}_test".format(k): v for k, v in test_metrics.items()}
-                    )
-
+                test_metrics, z_test = test_epoch(
+                    config=config,
+                    model=model,
+                    loader=loader_dict["val"],
+                    device="cuda",
+                    epoch=epoch,
+                )
+                metrics.update(
+                    {"{}_test".format(k): v for k, v in test_metrics.items()}
+                )
+                if config["train"]["minimal_test"]:
+                    pass
+                elif config["data"]["dataset"] == "4_mice":
                     # Calculate decodability of specified variables
                     for key in ["avg_speed_3d", "heading"]:
                         y_true = loader_dict["val"].dataset[:][key].detach().cpu().numpy()
@@ -482,7 +483,7 @@ def train(config, model, loader_dict, run=None):
                     #     metrics["mof_gmm_{}".format(cluster_key)] = (
                     #         (loader_dict["val"].dataset.gmm_pred[cluster_key] == mapped)
                     #     ).sum() / len(k_pred_e)
-                elif config["data"]["dataset"] == "parkinson":
+                elif config["data"]["dataset"] == "parkinsons":
                     for key in ["ids", "pd_label"]:
                         y_true = (
                             loader_dict["val"].dataset[:][key].detach().cpu().numpy().astype(int)

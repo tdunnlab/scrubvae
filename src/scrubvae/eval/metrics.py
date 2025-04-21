@@ -20,7 +20,6 @@ from pandas import crosstab
 from scipy.optimize import linear_sum_assignment
 import numpy.typing as npt
 
-
 def epoch_metric(func):
     @functools.wraps(func)
     def wrapper(
@@ -41,7 +40,7 @@ def epoch_metric(func):
             epochs_to_test = [
                 e
                 for e in get.all_saved_epochs(path)
-                if (e not in metrics["epochs"]) and (e > 100)
+                if (e not in metrics["epochs"]) and (e > 200)
             ]
             metrics["epochs"] = np.concatenate(
                 [metrics["epochs"], epochs_to_test]
@@ -54,7 +53,7 @@ def epoch_metric(func):
             # else:
             #     metrics = {k: {"R2": [], "R2_Null": []} for k in disentangle_keys}
             metrics = {
-                "epochs": [e for e in get.all_saved_epochs(path) if (e > 100)]
+                "epochs": [e for e in get.all_saved_epochs(path) if (e > 200)]
             }  # if (e>100)]
             epochs_to_test = metrics["epochs"]
 
@@ -66,13 +65,12 @@ def epoch_metric(func):
         if len(epochs_to_test) > 0:
             loader = get.mouse_data(
                 data_config=config["data"],
-                window=config["model"]["window"],
-                train=dataset_label == "Train",
+                train_val_test = dataset_label,
                 data_keys=data_keys + disentangle_keys,
                 shuffle=False,
-                normalize=[d for d in disentangle_keys if d not in ["heading", "ids"]],
+                # normalize=[d for d in disentangle_keys if d not in ["heading", "ids"]],
             )
-            stride = config["data"]["stride"]
+            # stride = config["data"]["stride"]
 
             metrics = func(
                 config=config,
@@ -167,6 +165,8 @@ def epoch_regression(
     dataset_label,
     disentangle_keys=["avg_speed", "heading", "heading_change"],
 ):
+    stride = 1 if config["data"]["dataset"] == "4_mice" else 10
+    print("Stride {stride}")
     if len(metrics.keys()) == 1:
         if ("log_class" in method) or ("qda" in method):
             metrics.update({k: {"Accuracy": []} for k in disentangle_keys})
@@ -196,7 +196,7 @@ def epoch_regression(
         for key in disentangle_keys:
             print("Decoding Feature: {}".format(key))
             if key == "ids":
-                y_true = loader.dataset[:][key].detach().cpu().numpy().astype(np.int)
+                y_true = loader.dataset[:][key].detach().cpu().numpy().astype(int)
             else:
                 y_true = loader.dataset[:][key].detach().cpu().numpy()
 
@@ -237,14 +237,20 @@ def epoch_regression(
 
                 elif method == "log_class_rand_cv":
                     acc = log_class_rand_cv(
-                        StandardScaler().fit_transform(z), y_true, model.window, 5
+                        z, y_true, model.window//stride, 5
                     )
+                    # acc = log_class_rand_cv(
+                    #     StandardScaler().fit_transform(z), y_true, model.window, 5
+                    # )
                     metrics[key]["Accuracy"] += [acc]
 
                 elif method == "qda_rand_cv":
                     acc = qda_rand_cv(
-                        StandardScaler().fit_transform(z), y_true, model.window, 5
+                        z, y_true, model.window//stride, 5
                     )
+                    # acc = qda_rand_cv(
+                    #     StandardScaler().fit_transform(z), y_true, model.window//10, 5
+                    # )
                     print(metrics[key])
                     metrics[key]["Accuracy"] += [acc]
 
@@ -446,7 +452,7 @@ def train_MLP(z, y_true, num_epochs=200):
     torch.backends.cudnn.benchmark = True
     z = z.cuda()
     y_true = torch.tensor(y_true, device="cuda")
-    optimizer = optim.AdamW(model.parameters(), lr=0.01)
+    optimizer = optim.AdamW(model.parameters(), lr=0.001)
     model.train()
     with torch.enable_grad():
         for epoch in range(num_epochs):

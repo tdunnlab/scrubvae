@@ -41,7 +41,12 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
         spd_std = torch.tensor(
             [0.4038, 0.3586, 0.4169], dtype=torch.float32, device=z.device
         )
-        rand_jitter = torch.randn((batch_size, 1), dtype=torch.float32, device=z.device) * spd_std * 1.5 + 0.5
+        rand_jitter = (
+            torch.randn((batch_size, 1), dtype=torch.float32, device=z.device)
+            * spd_std
+            * 1.5
+            + 0.5
+        )
         mins = torch.tensor(
             [-1.2323, -1.9734, -1.5858], dtype=torch.float32, device=z.device
         )
@@ -56,8 +61,7 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
         data_o["x6d"].reshape((-1, n_keypts, 6)),
         kinematic_tree,
         data["offsets"].reshape((-1,) + data["offsets"].shape[-2:]),
-        root_pos=torch.zeros(window * batch_size, 3),
-        # data_o["root"].reshape((-1, 3)),
+        root_pos=data_o["root"].reshape((-1, 3)),#torch.zeros(window * batch_size, 3),
         do_root_R=True,
         eps=1e-8,
     ).reshape((-1, model.window, n_keypts, 3))
@@ -76,10 +80,12 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
             [1, 6, 7, 8, 9, 10, 11],  # arms from front spine
             [5, 12, 13, 14, 15, 16, 17],  # legs from back spine
         ]
-        dxyz = torch.zeros((len(root_spd), 3), dtype=torch.float32, device=data_o["root"].device)
+        dxyz = torch.zeros(
+            (len(root_spd), 3), dtype=torch.float32, device=data_o["root"].device
+        )
         for i, part in enumerate(parts):
             pose_part = (
-                pose_batch - pose_batch[:, window // 2, None, part[0] : part[0] + 1, :]
+                pose_batch - pose_batch[:, window // 2, part[0], :][:, None, None, :]
             )
             relative_dxyz = (
                 torch.diff(
@@ -100,8 +106,12 @@ def generative_restrictiveness(model, z, data, key, kinematic_tree):
             axis=-1,
         )
         norm_params = {
-            "mean": torch.tensor([0.4993, 0.7112, 0.6663], dtype=torch.float32, device=z.device),
-            "std": torch.tensor([0.4038, 0.3586, 0.4169], dtype=torch.float32, device=z.device),
+            "mean": torch.tensor(
+                [0.4993, 0.7112, 0.6663], dtype=torch.float32, device=z.device
+            ),
+            "std": torch.tensor(
+                [0.4038, 0.3586, 0.4169], dtype=torch.float32, device=z.device
+            ),
         }
 
         pred -= norm_params["mean"]

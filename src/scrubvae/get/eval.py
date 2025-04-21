@@ -6,7 +6,7 @@ import numpy as np
 
 
 def latents(
-    config, model=None, epoch=None, loader=None, device="cuda", dataset_label="Train"
+    config, model=None, epoch=None, loader=None, device="cuda", train_val_test="test", overwrite=False,
 ):
     """NOT FOR TRAINING
 
@@ -20,7 +20,7 @@ def latents(
         _description_, by default None
     device : str, optional
         _description_, by default "cuda"
-    dataset_label : str, optional
+    train_val_test : str, optional
         _description_, by default "Train"
 
     Returns
@@ -31,10 +31,10 @@ def latents(
     if model is not None:
         model.eval()
     latent_path = "{}/latents/{}_{}.npy".format(
-        config["out_path"], dataset_label, epoch
+        config["out_path"], train_val_test, epoch
     )
 
-    if not Path(latent_path).exists():
+    if not Path(latent_path).exists() or overwrite:
         # loader = DataLoader(
         #     dataset=dataset, batch_size=config["data"]["batch_size"], shuffle=False, num_workers=5
         # )

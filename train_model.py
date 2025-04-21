@@ -36,7 +36,7 @@ print("WANDB directory: {}".format(run.dir))
 loader_dict, model = scrubvae.get.data_and_model(
     config,
     train_val_test=["train","val"],
-    data_keys=["x6d", "root", "offsets", "target_pose", "ids"]
+    data_keys=["x6d", "root", "offsets", "target_pose"]
     + config["disentangle"]["features"],
     shuffle=[True,False],
 )
