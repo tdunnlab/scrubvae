@@ -28,6 +28,7 @@ def epoch_metric(func):
         dataset_label,
         save_load=True,
         disentangle_keys=["avg_speed", "heading"],
+        start_epoch=100,
         **kwargs,
     ):
         config = read.config(path + "/model_config.yaml")
@@ -36,25 +37,18 @@ def epoch_metric(func):
         pickle_path = "{}/{}_{}.p".format(config["out_path"], method, dataset_label)
         if Path(pickle_path).is_file() and save_load:
             metrics = pickle.load(open(pickle_path, "rb"))
-            # metrics["epochs"] = [e for e in get.all_saved_epochs(path) if (e > 100)]
             epochs_to_test = [
                 e
                 for e in get.all_saved_epochs(path)
-                if (e not in metrics["epochs"]) and (e > 200)
+                if (e not in metrics["epochs"]) and (e > start_epoch)
             ]
             metrics["epochs"] = np.concatenate(
                 [metrics["epochs"], epochs_to_test]
             ).astype(int)
         else:
-            # if ("log_class" in method) or ("qda" in method):
-            #     metrics = {k: {"Accuracy": []} for k in disentangle_keys}
-            # elif "_cv" in method:
-            #     metrics = {k: {"R2": []} for k in disentangle_keys}
-            # else:
-            #     metrics = {k: {"R2": [], "R2_Null": []} for k in disentangle_keys}
             metrics = {
-                "epochs": [e for e in get.all_saved_epochs(path) if (e > 200)]
-            }  # if (e>100)]
+                "epochs": [e for e in get.all_saved_epochs(path) if (e > start_epoch)]
+            }
             epochs_to_test = metrics["epochs"]
 
         data_keys = ["x6d", "root"]
@@ -68,9 +62,7 @@ def epoch_metric(func):
                 train_val_test = dataset_label,
                 data_keys=data_keys + disentangle_keys,
                 shuffle=False,
-                # normalize=[d for d in disentangle_keys if d not in ["heading", "ids"]],
             )
-            # stride = config["data"]["stride"]
 
             metrics = func(
                 config=config,
@@ -200,101 +192,28 @@ def epoch_regression(
             else:
                 y_true = loader.dataset[:][key].detach().cpu().numpy()
 
-            if method == "log_class":
-                accuracy = log_class_regression(z, y_true)
-                metrics[key]["Accuracy"] += [accuracy]
-            elif "_cv" in method:
-                if method == "linear_cv":
-                    r2 = linear_cv(
-                        z,
-                        y_true,
-                        loader.dataset[:]["ids"].detach().cpu().numpy().ravel(),
-                    )
-                    metrics[key]["R2"] += [r2]
-                elif method == "mlp_cv":
-                    r2 = mlp_cv(
-                        z,
-                        y_true,
-                        loader.dataset[:]["ids"].detach().cpu().numpy().ravel(),
-                    )
-                    metrics[key]["R2"] += [r2]
-                elif method == "log_class_cv":
-                    acc = log_class_cv(
-                        z,
-                        y_true,
-                        loader.dataset[:]["ids"].detach().cpu().numpy().ravel(),
-                    )
-
-                    metrics[key]["Accuracy"] += [acc]
-
-                elif method == "linear_rand_cv":
-                    r2 = linear_rand_cv(z, y_true, model.window, 5)
-                    metrics[key]["R2"] += [r2]
-
-                elif method == "mlp_rand_cv":
-                    r2 = mlp_rand_cv(z, y_true, model.window, 5)
-                    metrics[key]["R2"] += [r2]
-
-                elif method == "log_class_rand_cv":
-                    acc = log_class_rand_cv(
-                        z, y_true, model.window//stride, 5
-                    )
-                    # acc = log_class_rand_cv(
-                    #     StandardScaler().fit_transform(z), y_true, model.window, 5
-                    # )
-                    metrics[key]["Accuracy"] += [acc]
-
-                elif method == "qda_rand_cv":
-                    acc = qda_rand_cv(
-                        z, y_true, model.window//stride, 5
-                    )
-                    # acc = qda_rand_cv(
-                    #     StandardScaler().fit_transform(z), y_true, model.window//10, 5
-                    # )
-                    print(metrics[key])
-                    metrics[key]["Accuracy"] += [acc]
-
-            else:
-                if method == "linear":
-                    r2, r2_null = linear_regression(z, y_true, model, key)
-                elif method == "mlp":
-                    r2, r2_null = mlp_regression(z, y_true, model, key)
-
-                metrics[key]["R2_Null"] += [r2_null]
+            if method == "linear_rand_cv":
+                r2 = linear_rand_cv(z, y_true, model.window, 5)
                 metrics[key]["R2"] += [r2]
 
+            elif method == "mlp_rand_cv":
+                r2 = mlp_rand_cv(z, y_true, model.window, 5)
+                metrics[key]["R2"] += [r2]
+
+            elif method == "log_class_rand_cv":
+                acc = log_class_rand_cv(
+                    z, y_true, model.window//stride, 5
+                )
+                metrics[key]["Accuracy"] += [acc]
+
+            elif method == "qda_rand_cv":
+                acc = qda_rand_cv(
+                    z, y_true, model.window//stride, 5
+                )
+                print(metrics[key])
+                metrics[key]["Accuracy"] += [acc]
+
     return metrics
-
-
-def log_class_regression(z, y_true):
-    LR_Classifier = LogisticRegression(
-        multi_class="multinomial", solver="sag", max_iter=200
-    ).fit(z, y_true.ravel())
-    pred = LR_Classifier.predict(z)
-    accuracy = (y_true.ravel() == pred).sum() / len(y_true)
-    return accuracy
-
-
-def linear_regression(z, y_true, model, key):
-    lin_model = LinearRegression().fit(z, y_true)
-    pred = lin_model.predict(z)
-
-    r2 = r2_score(y_true, pred)
-    if "linear" in model.disentangle.keys():
-        if key in model.disentangle["linear"].keys():
-            dis_w = (
-                model.disentangle["linear"][key].decoder.weight.detach().cpu().numpy()
-            )
-    else:
-        dis_w = lin_model.coef_
-        # z -= lin_model.intercept_[:,None] * dis_w
-
-    ## Null space projection
-    z_null = project_to_null(z, dis_w)[0]
-    pred_null = LinearRegression().fit(z_null, y_true).predict(z_null)
-    r2_null = r2_score(y_true, pred_null)
-    return r2, r2_null
-
 
 def custom_cv_5folds(i, ids, folds=5):
     full_ind = np.arange(len(ids), dtype=int)
@@ -385,68 +304,6 @@ def mlp_rand_cv(z_train, y_train, z_test, y_test):
     r2 = r2_score(y_test, y_pred)
     return r2
 
-
-def linear_cv(z, y_true, ids, folds=5):
-    r2 = []
-    for i in range(folds):
-        idx_train, idx_test = custom_cv_5folds(i, ids)
-        pred = (
-            LinearRegression().fit(z[idx_train], y_true[idx_train]).predict(z[idx_test])
-        )
-        r2 += [r2_score(y_true[idx_test], pred)]
-
-    return r2
-
-
-def mlp_cv(z, y_true, ids, folds=5):
-    r2 = []
-    for i in range(folds):
-        idx_train, idx_test = custom_cv_5folds(i, ids)
-        model = train_MLP(z[idx_train], y_true[idx_train], 200)[0]
-        pred = model(torch.tensor(z[idx_test]).cuda()).cpu().detach().numpy()
-        r2 += [r2_score(y_true[idx_test], pred)]
-
-    return r2
-
-
-def log_class_cv(z, y_true, ids, folds=5):
-    acc = []
-    for i in range(folds):
-        idx_train, idx_test = custom_cv_5folds(i, ids)
-        clf = LogisticRegression(
-            multi_class="multinomial", solver="sag", max_iter=300
-        ).fit(z[idx_train], y_true[idx_train].ravel())
-
-        accuracy = (y_true[idx_test].ravel() == clf.predict(z[idx_test])).sum() / len(
-            idx_test
-        )
-
-        acc += [accuracy]
-
-    return acc
-
-
-def mlp_regression(z, y_true, model, key):
-    pred = train_MLP(z, y_true, 200)[1]
-    r2 = r2_score(y_true, pred)
-
-    if "linear" in model.disentangle.keys():
-        if key in model.disentangle["linear"].keys():
-            dis_w = (
-                model.disentangle["linear"][key].decoder.weight.detach().cpu().numpy()
-            )
-    else:
-        print("No linear decoder - fitting SKLearn Linear Regression")
-        lin_model = LinearRegression().fit(z, y_true)
-        dis_w = lin_model.coef_
-
-    ## Null space projection
-    z_null = project_to_null(z, dis_w)[0]
-    pred_null = train_MLP(z_null, y_true, 200)[1]
-    r2_null = r2_score(y_true, pred_null)
-    return r2, r2_null
-
-
 def train_MLP(z, y_true, num_epochs=200):
     model = MLP(z.shape[-1], y_true.shape[-1]).cuda()
     torch.backends.cudnn.benchmark = True
@@ -522,12 +379,6 @@ def shannon_entropy(x):
     hist = counts / counts.sum()
     entropy = (hist * np.log(1 / hist)).sum()
     return entropy
-
-# def shannon_entropy(x, bins=50, range=(-0.5, 49.5)):
-#     hist = np.histogram(x, bins, range, density=True)[0]
-#     entropy = np.nan_to_num(hist * np.log(1 / hist)).sum()
-#     return entropy
-
 
 def shannon_entropy_torch(x, bins, range):
     hist = torch.histogram(x, bins=bins, range=range)[0]
