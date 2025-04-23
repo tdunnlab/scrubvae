@@ -249,8 +249,8 @@ body {
 
 .page-header__nav-link:hover,
 .page-header__nav-link.is-active {
-	background-color: #fff;
-	color: #fff;
+	background-color: #D4D4D4;
+	color: #424242;
 }
 
 .page-footer {
