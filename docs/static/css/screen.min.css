@@ -261,7 +261,7 @@ body {
 }
 
 .page-footer__inner {
-	max-width: 1024px;
+	max-width: 1500px;
 	margin: 0 auto;
 	display: -webkit-box;
 	display: -webkit-flex;
@@ -271,6 +271,7 @@ body {
 	-webkit-align-items: center;
 	-ms-flex-align: center;
 	align-items: center;
+	color: #424242
 }
 
 .page-footer__inner:after {
