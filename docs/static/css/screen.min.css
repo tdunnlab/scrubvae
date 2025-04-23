@@ -354,7 +354,7 @@ body {
 
 .promo__title {
 	margin-bottom: 35px;
-	font-size: 55px;
+	font-size: 40px;
 	text-transform: capitalize;
 }
 
@@ -365,7 +365,7 @@ body {
 .promo__descr {
 	max-width: 580px;
 	margin: 0 auto 50px;
-	font-size: 18px;
+	font-size: 20px;
 	color: #a8a8a8;
 	line-height: 1.1;
 }
