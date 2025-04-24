@@ -261,7 +261,7 @@ body {
 }
 
 .page-footer__inner {
-	max-width: 1024px;
+	max-width: 2048px;
 	margin: 0 auto;
 	display: -webkit-box;
 	display: -webkit-flex;
@@ -271,6 +271,7 @@ body {
 	-webkit-align-items: center;
 	-ms-flex-align: center;
 	align-items: center;
+	color: #424242;
 }
 
 .page-footer__inner:after {
@@ -362,7 +363,7 @@ body {
 }
 
 .promo__descr {
-	max-width: 580px;
+	max-width: 780px;
 	margin: 0 auto 50px;
 	font-size: 20px;
 	color: #a8a8a8;
@@ -527,10 +528,12 @@ body {
 	-webkit-justify-content: space-between;
 	-ms-flex-pack: justify;
 	justify-content: space-between;
+	background-color: #fff;
+	color: #424242;
 }
 
 .page-footer__copyright {
-	max-width: 200px;
+	max-width: 700px;
 	color: #424242;
 	margin: 35px auto 0;
 }
