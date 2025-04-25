@@ -299,7 +299,7 @@ body {
 	-ms-flex-item-align: start;
 	align-self: flex-start;
 	margin-top: 20px;
-	margin-left: 40px; /* justify-content: center; */
+	margin-left: 20px; /* justify-content: center; */
 	-webkit-box-align: center;
 	-webkit-align-items: center;
 	-ms-flex-align: center;
