@@ -258,6 +258,7 @@ body {
 	min-height: 85px;
 	padding-bottom: 30px;
 	background-color: #ffffff;
+	color: #424242;
 }
 
 .page-footer__inner {
@@ -278,6 +279,7 @@ body {
 	content: '';
 	display: table;
 	clear: both;
+	color: #424242;
 }
 
 .page-footer__copyright {
@@ -302,6 +304,7 @@ body {
 	-webkit-align-items: center;
 	-ms-flex-align: center;
 	align-items: center;
+	color: #424242;
 }
 
 .page-footer__gotop {
@@ -514,7 +517,7 @@ body {
 	margin-left: 0;
 }
 
-.page-footer {
+/* .page-footer {
 	padding: 0 10px 30px;
 	text-align: center;
 	display: -webkit-box;
@@ -543,7 +546,7 @@ body {
 	float: none;
 	width: 100%;
 	margin: 20px auto 0;
-}
+} */
 
 }
 
