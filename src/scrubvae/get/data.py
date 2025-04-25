@@ -24,7 +24,7 @@ def mouse_data(
         "{}mouse_skeleton.yaml".format(data_config["data_path"])
     )
 
-    if train_val_test is not "full":
+    if train_val_test != "full":
         data_path = "{}{}/{}/".format(
             data_config["data_path"], data_config["dataset"], train_val_test
         )
