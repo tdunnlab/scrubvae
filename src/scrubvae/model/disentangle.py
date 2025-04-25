@@ -231,7 +231,6 @@ class QuadraticDiscriminantFilter(nn.Module):
 
         return ll_loss / len(self.classes)
 
-
 class MutInfoEstimator(torch.nn.Module):
 
     def __init__(
@@ -324,7 +323,7 @@ class RecursiveLeastSquares(nn.Module):
         nx,  # latent_dim
         ny,  # y_dim
         bias=False,
-        polynomial_order = 1,
+        polynomial_order=1,
     ):
         super().__init__()
         self.bias = bias
@@ -368,7 +367,7 @@ class RecursiveLeastSquares(nn.Module):
             x_list += [x[:, C_idx].prod(dim=-1) / len(C_idx) * n_features]
 
         return torch.column_stack(x_list)
-    
+
     def update(self, x, y):
         # x (batch_size, latent_dim)
         # y (batch_size, y_dim)
@@ -556,6 +555,7 @@ class GradientReversal(Function):
 
 revgrad = GradientReversal.apply
 
+
 class GradientReversalLayer(nn.Module):
     def __init__(self, alpha):
         super(GradientReversalLayer, self).__init__()
@@ -563,6 +563,7 @@ class GradientReversalLayer(nn.Module):
 
     def forward(self, x):
         return revgrad(x, self.alpha)
+
 
 class MLP(nn.Module):
     def __init__(self, in_dim, out_dim):

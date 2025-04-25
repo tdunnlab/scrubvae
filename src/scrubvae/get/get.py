@@ -54,36 +54,8 @@ def data_and_model(
             train_val_test=dataset_label,
             data_keys=curr_data_keys,
             shuffle=is_shuffle,
-            # normalize=["avg_speed_3d"] if "avg_speed_3d" in curr_data_keys else None,
-            # norm_params=None,
         )
         
-        # import pdb; pdb.set_trace()
-        # loader2 = scrubvae.get.mouse_data(
-        #     data_config=test_config,
-        #     window=config["model"]["window"],
-        #     train=False,
-        #     data_keys=[
-        #         "x6d",
-        #         "root",
-        #         "offsets",
-        #         "target_pose",
-        #         "avg_speed_3d",
-        #         "heading",
-        #     ],
-        #     shuffle=False,
-        #     normalize=["avg_speed_3d"],
-        #     norm_params=loader1.dataset.norm_params,
-        # )
-    # else:
-    #     loader1 = scrubvae.get.mouse_data(
-    #         data_config=config["data"],
-    #         window=config["model"]["window"],
-    #         train=train_val_test,
-    #         data_keys=data_keys,
-    #         shuffle=shuffle,
-    #         normalize=config["disentangle"]["features"],
-    #     )
     model = scrubvae.get.model(
         model_config=config["model"],
         load_model=load_model,
