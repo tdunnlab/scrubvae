@@ -282,9 +282,10 @@ body {
 
 .page-footer__copyright {
 	display: inline-block;
+	max-width: 512px;
 	margin: 35px 0 0 45px;
 	font-size: 14px;
-	color: #fff;
+	color: #424242;
 }
 
 .page-footer__image {
