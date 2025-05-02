@@ -263,7 +263,7 @@ body {
 
 .page-footer__inner {
 	max-width: 2048px;
-	margin: auto;
+	margin-right: 500px;
 	display: -webkit-box;
 	display: -webkit-flex;
 	display: -ms-flexbox;
@@ -295,9 +295,9 @@ body {
 	display: -webkit-flex;
 	display: -ms-flexbox;
 	display: flex;
-	-webkit-align-self: flex-start;
-	-ms-flex-item-align: start;
-	align-self: flex-start;
+	-webkit-align-self: center;
+	-ms-flex-item-align: center;
+	align-self: center;
 	margin-top: 20px;
 	margin-left: 0px; 
 	justify-content: center;
@@ -520,7 +520,7 @@ body {
 }
 
 .embed-container {
-	position: relative;
+	/* position: relative; */
 	padding-bottom: 56.25%;
 	height: 0;
 	overflow: hidden;
