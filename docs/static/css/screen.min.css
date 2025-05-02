@@ -264,7 +264,7 @@ body {
 .page-footer__inner {
 	max-width: 2048px;
 	margin-right: 128px;
-	margin-left: 256px;
+	margin-left: 128px;
 	display: -webkit-box;
 	display: -webkit-flex;
 	display: -ms-flexbox;
@@ -309,7 +309,7 @@ body {
 	color: #424242;
 }
 
-
+/* 
 .page-footer__gotop {
 	display: block;
 	float: right;
@@ -335,7 +335,7 @@ body {
 	font-family: FontAwesome;
 	content: "\f077";
 	color: #fff;
-}
+} */
 
 .promo {
 	width: 100%;
