@@ -262,7 +262,7 @@ body {
 }
 
 .page-footer__inner {
-	max-width: 2048px;
+	max-width: 1500px;
 	margin: 0 auto;
 	display: -webkit-box;
 	display: -webkit-flex;
