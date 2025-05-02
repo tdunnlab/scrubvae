@@ -264,23 +264,24 @@ body {
 .page-footer__inner {
 	max-width: 1024px;
 	margin: 0 0 0 0;
-	display: -webkit-box;
+	/* display: -webkit-box;
 	display: -webkit-flex;
-	display: -ms-flexbox;
+	display: -ms-flexbox; */
 	display: flex;
-	-webkit-box-align: center;
+	justify-content: center;
+	/* -webkit-box-align: center;
 	-webkit-align-items: center;
 	-ms-flex-align: center;
-	align-items: center;
+	align-items: center; */
 	color: #424242;
 }
 
-.page-footer__inner:after {
+/* .page-footer__inner:after {
 	content: '';
 	display: table;
 	clear: both;
 	color: #424242;
-}
+} */
 
 .page-footer__copyright {
 	display: inline-block;
