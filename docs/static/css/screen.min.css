@@ -307,6 +307,23 @@ body {
 	color: #424242;
 }
 
+.page-footer__image_nyu_logo {
+	display: -webkit-box;
+	display: -webkit-flex;
+	display: -ms-flexbox;
+	display: flex;
+	-webkit-align-self: flex-start;
+	-ms-flex-item-align: start;
+	align-self: flex-start;
+	margin-top: 0px;
+	margin-left: 0px; /* justify-content: center; */
+	-webkit-box-align: center;
+	-webkit-align-items: center;
+	-ms-flex-align: center;
+	align-items: center;
+	color: #424242;
+}
+
 .page-footer__gotop {
 	display: block;
 	float: right;
@@ -523,6 +540,9 @@ body {
 	height: 0;
 	overflow: hidden;
 	max-width: 100%;
+	display: flex; 
+  	justify-content: center; 
+  	align-items: center;
   }
   .embed-container iframe,
   .embed-container object,
