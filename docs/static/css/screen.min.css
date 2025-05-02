@@ -285,7 +285,7 @@ body {
 .page-footer__copyright {
 	display: inline-block;
 	width: 800px;
-	margin: 35px 0 0 45px;
+	margin: 35px 100px 10px 45px;
 	font-size: 14px;
 	color: #424242;
 }
@@ -299,7 +299,7 @@ body {
 	-ms-flex-item-align: start;
 	align-self: flex-start;
 	margin-top: 20px;
-	margin-left: 5px; /* justify-content: center; */
+	margin-left: 45px; /* justify-content: center; */
 	-webkit-box-align: center;
 	-webkit-align-items: center;
 	-ms-flex-align: center;
