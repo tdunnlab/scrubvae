@@ -262,7 +262,7 @@ body {
 }
 
 .page-footer__inner {
-	max-width: 1500px;
+	max-width: 1024px;
 	margin: 0 auto;
 	display: -webkit-box;
 	display: -webkit-flex;
@@ -284,7 +284,7 @@ body {
 
 .page-footer__copyright {
 	display: inline-block;
-	width: 800px;
+	width: 500px;
 	margin: 35px 100px 10px 45px;
 	font-size: 14px;
 	color: #424242;
