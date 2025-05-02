@@ -296,9 +296,9 @@ body {
 	display: -webkit-flex;
 	display: -ms-flexbox;
 	display: flex;
-	-webkit-align-self: center;
-	-ms-flex-item-align: center;
-	align-self: center;
+	-webkit-align-self: flex-start;
+	-ms-flex-item-align: start;
+	align-self: flex-start;
 	margin-top: 20px;
 	margin-left: 0px; 
 	justify-content: center;
