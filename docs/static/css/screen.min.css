@@ -263,7 +263,7 @@ body {
 
 .page-footer__inner {
 	max-width: 2048px;
-	margin-right: 256px;
+	margin-right: 128px;
 	margin-left: 256px;
 	display: -webkit-box;
 	display: -webkit-flex;
@@ -296,13 +296,13 @@ body {
 	display: -webkit-flex;
 	display: -ms-flexbox;
 	display: flex;
-	-webkit-align-self: flex-end;
-	-ms-flex-item-align: end;
-	align-self: flex-end;
+	-webkit-align-self: center;
+	-ms-flex-item-align: center;
+	align-self: center;
 	margin-top: 20px;
 	margin-left: 0px; 
 	justify-content: center;
-	-webkit-box-align: center;
+	-webkit-box-align: end;
 	-webkit-align-items: center;
 	-ms-flex-align: center;
 	align-items: center;
