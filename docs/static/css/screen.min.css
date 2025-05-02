@@ -263,8 +263,7 @@ body {
 
 .page-footer__inner {
 	max-width: 2048px;
-	margin-right: 128px;
-	margin-left: 0px;
+	margin: 0 auto;
 	display: -webkit-box;
 	display: -webkit-flex;
 	display: -ms-flexbox;
