@@ -263,7 +263,7 @@ body {
 
 .page-footer__inner {
 	max-width: 1024px;
-	margin: 0 auto;
+	margin: 0 0 0 0;
 	display: -webkit-box;
 	display: -webkit-flex;
 	display: -ms-flexbox;
