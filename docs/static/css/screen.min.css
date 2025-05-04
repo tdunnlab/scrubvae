@@ -310,7 +310,7 @@ body {
 	color: #424242;
 }
 
-.page-footer__image {
+.page-footer__image_nyu {
 	/* display: -webkit-box;
 	display: -webkit-flex;
 	display: -ms-flexbox; */
@@ -319,7 +319,7 @@ body {
 	/* -webkit-align-self: flex-start;
 	-ms-flex-item-align: start;
 	align-self: flex-start; */
-	margin-top: 20px;
+	margin-top: 0px;
 	margin-left: 20px; 
 	justify-content: center;
 	/* -webkit-box-align: center;
@@ -392,7 +392,14 @@ body {
 .promo__descr {
 	max-width: 780px;
 	margin: 0 auto 50px;
-	font-size: 20px;
+	font-size: 25px;
+	color: #323232;
+	line-height: 1.1;
+}
+.titles {
+	max-width: 780px;
+	margin: 0 auto 50px;
+	font-size: 18px;
 	color: #a8a8a8;
 	line-height: 1.1;
 }
