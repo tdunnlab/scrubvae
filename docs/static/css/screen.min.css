@@ -390,7 +390,8 @@ body {
 }
 
 .promo__descr {
-	max-width: 780px;
+	width: 90%;
+	/* max-width: 780px; */
 	margin: 0 auto 50px;
 	font-size: 20px;
 	color: #323232;
@@ -398,11 +399,12 @@ body {
 }
 
 .titles {
-	max-width: 1224px;
+	width:90%;
 	margin: 0 auto 50px;
 	font-size: 20px;
 	color: #a8a8a8;
 	line-height: 1.1;
+	white-space: pre;
 }
 
 .promo__btn {
