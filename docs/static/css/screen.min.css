@@ -166,7 +166,7 @@ body {
 body {
 	background-color: #fff;
 	font-family: "Lato",sans-serif;
-	color: #424242;
+	color: #323232;
 }
 
 .main-content { /* position:relative; */
@@ -191,8 +191,8 @@ body {
 	top: 0;
 	left: 0;
 	z-index: 999;
-	-webkit-box-shadow: 0 2px 4px 0 #424242;
-	box-shadow: 0 2px 4px 0 #424242;
+	-webkit-box-shadow: 0 2px 4px 0 #323232;
+	box-shadow: 0 2px 4px 0 #323232;
 }
 
 .page-header__inner {
@@ -244,13 +244,13 @@ body {
 	padding: 10px;
 	-webkit-transition: background-color .2s;
 	transition: background-color .2s;
-	color: #424242;
+	color: #323232;
 }
 
 .page-header__nav-link:hover,
 .page-header__nav-link.is-active {
 	background-color: #D4D4D4;
-	color: #424242;
+	color: #323232;
 }
 
 .page-footer {
@@ -258,7 +258,7 @@ body {
 	min-height: 85px;
 	padding-bottom: 30px;
 	background-color: #ffffff;
-	color: #424242;
+	color: #323232;
 }
 
 .page-footer__inner {
@@ -271,16 +271,16 @@ body {
 	justify-content: center;
 	/* -webkit-box-align: center;
 	-webkit-align-items: center;
-	-ms-flex-align: center;
-	align-items: center; */
-	color: #424242;
+	-ms-flex-align: center;*/
+	align-items: end;
+	color: #323232;
 }
 
 /* .page-footer__inner:after {
 	content: '';
 	display: table;
 	clear: both;
-	color: #424242;
+	color: #323232;
 } */
 
 .page-footer__copyright {
@@ -288,7 +288,7 @@ body {
 	width: 500px;
 	margin: 35px 100px 10px 45px;
 	font-size: 14px;
-	color: #424242;
+	color: #323232;
 }
 
 .page-footer__image {
@@ -307,7 +307,7 @@ body {
 	-webkit-align-items: center;
 	-ms-flex-align: center; */
 	align-items: center;
-	color: #424242;
+	color: #323232;
 }
 
 .page-footer__image_nyu {
@@ -320,13 +320,13 @@ body {
 	-ms-flex-item-align: start;
 	align-self: flex-start; */
 	margin-top: 0px;
-	margin-left: 50px; 
-	justify-content: center;
+	margin-left: 100px; 
+	justify-content: end;
 	/* -webkit-box-align: center;
 	-webkit-align-items: center;
 	-ms-flex-align: center; */
-	align-items: end;
-	color: #424242;
+	align-items: center;
+	color: #323232;
 }
 
 /* 
@@ -392,24 +392,17 @@ body {
 .promo__descr {
 	max-width: 780px;
 	margin: 0 auto 50px;
-	font-size: 25px;
+	font-size: 20px;
 	color: #323232;
 	line-height: 1.1;
 }
 
-.authors {
-	max-width: 1224px;
-	margin: 0 auto 50px;
-	font-size: 25px;
-	color: #323232;
-	line-height: 1.1;
-}
 .titles {
 	max-width: 1224px;
-	margin: 0 auto 10px;
-	font-size: 18px;
+	margin: 0 auto 50px;
+	font-size: 20px;
 	color: #a8a8a8;
-	line-height: 1;
+	line-height: 1.1;
 }
 
 .promo__btn {
