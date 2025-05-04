@@ -390,7 +390,6 @@ body {
 }
 
 .promo__descr {
-	/* width: 90%; */
 	max-width: 1400px;
 	margin: 0 auto 50px;
 	font-size: 20px;
