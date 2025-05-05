@@ -397,14 +397,14 @@ body {
 	line-height: 1.1;
 }
 
-.promo__corrs {
+/* .promo__corrs {
 	max-width: 1400px;
 	margin: 0 auto 50px;
 	font-size: 20px;
 	color: #a8a8a8;
 	line-height: 1.1;
 	white-space: pre;
-}
+} */
 
 .promo__btn {
 	display: block;
