@@ -10,7 +10,7 @@ def data_and_model(
     epoch=None,
     train_val_test=["train", "val", "test"],
     data_keys=["x6d", "root", "offsets"],
-    shuffle=False,
+    shuffle=[False, False, False],
     use_default_val_keys=True,
     verbose=1,
 ):
