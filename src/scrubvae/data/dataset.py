@@ -8,6 +8,58 @@ from numpy.lib.stride_tricks import sliding_window_view
 from tqdm import trange
 
 
+def inv_kin_torch(
+    pose: torch.Tensor,
+    kinematic_tree: Union[List, torch.Tensor],
+    offset: torch.Tensor,
+    forward_indices: Union[List, torch.Tensor] = [0, 1],
+):
+    """
+    Adapted from T2M-GPT (https://mael-zys.github.io/T2M-GPT/)
+    [1] Zhang, Jianrong, et al. "Generating Human Motion From Textual
+    Descriptions With Discrete Representations." Proceedings of the
+    IEEE/CVF Conference on Computer Vision and Pattern Recognition. 2023.
+    """
+
+    # Find forward root direction
+    forward = pose[:, forward_indices[1], :] - pose[:, forward_indices[0], :]
+    forward = torch.nan_to_num(forward / torch.norm(forward, dim=-1, keepdim=True), nan=0.0)
+
+    # Root Rotation
+    target = torch.tensor([[1, 0, 0]], dtype=pose.dtype, device=pose.device).repeat(
+        len(forward), 1
+    )
+    root_quat = qtn.qbetween(forward, target)
+
+    local_quat = torch.zeros(
+        pose.shape[:-1] + (4,), dtype=pose.dtype, device=pose.device
+    )
+
+    # root_quat[0] = torch.tensor(
+    #     [[1.0, 0.0, 0.0, 0.0]], dtype=pose.dtype, device=pose.device
+    # )
+    local_quat[:, 0] = root_quat
+
+    for chain in kinematic_tree:
+        R = root_quat
+        for i in range(len(chain) - 1):
+            u = offset[chain[i + 1]].unsqueeze(0).repeat(len(pose), 1)
+            v = pose[:, chain[i + 1]] - pose[:, chain[i]]
+            v = v / torch.norm(v, dim=-1, keepdim=True)
+            rot_u_v = qtn.qbetween(u, v)
+            rot_u_v[:, 0] = torch.nan_to_num(rot_u_v[:, 0], 1)
+            rot_u_v[:, 1:] = torch.nan_to_num(rot_u_v[:, 1:], 0)
+            R_loc = qtn.qmul(qtn.qinv(R), rot_u_v)
+            local_quat[:, chain[i + 1], :] = R_loc
+            if torch.isnan(R_loc).sum() > 0:
+                import pdb
+
+                pdb.set_trace()
+            R = qtn.qmul(R, R_loc)
+
+    return local_quat
+
+
 def inv_kin(
     pose: np.ndarray,
     kinematic_tree: Union[List, np.ndarray],
@@ -30,7 +82,8 @@ def inv_kin(
     root_quat = qtn.qbetween_np(forward, target)
 
     local_quat = np.zeros(pose.shape[:-1] + (4,))
-    root_quat[0] = np.array([[1.0, 0.0, 0.0, 0.0]])
+    # import pdb; pdb.set_trace()
+    # root_quat[0] = np.array([[1.0, 0.0, 0.0, 0.0]])
     local_quat[:, 0] = root_quat
     for chain in kinematic_tree:
         R = root_quat
@@ -39,6 +92,8 @@ def inv_kin(
             v = pose[:, chain[i + 1]] - pose[:, chain[i]]
             v = v / np.linalg.norm(v, axis=-1)[..., None]
             rot_u_v = qtn.qbetween_np(u, v)
+            rot_u_v[:, 0] = np.nan_to_num(rot_u_v[:, 0], nan=1, posinf=1, neginf=1)
+            rot_u_v[:, 1:] = np.nan_to_num(rot_u_v[:, 1:], nan=0, posinf=0, neginf=0)
             R_loc = qtn.qmul_np(qtn.qinv_np(R), rot_u_v)
             local_quat[:, chain[i + 1], :] = R_loc
             R = qtn.qmul_np(R, R_loc)
@@ -113,6 +168,10 @@ def fwd_kin_cont6d_torch(
             pose[:, chain[i]] = (
                 torch.matmul(matR, offset_vec).squeeze(-1) + pose[:, chain[i - 1]]
             )
+
+            if chain[i] == 1:
+                if torch.any(torch.norm((pose[:, 1] - pose[:, 0]), dim=-1)==0):
+                    import pdb; pdb.set_trace()
     return pose
 
 
@@ -280,6 +339,7 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
     """
     Get length of all segments in a pose defined by a kinematic tree
     """
+    offset = offset.astype(pose.dtype)
     parents = [0] * len(offset)
     parents[0] = -1
     for chain in kinematic_tree:
@@ -288,10 +348,11 @@ def get_segment_len(pose: np.ndarray, kinematic_tree: np.ndarray, offset: np.nda
 
     offsets = np.moveaxis(np.tile(offset[..., None], pose.shape[0]), -1, 0)
     for i in range(1, offset.shape[0]):
-        offsets[:, i] = (
-            np.linalg.norm(pose[:, i, :] - pose[:, parents[i], :], axis=1)[..., None]
-            * offsets[:, i]
-        )
+        length = np.linalg.norm(pose[:, i, :] - pose[:, parents[i], :], axis=1)[
+            ..., None
+        ]
+        length = np.clip(length, a_min=1e-3, a_max=None)
+        offsets[:, i] = length * offsets[:, i]
 
     return offsets
 
@@ -309,16 +370,17 @@ def get_speed_outliers(pose, threshold=2.25):
     return outlier_frames
 
 
-
 def preprocess_save_data(
     data_path: str,
     skeleton_config: dict,
     dataset: str,
     window: int,
+    train_val_test: str = "train",
     stride: int = 2,
     data_keys: List[str] = ["x6d", "root", "offsets"],
     speed_threshold: Optional[float] = 2.25,
     direction_process: str = "midfwd",
+    use_default_offsets: bool = False,
 ):
     """Prepare and save all data preprocessing for SC-VAE model training, validation, and testing
 
@@ -337,18 +399,32 @@ def preprocess_save_data(
     direction_process : str, optional
         Preprocess pose sequences such that the animals pass through the origin at the middle frame from
         any direction ("x360") or only in the x+ direction ("midfwd"), by default "midfwd"
+    use_default_offsets : bool, optional
+        Whether to use default segment lengths for offsets, by default False
 
     Returns
     -------
     data
         Dictionary with key-value pairs associated with `data_keys`
     """
-    n_ids = 72 if dataset == "parkinsons" else 4
+    n_ids = 72 if "parkinsons" in dataset else 4
     print("Calculating dataset: {}".format(dataset))
-    pose, ids = read.pose_h5("{}{}/pose.h5".format(data_path, dataset))
-    window_inds = get_window_indices(ids, stride, window)
-    pose = pose[window_inds]
-    ids = ids[window_inds][:, window//2]
+    dataset_name = "parkinsons" if dataset == "parkinsons_healthy" else dataset
+    if train_val_test in [None, "full"]:
+        pose, ids = read.pose_h5("{}{}/pose.h5".format(data_path, dataset_name))
+        window_inds = get_window_indices(ids, stride, window)
+        pose = pose[window_inds]
+        ids = ids[window_inds][:, window // 2]
+    else:
+        pose = np.load(
+            "{}{}/{}/pose.npy".format(data_path, dataset_name, train_val_test)
+        )
+        # pose = pose[..., 51 // 2, :, :]
+        ids = np.repeat(np.arange(n_ids), len(pose) // n_ids)
+
+    if dataset == "parkinsons_healthy":
+        pose = pose[ids < 36, ...]
+        ids = ids[ids < 36]
 
     # Filter out bad tracking using speed threshold
     if speed_threshold is not None:
@@ -416,11 +492,39 @@ def preprocess_save_data(
 
     # Get offsets scaled by segment lengths
     if "offsets" in data_keys:
-        data["offsets"] = get_segment_len(
-            pose.reshape((-1,) + pose.shape[-2:]),
-            skeleton_config["KINEMATIC_TREE"],
-            np.array(skeleton_config["OFFSET"]),
-        ).reshape(pose.shape)
+        if use_default_offsets:
+            data["offsets"] = np.array(
+                [
+                    0.0,
+                    17.0,
+                    14.0,
+                    19.0,
+                    24.0,
+                    42.0,
+                    23.5,
+                    11.5,
+                    3.0,
+                    23.5,
+                    11.5,
+                    3.0,
+                    29.5,
+                    17.0,
+                    11.0,
+                    29.5,
+                    17.0,
+                    11.0,
+                ],
+                dtype=np.float32,
+            )
+            data["offsets"] = data["offsets"][:, None] * np.array(
+                skeleton_config["OFFSET"], dtype=np.float32
+            )
+        else:
+            data["offsets"] = get_segment_len(
+                pose.reshape((-1,) + pose.shape[-2:]),
+                skeleton_config["KINEMATIC_TREE"],
+                np.array(skeleton_config["OFFSET"]),
+            ).reshape(pose.shape)
 
     # Get root positions
     if "root" in data_keys:
@@ -438,7 +542,10 @@ def preprocess_save_data(
     if "target_pose" in data_keys:
         # Target pose root does not move
         reshaped_x6d = data["x6d"].reshape((-1,) + data["x6d"].shape[-2:])
-        offsets = data["offsets"].reshape(reshaped_x6d.shape[:2] + (-1,))
+        if use_default_offsets:
+            offsets = data["offsets"]
+        else:
+            offsets = data["offsets"].reshape(reshaped_x6d.shape[:2] + (-1,))
         data["target_pose"] = fwd_kin_cont6d_torch(
             reshaped_x6d,
             skeleton_config["KINEMATIC_TREE"],
@@ -449,9 +556,13 @@ def preprocess_save_data(
         ).reshape(data["x6d"].shape[:-1] + (3,))
 
     for k, v in data.items():
-        assert len(v) == data_len
+        try:
+            assert len(v) == data_len
+        except:
+            assert (len(v) == pose.shape[-2]) and (k == "offsets")
 
     return data
+
 
 class MouseDataset(Dataset):
     """
@@ -481,6 +592,11 @@ class MouseDataset(Dataset):
 
         self.kinematic_tree = kinematic_tree
 
+        self.standard_offsets = False
+        if "offsets" in self.data_keys:
+            if self.data["offsets"].ndim == 2:
+                self.standard_offsets = True
+
         # # List of items which have already been windowed
         # self.ind_with_window_inds = [
         #     k for k, v in self.data.items() if v.shape[0] != len(self.window_inds)
@@ -497,9 +613,14 @@ class MouseDataset(Dataset):
         # }
 
         # Query items which have already been windowed
-        query = {
-            k: v[idx]
-            for k, v in self.data.items()
-            # if k not in self.ind_with_window_inds
-        }
+        query = {}
+        for k, v in self.data.items():
+            if (k in ["offsets"]) and self.standard_offsets:
+                query[k] = v
+            else:
+                query[k] = v[idx]
+        # query = {
+        #     k: v[idx]
+        #     for k, v in self.data.items()
+        # }
         return query

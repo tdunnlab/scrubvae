@@ -352,7 +352,6 @@ def cont6d_to_matrix(cont6d, eps=0):
     mat = torch.cat([x, y, z], dim=-1)
     return mat
 
-
 def cont6d_to_matrix_np(cont6d):
     q = torch.from_numpy(cont6d).contiguous().float()
     return cont6d_to_matrix(q).numpy()

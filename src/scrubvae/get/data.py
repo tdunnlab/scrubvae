@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 import h5py
 import pandas as pd
 
-
 def mouse_data(
     data_config: dict,
     train_val_test: str = "train",
@@ -25,15 +24,50 @@ def mouse_data(
     )
 
     if train_val_test != "full":
+        if data_config["dataset"] == "parkinsons_healthy":
+            dataset_name = "parkinsons"
+        else:
+            dataset_name = data_config["dataset"]
         data_path = "{}{}/{}/".format(
-            data_config["data_path"], data_config["dataset"], train_val_test
+            data_config["data_path"], dataset_name, train_val_test
         )
         data = {}
         for key in data_keys + ["ids"]:
             if key in ["pd_label", "fluorescence"]:
                 continue
-            elif key in ["ids", "heading", "avg_speed_3d", "offsets", "raw_pose"]:
+            elif key in ["ids", "heading", "avg_speed_3d", "raw_pose"]:
                 file_path = "{}{}.h5".format(data_path, key)
+            elif key == "offsets":
+                if data_config.get("use_default_offsets", False):
+                    file_path = "{}{}.h5".format(data_path, key)
+                else:
+                    data["offsets"] = np.array(
+                        [
+                            0.0,
+                            17.0,
+                            14.0,
+                            19.0,
+                            24.0,
+                            42.0,
+                            23.5,
+                            11.5,
+                            3.0,
+                            23.5,
+                            11.5,
+                            3.0,
+                            29.5,
+                            17.0,
+                            11.0,
+                            29.5,
+                            17.0,
+                            11.0,
+                        ],
+                        dtype=np.float32,
+                    )
+                    data["offsets"] = data["offsets"][:, None] * np.array(
+                        skeleton_config["OFFSET"], dtype=np.float32
+                    )
+                    continue
             else:
                 file_path = "{}{}_{}.h5".format(
                     data_path, key, data_config["direction_process"]
@@ -52,6 +86,7 @@ def mouse_data(
             stride=stride,
             data_keys=data_keys + ["ids"],
             speed_threshold=2.25,
+            use_default_offsets=True,
             direction_process=data_config["direction_process"],
         )
 

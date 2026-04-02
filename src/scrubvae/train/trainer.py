@@ -22,6 +22,7 @@ from sklearn.metrics import r2_score
 import numpy as np
 from line_profiler import profile
 from pathlib import Path
+from neurobe4.model.model import ConditionalForecaster, ForecastingVAE
 
 class CyclicalBetaAnnealing(torch.nn.Module):
     def __init__(self, beta_max=1, len_cycle=100, R=0.5):
@@ -418,92 +419,95 @@ def train(config, model, loader_dict, run=None):
                 elif config["data"]["dataset"] == "4_mice":
                     # Calculate decodability of specified variables
                     for key in ["avg_speed_3d", "heading"]:
-                        y_true = loader_dict["val"].dataset[:][key].detach().cpu().numpy()
-                        r2_lin = linear_rand_cv(
-                            z=z_test,
-                            y_true=y_true,
-                            window=model.window,
-                            folds=5,
-                        )
-                        r2_mlp = mlp_rand_cv(
-                            z=z_test,
-                            y_true=y_true,
-                            window=model.window,
-                            folds=5,
-                        )
-                        metrics["r2_{}_lin_mean".format(key)] = np.mean(r2_lin)
-                        metrics["r2_{}_lin_std".format(key)] = np.std(r2_lin)
-                        metrics["r2_{}_mlp_mean".format(key)] = np.mean(r2_mlp)
-                        metrics["r2_{}_mlp_std".format(key)] = np.std(r2_mlp)
+                        if key in loader_dict["val"].dataset.data.keys():
+                            y_true = loader_dict["val"].dataset[:][key].detach().cpu().numpy()
+                            r2_lin = linear_rand_cv(
+                                z=z_test,
+                                y_true=y_true,
+                                window=model.window,
+                                folds=5,
+                            )
+                            r2_mlp = mlp_rand_cv(
+                                z=z_test,
+                                y_true=y_true,
+                                window=model.window,
+                                folds=5,
+                            )
+                            metrics["r2_{}_lin_mean".format(key)] = np.mean(r2_lin)
+                            metrics["r2_{}_lin_std".format(key)] = np.std(r2_lin)
+                            metrics["r2_{}_mlp_mean".format(key)] = np.mean(r2_mlp)
+                            metrics["r2_{}_mlp_std".format(key)] = np.std(r2_mlp)
 
-                    # Calculate decodability of identity
-                    y_true = (
-                        loader_dict["val"].dataset[:]["ids"].detach().cpu().numpy().astype(int)
-                    )
-                    acc_log = log_class_rand_cv(
-                        z=z_test,
-                        y_true=y_true,
-                        window=model.window,
-                        folds=5,
-                    )
-                    acc_qda = qda_rand_cv(
-                        z=z_test,
-                        y_true=y_true,
-                        window=model.window,
-                        folds=5,
-                    )
-                    metrics["acc_ids_log_mean"] = np.mean(acc_log)
-                    metrics["acc_ids_log_std"] = np.std(acc_log)
-                    metrics["acc_ids_qda_mean"] = np.mean(acc_qda)
-                    metrics["acc_ids_qda_std"] = np.std(acc_qda)
-
-                    # GMM Cluster latents
-                    # k_pred_e = cluster.gmm(
-                    #     latents=z_test,
-                    #     n_components=50,
-                    #     label="".format(epoch),
-                    #     covariance_type="diag" if config["model"]["diag"] else "full",
-                    #     path=None,
-                    # )[0]
-
-                    # Extract walking indices
-                    # walking_inds = np.in1d(
-                    #     loader_dict["val"].dataset.gmm_pred["midfwd_test"],
-                    #     loader_dict["val"].dataset.walking_clusters["midfwd_test"],
-                    # )
-
-                    # Shannon entropy of walking clusters
-                    # metrics["entropy_midfwd_test"] = shannon_entropy(k_pred_e[walking_inds])
-
-                    # Matching clusters to those from the latents of another vanilla model
-                    # for cluster_key in loader_dict["val"].dataset.gmm_pred.keys():
-                    #     mapped = hungarian_match(
-                    #         k_pred_e, loader_dict["val"].dataset.gmm_pred[cluster_key]
-                    #     )
-                    #     metrics["mof_gmm_{}".format(cluster_key)] = (
-                    #         (loader_dict["val"].dataset.gmm_pred[cluster_key] == mapped)
-                    #     ).sum() / len(k_pred_e)
-                elif config["data"]["dataset"] == "parkinsons":
-                    for key in ["ids", "pd_label"]:
+                    if not (isinstance(model, ConditionalForecaster) or isinstance(model, ForecastingVAE)):
+                        # Calculate decodability of identity
                         y_true = (
-                            loader_dict["val"].dataset[:][key].detach().cpu().numpy().astype(int)
+                            loader_dict["val"].dataset[:]["ids"].detach().cpu().numpy().astype(int)
                         )
                         acc_log = log_class_rand_cv(
-                            z_test,
-                            y_true,
-                            model.window, ## TODO: change this to reflect the stride of the 
-                            5,
+                            z=z_test,
+                            y_true=y_true,
+                            window=model.window,
+                            folds=5,
                         )
                         acc_qda = qda_rand_cv(
-                            z_test,
-                            y_true,
-                            model.window,
-                            5,
+                            z=z_test,
+                            y_true=y_true,
+                            window=model.window,
+                            folds=5,
                         )
-                        metrics["acc_{}_log_mean".format(key)] = np.mean(acc_log)
-                        metrics["acc_{}_log_std".format(key)] = np.std(acc_log)
-                        metrics["acc_{}_qda_mean".format(key)] = np.mean(acc_qda)
-                        metrics["acc_{}_qda_std".format(key)] = np.std(acc_qda)
+                        metrics["acc_ids_log_mean"] = np.mean(acc_log)
+                        metrics["acc_ids_log_std"] = np.std(acc_log)
+                        metrics["acc_ids_qda_mean"] = np.mean(acc_qda)
+                        metrics["acc_ids_qda_std"] = np.std(acc_qda)
+
+                        # GMM Cluster latents
+                        # k_pred_e = cluster.gmm(
+                        #     latents=z_test,
+                        #     n_components=50,
+                        #     label="".format(epoch),
+                        #     covariance_type="diag" if config["model"]["diag"] else "full",
+                        #     path=None,
+                        # )[0]
+
+                        # Extract walking indices
+                        # walking_inds = np.in1d(
+                        #     loader_dict["val"].dataset.gmm_pred["midfwd_test"],
+                        #     loader_dict["val"].dataset.walking_clusters["midfwd_test"],
+                        # )
+
+                        # Shannon entropy of walking clusters
+                        # metrics["entropy_midfwd_test"] = shannon_entropy(k_pred_e[walking_inds])
+
+                        # Matching clusters to those from the latents of another vanilla model
+                        # for cluster_key in loader_dict["val"].dataset.gmm_pred.keys():
+                        #     mapped = hungarian_match(
+                        #         k_pred_e, loader_dict["val"].dataset.gmm_pred[cluster_key]
+                        #     )
+                        #     metrics["mof_gmm_{}".format(cluster_key)] = (
+                        #         (loader_dict["val"].dataset.gmm_pred[cluster_key] == mapped)
+                        #     ).sum() / len(k_pred_e)
+                elif config["data"]["dataset"] == "parkinsons":
+                    for key in ["ids", "pd_label"]:
+                        if key in loader_dict["val"].data.keys():
+                            y_true = (
+                                loader_dict["val"].dataset[:][key].detach().cpu().numpy().astype(int)
+                            )
+                            acc_log = log_class_rand_cv(
+                                z_test,
+                                y_true,
+                                model.window, ## TODO: change this to reflect the stride of the 
+                                5,
+                            )
+                            acc_qda = qda_rand_cv(
+                                z_test,
+                                y_true,
+                                model.window,
+                                5,
+                            )
+                            metrics["acc_{}_log_mean".format(key)] = np.mean(acc_log)
+                            metrics["acc_{}_log_std".format(key)] = np.std(acc_log)
+                            metrics["acc_{}_qda_mean".format(key)] = np.mean(acc_qda)
+                            metrics["acc_{}_qda_std".format(key)] = np.std(acc_qda)
 
 
 

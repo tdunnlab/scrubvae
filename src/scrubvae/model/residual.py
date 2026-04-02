@@ -223,6 +223,8 @@ class ResidualEncoder(nn.Module):
         elif prior == "beta":
             self.fc_alpha = nn.Linear(flatten_dim, z_dim)
             self.fc_beta = nn.Linear(flatten_dim, z_dim)
+        elif prior is None:
+            self.fc = nn.Linear(flatten_dim, z_dim)
 
     def forward(self, x):
         x = self.activation(self.conv_in(x))
@@ -237,6 +239,8 @@ class ResidualEncoder(nn.Module):
             alpha = F.softplus(self.fc_alpha(x)) + 1
             beta = F.softplus(self.fc_beta(x)) + 1
             return alpha, beta
+        elif self.prior is None:
+            return self.fc(x)
         return 0
 
 
@@ -300,8 +304,13 @@ class VAE(nn.Module):
             self.dist_params = ["mu", "L"]
         elif prior == "beta":
             self.dist_params = ["alpha", "beta"]
+        elif prior is None:
+            self.dist_params = ["mu"]
         return self
 
+    def device(self):
+        return next(self.parameters()).device
+    
     def sampling(self, mu, L):
         """Reparameterization trick
 
@@ -329,35 +338,38 @@ class VAE(nn.Module):
             beta_dist = torch.distributions.Beta(data_o["alpha"], data_o["beta"])
             data_o["beta_dist"] = beta_dist
             z = beta_dist.rsample() * 2 - 1
+        elif self.prior is None:
+            z = data_o["mu"]
 
         data_o["z"] = z
 
         data_o.update(self.decode(z, data))
 
-        # Running disentangle
-        data_o["disentangle"] = {}
-        if "linear" in self.disentangle.keys():
-            data_o["disentangle"]["linear"] = {
-                k: model(data_o["mu"])
-                for k, model in self.disentangle["linear"].items()
-            }
+        if hasattr(self, "disentangle"):
+            # Running disentangle
+            data_o["disentangle"] = {}
+            if "linear" in self.disentangle.keys():
+                data_o["disentangle"]["linear"] = {
+                    k: model(data_o["mu"])
+                    for k, model in self.disentangle["linear"].items()
+                }
 
-        # Forward pass through all scrubbers if necessary
-        for method, module_dict in self.disentangle.items():
-            if method == "linear":
-                ## Placeholder for if we reimplement in the future
-                continue
-            else:
-                data_o["disentangle"][method] = {}
-                for k, model in module_dict.items():
-                    if "linear" in self.disentangle.keys():
-                        latent = data_o["disentangle"]["linear"][k]["z_null"]
-                    else:
-                        latent = data_o["mu"]
-                    if method == "adversarial_net":
-                        data_o["disentangle"][method][k] = model(latent, data_o["var"])
-                    else:
-                        data_o["disentangle"][method][k] = model(latent)
+            # Forward pass through all scrubbers if necessary
+            for method, module_dict in self.disentangle.items():
+                if method == "linear":
+                    ## Placeholder for if we reimplement in the future
+                    continue
+                else:
+                    data_o["disentangle"][method] = {}
+                    for k, model in module_dict.items():
+                        if "linear" in self.disentangle.keys():
+                            latent = data_o["disentangle"]["linear"][k]["z_null"]
+                        else:
+                            latent = data_o["mu"]
+                        if method == "adversarial_net":
+                            data_o["disentangle"][method][k] = model(latent, data_o["var"])
+                        else:
+                            data_o["disentangle"][method][k] = model(latent)
 
         return data_o
 
@@ -385,6 +397,7 @@ class ResVAE(VAE):
         super().__init__(prior=prior)
         self.in_channels = in_channels
         self.ch = ch
+        self.z_dim = z_dim
         self.window = window
         self.is_diag = is_diag
         self.conditional_dim = conditional_dim
@@ -486,6 +499,7 @@ class ResVAE(VAE):
                 z.shape[0], self.window, 3
             )
 
+        x6d = F.normalize(x6d.reshape(z.shape[0], 1, -1, 2, 3), dim=-1)
         data_o["x6d"] = x6d.reshape(z.shape[0], self.window, -1, 6)
 
         return data_o

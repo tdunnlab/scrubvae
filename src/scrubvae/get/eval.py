@@ -4,7 +4,6 @@ import tqdm
 import torch
 import numpy as np
 
-
 def latents(
     config, model=None, epoch=None, loader=None, device="cuda", train_val_test="test", overwrite=False,
 ):

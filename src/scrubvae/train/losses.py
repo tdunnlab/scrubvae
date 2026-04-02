@@ -1,12 +1,9 @@
 import torch.nn.functional as F
 import torch
-from scrubvae.data.rotation_conversion import rotation_6d_to_matrix
-from scrubvae.data.dataset import fwd_kin_cont6d_torch
+from befound.data import quaternion as qtn
+from befound.data import fwd_kin_cont6d_torch
 import numpy as np
-import wandb
-
 LN2PI = np.log(2 * np.pi)
-
 
 def balance_disentangle(config, dataset):
     # Balance disentanglement losses
@@ -108,8 +105,8 @@ def rotation_loss(x, x_hat, eps=1e-7):
     assert x.shape[-1] == 6
     assert x_hat.shape[-1] == 6
     batch_size = x.shape[0]
-    m1 = rotation_6d_to_matrix(x).view((-1, 3, 3))
-    m2 = rotation_6d_to_matrix(x_hat).view((-1, 3, 3))
+    m1 = qtn.cont6d_to_matrix(x).view((-1, 3, 3))
+    m2 = qtn.cont6d_to_matrix(x_hat).view((-1, 3, 3))
 
     m = torch.bmm(m1, m2.permute(0, 2, 1))  # batch*3*3
 
@@ -119,7 +116,6 @@ def rotation_loss(x, x_hat, eps=1e-7):
 
     return theta
 
-
 def stable_rotation_loss(x, x_hat, eps=1e-7):
     """
     Geodesic rotation loss of two 6D rotation representations
@@ -128,12 +124,13 @@ def stable_rotation_loss(x, x_hat, eps=1e-7):
     """
     assert x.shape[-1] == 6
     assert x_hat.shape[-1] == 6
-    m1 = rotation_6d_to_matrix(x).view((-1, 3, 3))
-    m2 = rotation_6d_to_matrix(x_hat).view((-1, 3, 3))
+    m1 = qtn.cont6d_to_matrix(x).view((-1, 3, 3))
+    m2 = qtn.cont6d_to_matrix(x_hat).view((-1, 3, 3))
 
     sin = torch.linalg.matrix_norm(m2 - m1) / (2**1.5)
     sin = torch.clamp(sin, -1 + eps, 1 - eps)
     return 2 * torch.asin(sin).sum()
+
 
 def prior_loss(mu, L):
     var = torch.matmul(L, torch.transpose(L, dim0=-2, dim1=-1))
@@ -144,6 +141,13 @@ def prior_loss(mu, L):
         - var.diagonal(dim1=-1, dim2=-2)
     )
     return KL_div / mu.shape[0]
+
+
+# def prior_loss(mu, logvar):
+#     import pdb; pdb.set_trace()
+#     KL_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+#     return KL_div / mu.shape[0]
+
 
 def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root_hat=None):
     """
@@ -170,6 +174,31 @@ def mpjpe_loss(pose, x_hat, kinematic_tree, offsets, root_hat=None):
     loss = loss / (pose.shape[0] * pose.shape[-1] * pose.shape[-2])
     return loss
 
+def time_consistency_loss(x, x_hat, kinematic_tree, offsets):
+    root_hat = torch.zeros_like(offsets[...,0, 0, :])
+    pose = fwd_kin_cont6d_torch(
+        x[:,0],
+        kinematic_tree,
+        offsets[:, 0],
+        root_pos=root_hat,
+        do_root_R=False,
+        eps=1e-8,
+    )
+
+    pose_hat = fwd_kin_cont6d_torch(
+        x_hat[:,0],
+        kinematic_tree,
+        offsets[:,0],
+        root_pos=root_hat,
+        do_root_R=False,
+        eps=1e-8,
+    )
+
+    loss = torch.sum((pose - pose_hat) ** 2)
+    loss = loss / (pose.shape[0] * pose.shape[-1] * pose.shape[-2])
+
+    return loss
+
 def direct_lsq_loss(z, y, bias=False):
     if bias:
         z = torch.column_stack((z, torch.ones(z.shape[0], 1, device="cuda")))
@@ -180,6 +209,7 @@ def direct_lsq_loss(z, y, bias=False):
 
 
 def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
+    is_forecast = getattr(model, "is_forecasting", default=False)
     batch_size = data["x6d"].shape[0]
     batch_loss = {}
 
@@ -210,12 +240,21 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
             data["target_pose"],  # data["x6d"].reshape(-1, *data["x6d"].shape[-2:]),
             data_o["x6d"],
             model.kinematic_tree,
-            data["offsets"],
+            data["offsets"][:, 1] if is_forecast else data["offsets"],
         )
+
+    if "diffusion" in loss_scale.keys():
+        batch_loss["diffusion"] = model.ddpm.loss(x0=data_o["mu"], cond=data_o["z_past"])
+
+    if "time_consistency" in loss_scale.keys():
+        batch_loss["time_consistency"] = time_consistency_loss(data["x6d"][:,1], data_o["x6d"], model.kinematic_tree, data["offsets"][:, 1] if is_forecast else data["offsets"])
 
     if "root" in loss_scale.keys():
         batch_loss["root"] = (
-            torch.nn.MSELoss(reduction="sum")(data_o["root"], data["root"]) / batch_size
+            torch.nn.MSELoss(reduction="sum")(
+                data_o["root"], data["root"][:, 1] if is_forecast else data["root"]
+            )
+            / batch_size
         )
 
     if "mcmi" in loss_scale.keys():
@@ -305,8 +344,8 @@ def get_batch_loss(model, data, data_o, loss_scale, disentangle_config):
                 batch_loss[key + "_an"] = 0
                 for y_ens in y_pred:
                     batch_loss[key + "_an"] += ce(y_ens, y)
-                    
-                batch_loss[key + "_an"] /= - (len(y_pred) * batch_size)
+
+                batch_loss[key + "_an"] /= -(len(y_pred) * batch_size)
 
     if "total_correlation" in loss_scale.keys():
         batch_loss["total_correlation"] = total_correlation(
